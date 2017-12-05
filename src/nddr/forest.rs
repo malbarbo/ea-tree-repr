@@ -42,7 +42,7 @@ pub enum FindVertexStrategy {
 }
 
 // One instance of Data is shared between many Forest instances.
-pub struct Data<G, W>
+struct Data<G, W>
 where
     G: Graph
         + WithVertexProp<DefaultVertexPropMut<G, OptionEdge<G>>>
@@ -147,7 +147,7 @@ where
     W: EdgeProp<G, f64>,
     Vertex<G>: Ord,
 {
-    con: Rc<RefCell<Data<G, W>>>,
+    data: Rc<RefCell<Data<G, W>>>,
 
     // The star tree is keeped in trees[0]. The star tree connects the roots of the trees.
     // TODO: Use RcArray
@@ -206,8 +206,7 @@ where
     W: EdgeProp<G, f64>,
     Vertex<G>: Ord,
 {
-    fn eq(&self, other: &Self) -> bool {
-        // self.eq_board(other)
+    fn eq(&self, _other: &Self) -> bool {
         panic!()
     }
 }
@@ -223,13 +222,19 @@ where
     DefaultVertexPropMut<G, OptionEdge<G>>: Clone,
     Vertex<G>: Ord,
 {
-    pub fn new(mut con: Data<G, W>, mut edges: Vec<Edge<G>>) -> Self {
-        let weight = edges.iter().map(|e| con.w()[*e]).sum();
-        let nsqrt = con.nsqrt;
+    pub fn new(g: G, w: W, rng: XorShiftRng, edges: Vec<Edge<G>>) -> Self {
+        Self::new_with_data(Rc::new(RefCell::new(Data::new(g, w, rng))), edges)
+    }
+
+    fn new_with_data(data: Rc<RefCell<Data<G, W>>>, mut edges: Vec<Edge<G>>) -> Self {
+        let data_rc = data.clone();
+        let mut data = data.borrow_mut();
+        let weight = edges.iter().map(|e| data.w()[*e]).sum();
+        let nsqrt = data.nsqrt;
 
         let star_tree = {
-            let mut rng = con.rng().clone();
-            let s = con.g().spanning_subgraph(edges.clone());
+            let mut rng = data.rng().clone();
+            let s = data.g().spanning_subgraph(edges.clone());
             let r = s.choose_vertex(&mut rng).unwrap();
             Rc::new(NddTree::new(s.find_star_tree(r, nsqrt)))
         };
@@ -237,14 +242,14 @@ where
         let roots = vec(star_tree.iter().map(|ndd| ndd.vertex()));
         let star_edges = {
             let mut star_edges = vec![];
-            let data = &con;
+            let data = &data;
             for i in 0..roots.len() {
                 for j in i + 1..roots.len() {
                     let u = roots[i];
                     let v = roots[j];
                     if let Some(e) = data.edge_by_vertices[u][v].into_option() {
                         star_edges.push(e);
-                        star_edges.push(con.g().reverse(e));
+                        star_edges.push(data.g().reverse(e));
                     }
                 }
             }
@@ -253,7 +258,7 @@ where
 
         // TODO: improve
         edges.retain(|&e| {
-            let (u, v) = con.g().ends(e);
+            let (u, v) = data.g().ends(e);
             !star_tree.contains_edge(u, v)
         });
 
@@ -261,19 +266,19 @@ where
 
         // TODO: try to create a balanced Forest
         trees.extend({
-            let s = con.g().spanning_subgraph(edges);
+            let s = data.g().spanning_subgraph(edges);
             s.collect_trees(&roots).into_iter().map(|t| {
                 let mut t = NddTree::new(t);
                 // TODO: find an away to not pass this closure
-                t.calc_degs(|v| con.g().out_degree(v));
+                t.calc_degs(|v| data.g().out_degree(v));
                 Rc::new(t)
             })
         });
 
         assert_eq!(nsqrt + 1, trees.len());
 
-        if con.find_vertex_strategy == FindVertexStrategy::FatNode {
-            let data = &mut con;
+        if data.find_vertex_strategy == FindVertexStrategy::FatNode {
+            let data = &mut data;
             data.version += 1;
             let version = data.version;
             for (i, t) in trees[1..].iter().enumerate() {
@@ -282,17 +287,17 @@ where
         }
 
         let mut maps = vec![Rc::new(vec![])];
-        if con.find_vertex_strategy == FindVertexStrategy::Map {
-            let indices = &con.vertices_to_index;
+        if data.find_vertex_strategy == FindVertexStrategy::Map {
+            let indices = &data.vertices_to_index;
             for (i, t) in trees[1..].iter().enumerate() {
                 maps.push(Forest::<G, W>::new_map(indices, i + 1, &t));
             }
         }
 
-        let version = con.version;
+        let version = data.version;
 
         Forest {
-            con: Rc::new(RefCell::new(con)),
+            data: data_rc,
             trees: trees,
             maps: maps,
             version: version,
@@ -520,7 +525,7 @@ where
         }
 
         if self.find_vertex_strategy() == FindVertexStrategy::Map {
-            let indices = &(self.con.borrow().vertices_to_index);
+            let indices = &(self.data.borrow().vertices_to_index);
             self.maps[i] = Self::new_map(indices, i, &ti);
         }
 
@@ -549,7 +554,7 @@ where
         }
 
         if self.find_vertex_strategy() == FindVertexStrategy::Map {
-            let indices = &(self.con.borrow().vertices_to_index);
+            let indices = &(self.data.borrow().vertices_to_index);
             self.maps[i] = Self::new_map(indices, i, &ti);
             self.maps[j] = Self::new_map(indices, j, &tj);
         }
@@ -746,11 +751,11 @@ where
     }
 
     fn data(&self) -> Ref<Data<G, W>> {
-        self.con.borrow()
+        self.data.borrow()
     }
 
     fn data_mut(&self) -> RefMut<Data<G, W>> {
-        self.con.borrow_mut()
+        self.data.borrow_mut()
     }
 }
 
@@ -760,7 +765,6 @@ where
 trait GraphForestExt: IncidenceGraph {
     fn collect_trees(&self, roots: &Vec<Vertex<Self>>) -> Vec<Vec<Ndd<Vertex<Self>>>> {
         let mut vis = CompsVisitor {
-            g: self,
             trees: vec![],
             depth: self.vertex_prop(0usize),
         };
@@ -785,25 +789,24 @@ trait GraphForestExt: IncidenceGraph {
 
 impl<G: IncidenceGraph> GraphForestExt for G {}
 
-struct CompsVisitor<'a, G: 'a + AdjacencyGraph> {
-    g: &'a G,
+struct CompsVisitor<G: AdjacencyGraph> {
     trees: Vec<Vec<Ndd<Vertex<G>>>>,
     depth: DefaultVertexPropMut<G, usize>,
 }
 
-impl<'a, G: AdjacencyGraph> Visitor<G> for CompsVisitor<'a, G> {
+impl<G: AdjacencyGraph> Visitor<G> for CompsVisitor<G> {
     fn discover_root_vertex(&mut self, g: &G, v: Vertex<G>) -> Control {
-        self.trees.push(vec![Ndd::new(v, 0, self.g.out_degree(v))]);
+        self.trees.push(vec![Ndd::new(v, 0, g.out_degree(v))]);
         Control::Continue
     }
 
     fn discover_edge(&mut self, g: &G, e: Edge<G>) -> Control {
-        let (u, v) = self.g.ends(e);
+        let (u, v) = g.ends(e);
         self.depth[v] = self.depth[u] + 1;
         self.trees.last_mut().unwrap().push(Ndd::new(
             v,
             self.depth[v],
-            self.g.out_degree(v),
+            g.out_degree(v),
         ));
         Control::Continue
     }
@@ -892,7 +895,7 @@ mod tests {
                 let (mut data, tree) = data();
                 data.find_op_strategy = FindOpStrategy::$op;
                 data.find_vertex_strategy = FindVertexStrategy::$vertex;
-                let mut forest = Forest::new(data, tree);
+                let mut forest = Forest::new_with_data(Rc::new(RefCell::new(data)), tree);
                 for _ in 0..1000 {
                     forest.op1();
                     forest.check();
