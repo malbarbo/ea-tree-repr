@@ -1,0 +1,8 @@
+[package]
+name = "ec-tree-repr"
+version = "0.1.0"
+authors = ["mabarbo"]
+
+[dependencies]
+fera = { version = "0.1", features = ["ext", "fun", "graph"] }
+rand = "0.3"
