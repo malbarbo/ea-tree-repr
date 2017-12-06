@@ -45,6 +45,7 @@ pub enum FindVertexStrategy {
 struct Data<G, W>
 where
     G: Graph
+        + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     W: EdgeProp<G, f64>,
 {
@@ -57,7 +58,7 @@ where
     pub find_vertex_strategy: FindVertexStrategy,
 
     // Used if find_vertex_strategy == Map to map each vertex to a number in 0..n
-    vertices_to_index: DefaultVertexPropMut<G, u16>,
+    vertex_index: VertexIndexProp<G>,
 
     // The next two field are used if find_op_strategy = Adj or AdjSmaller
     // used in sample without replacement in select_tree_if
@@ -76,19 +77,15 @@ where
 impl<G, W> Data<G, W>
 where
     G: Graph
+        + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     W: EdgeProp<G, f64>,
     DefaultVertexPropMut<G, bool>: Clone,
 {
     fn new(g: G, w: W, rng: XorShiftRng) -> Self {
-        // FIXME: use VertexIndexProp
-        let mut vertices_to_index = g.default_vertex_prop(0u16);
-        for (i, v) in g.vertices().enumerate() {
-            vertices_to_index[v] = i as u16;
-        }
-
         let nsqrt = (g.num_vertices() as f64).sqrt().ceil() as usize;
         let m = g.vertex_prop(g.vertex_prop(false));
+        let vertex_index = g.vertex_index();
         // 0 is the index of the star tree, so its keeped out
         let tree_indices = vec(1..nsqrt + 1);
         let pi_version = g.vertex_prop(Vec::<usize>::new());
@@ -102,7 +99,7 @@ where
             dc: ::std::usize::MAX,
             find_op_strategy: FindOpStrategy::Balanced,
             find_vertex_strategy: FindVertexStrategy::FatNode,
-            vertices_to_index: vertices_to_index,
+            vertex_index: vertex_index,
             tree_indices: tree_indices,
             m: m,
             version: 0,
@@ -129,6 +126,7 @@ pub struct Forest<G, W>
 where
     G: Graph
         + Choose
+        + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     W: EdgeProp<G, f64>,
     Vertex<G>: Ord,
@@ -145,10 +143,10 @@ where
 
     // Used if find_vertex_strategy == Map
     //
-    // if trees[i][maps[i][vertices_to_index[v]]].vertex == v,
-    // so v is in tree[i] in position maps[i][vertices_to_index[v]]
+    // if trees[i][maps[i][vertex_index[v]]].vertex == v,
+    // so v is in tree[i] in position maps[i][vertex_index[v]]
     // TODO: move this to NddTree
-    maps: Vec<Rc<Vec<u16>>>,
+    maps: Vec<Rc<Vec<usize>>>,
 
     // Used if find_vertex_strategy = FatNode
     //
@@ -171,6 +169,7 @@ impl<G, W> Deref for Forest<G, W>
 where
     G: Graph
         + Choose
+        + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     W: EdgeProp<G, f64>,
     Vertex<G>: Ord,
@@ -186,6 +185,7 @@ impl<G, W> PartialEq for Forest<G, W>
 where
     G: Graph
         + Choose
+        + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     W: EdgeProp<G, f64>,
     Vertex<G>: Ord,
@@ -199,6 +199,7 @@ impl<G, W> Forest<G, W>
 where
     G: AdjacencyGraph
         + Choose
+        + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     W: EdgeProp<G, f64>,
     DefaultVertexPropMut<G, bool>: Clone,
@@ -270,7 +271,7 @@ where
 
         let mut maps = vec![Rc::new(vec![])];
         if data.find_vertex_strategy == FindVertexStrategy::Map {
-            let indices = &data.vertices_to_index;
+            let indices = &data.vertex_index;
             for (i, t) in trees[1..].iter().enumerate() {
                 maps.push(Forest::<G, W>::new_map(indices, i + 1, &t));
             }
@@ -507,7 +508,7 @@ where
         }
 
         if self.find_vertex_strategy() == FindVertexStrategy::Map {
-            let indices = &(self.data.borrow().vertices_to_index);
+            let indices = &(self.data.borrow().vertex_index);
             self.maps[i] = Self::new_map(indices, i, &ti);
         }
 
@@ -536,7 +537,7 @@ where
         }
 
         if self.find_vertex_strategy() == FindVertexStrategy::Map {
-            let indices = &(self.data.borrow().vertices_to_index);
+            let indices = &(self.data.borrow().vertex_index);
             self.maps[i] = Self::new_map(indices, i, &ti);
             self.maps[j] = Self::new_map(indices, j, &tj);
         }
@@ -551,19 +552,19 @@ where
 
     #[inline(never)]
     fn new_map(
-        indices: &DefaultVertexPropMut<G, u16>,
+        indices: &VertexIndexProp<G>,
         i: usize,
         ti: &NddTree<Vertex<G>>,
-    ) -> Rc<Vec<u16>> {
+    ) -> Rc<Vec<usize>> {
         if i == 0 {
             // TODO: do not create
             return Rc::new(vec![]);
         }
-        let inds = vec(ti.iter().map(|ndd| indices[ndd.vertex()]));
-        let max = *inds.iter().max().unwrap() as usize;
+        let inds = vec(ti.iter().map(|ndd| indices.get(ndd.vertex())));
+        let max = *inds.iter().max().unwrap();
         let mut map = unsafe { Vec::new_uninitialized(max + 1) };
         for (pos, iv) in inds.iter().enumerate() {
-            map[*iv as usize] = pos as u16;
+            map[*iv] = pos;
         }
         Rc::new(map)
     }
@@ -638,13 +639,13 @@ where
                 panic!()
             }
             FindVertexStrategy::Map => {
-                let iv = self.data().vertices_to_index[v] as usize;
+                let iv = self.data().vertex_index.get(v);
                 for (i, map) in self.maps[1..].iter().enumerate() {
                     if let Some(&p) = map.get(iv) {
                         if let Some(tree) = self.get(i + 1) {
-                            if let Some(ndd) = tree.get(p as usize) {
+                            if let Some(ndd) = tree.get(p) {
                                 if ndd.vertex() == v {
-                                    return (i + 1, p as usize);
+                                    return (i + 1, p);
                                 }
                             }
                         }
