@@ -4,6 +4,7 @@ use fera::fun::vec;
 use fera::graph::algs::Trees;
 use fera::graph::choose::Choose;
 use fera::graph::prelude::*;
+use fera::graph::sum_prop;
 use fera::graph::traverse::{continue_if, Control, Dfs, Visitor, OnDiscoverTreeEdge};
 use rand::{Rng, XorShiftRng};
 
@@ -45,7 +46,7 @@ pub enum FindVertexStrategy {
 struct Data<G, W>
 where
     G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgeProp<G, u64>,
+    W: EdgePropGet<G, u64>,
 {
     g: G,
     w: W,
@@ -75,7 +76,7 @@ where
 impl<G, W> Data<G, W>
 where
     G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgeProp<G, u64>,
+    W: EdgePropGet<G, u64>,
     DefaultVertexPropMut<G, bool>: Clone,
 {
     fn new(g: G, w: W, rng: XorShiftRng) -> Self {
@@ -121,7 +122,7 @@ where
 pub struct Forest<G, W>
 where
     G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgeProp<G, u64>,
+    W: EdgePropGet<G, u64>,
     Vertex<G>: Ord,
 {
     data: Rc<RefCell<Data<G, W>>>,
@@ -153,7 +154,7 @@ where
     G: Graph
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgeProp<G, u64>,
+    W: EdgePropGet<G, u64>,
     Vertex<G>: Ord,
 {
     fn clone(&self) -> Self {
@@ -176,7 +177,7 @@ where
         + Choose
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgeProp<G, u64>,
+    W: EdgePropGet<G, u64>,
     Vertex<G>: Ord,
 {
     type Target = Vec<Rc<NddTree<Vertex<G>>>>;
@@ -192,7 +193,7 @@ where
         + Choose
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgeProp<G, u64>,
+    W: EdgePropGet<G, u64>,
     DefaultVertexPropMut<G, bool>: Clone,
     Vertex<G>: Ord,
 {
@@ -222,7 +223,7 @@ where
         + Choose
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgeProp<G, u64>,
+    W: EdgePropGet<G, u64>,
     DefaultVertexPropMut<G, bool>: Clone,
     Vertex<G>: Ord,
 {
@@ -233,7 +234,7 @@ where
     fn new_with_data(data: Rc<RefCell<Data<G, W>>>, mut edges: Vec<Edge<G>>) -> Self {
         let data_rc = data.clone();
         let mut data = data.borrow_mut();
-        let weight = edges.iter().map(|e| data.w()[*e]).sum();
+        let weight: u64 = sum_prop(data.w(), &edges);
         let nsqrt = data.nsqrt;
 
         let star_tree = {
@@ -334,15 +335,16 @@ where
     }
 
     pub fn check(&self) {
-        let mut weight = 0;
         let edges = self.edges_vec();
         for &e in &edges {
             assert!(self.contains(e));
-            weight += self.w()[e];
         }
+
         let g = self.g();
-        let sub = g.spanning_subgraph(self.edges_vec());
+        let sub = g.spanning_subgraph(&edges);
         assert!(sub.is_tree());
+
+        let weight: u64 = sum_prop(&*self.w(), &edges);
         assert_eq!(weight, self.weight());
     }
 
@@ -364,8 +366,8 @@ where
         }
 
         let mut weight = self.weight;
-        weight -= self.w()[rem];
-        weight += self.w()[ins];
+        weight -= self.w().get(rem);
+        weight += self.w().get(ins);
         self.weight = weight;
 
         G::edge_some(rem)
