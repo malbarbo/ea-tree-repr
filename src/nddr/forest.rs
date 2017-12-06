@@ -44,9 +44,7 @@ pub enum FindVertexStrategy {
 // One instance of Data is shared between many Forest instances.
 struct Data<G, W>
 where
-    G: Graph
-        + WithVertexIndexProp
-        + WithVertexProp<DefaultVertexPropMut<G, bool>>,
+    G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     W: EdgeProp<G, u64>,
 {
     g: G,
@@ -76,9 +74,7 @@ where
 
 impl<G, W> Data<G, W>
 where
-    G: Graph
-        + WithVertexIndexProp
-        + WithVertexProp<DefaultVertexPropMut<G, bool>>,
+    G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     W: EdgeProp<G, u64>,
     DefaultVertexPropMut<G, bool>: Clone,
 {
@@ -124,10 +120,7 @@ where
 
 pub struct Forest<G, W>
 where
-    G: Graph
-        + Choose
-        + WithVertexIndexProp
-        + WithVertexProp<DefaultVertexPropMut<G, bool>>,
+    G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     W: EdgeProp<G, u64>,
     Vertex<G>: Ord,
 {
@@ -155,15 +148,27 @@ where
     history: Vec<usize>,
 }
 
-/*
-   impl<G, W> Clone for Forest<G, W>
-   where G: Graph + Choose,
-   W: EdgeProp<G, u64>,
-   Vertex<G>: Ord
-   {
-   clone!{Forest, con, trees, star_edges, weight, maps, version, history;}
-   }
-   */
+impl<G, W> Clone for Forest<G, W>
+where
+    G: Graph
+        + WithVertexIndexProp
+        + WithVertexProp<DefaultVertexPropMut<G, bool>>,
+    W: EdgeProp<G, u64>,
+    Vertex<G>: Ord,
+{
+    fn clone(&self) -> Self {
+        Self {
+            data: self.data.clone(),
+            trees: self.trees.clone(),
+            star_edges: self.star_edges.clone(),
+            weight: self.weight,
+            maps: self.maps.clone(),
+            version: self.version,
+            // TODO: Should history be shared? How this affects running time?
+            history: self.history.clone(),
+        }
+    }
+}
 
 impl<G, W> Deref for Forest<G, W>
 where
@@ -183,15 +188,31 @@ where
 
 impl<G, W> PartialEq for Forest<G, W>
 where
-    G: Graph
+    G: AdjacencyGraph
         + Choose
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     W: EdgeProp<G, u64>,
+    DefaultVertexPropMut<G, bool>: Clone,
     Vertex<G>: Ord,
 {
-    fn eq(&self, _other: &Self) -> bool {
-        panic!()
+    fn eq(&self, other: &Self) -> bool {
+        if (self as *const _) == (other as *const _) {
+            return true;
+        }
+
+        if self.weight != other.weight {
+            return false;
+        }
+
+        // TODO: make it faster
+        for e in self.edges_vec() {
+            if !other.contains(e) {
+                return false
+            }
+        }
+
+        true
     }
 }
 
@@ -217,7 +238,7 @@ where
 
         let star_tree = {
             let mut rng = data.rng().clone();
-            let s = data.g().spanning_subgraph(edges.clone());
+            let s = data.g().spanning_subgraph(&edges);
             let r = s.choose_vertex(&mut rng).unwrap();
             Rc::new(NddTree::new(s.find_star_tree(r, nsqrt)))
         };
@@ -324,6 +345,7 @@ where
         assert!(sub.is_tree());
         assert_eq!(weight, self.weight());
     }
+
 
     // Subtree ops
 
@@ -554,11 +576,7 @@ where
     }
 
     #[inline(never)]
-    fn new_map(
-        indices: &VertexIndexProp<G>,
-        i: usize,
-        ti: &NddTree<Vertex<G>>,
-    ) -> Rc<Vec<usize>> {
+    fn new_map(indices: &VertexIndexProp<G>, i: usize, ti: &NddTree<Vertex<G>>) -> Rc<Vec<usize>> {
         if i == 0 {
             // TODO: do not create
             return Rc::new(vec![]);
@@ -596,11 +614,7 @@ where
         F: FnMut(usize) -> bool,
     {
         let mut rng: XorShiftRng = self.rng().clone();
-        sample_without_replacement(
-            &mut *self.data_mut().tree_indices,
-            &mut rng,
-            |&i| f(i),
-        ).cloned()
+        sample_without_replacement(&mut *self.data_mut().tree_indices, &mut rng, |&i| f(i)).cloned()
     }
 
     #[inline(never)]
@@ -858,18 +872,34 @@ mod tests {
         );
     }
 
-    fn data()
-        -> (Data<CompleteGraph, DefaultEdgePropMut<CompleteGraph, u64>>, Vec<Edge<CompleteGraph>>)
-    {
+    #[test]
+    fn test_eq() {
+        let n = 30;
         let mut rng = rand::weak_rng();
-        let g = CompleteGraph::new(100);
+        let (data, mut tree) = data(n);
+        let data = Rc::new(RefCell::new(data));
+        let forests = vec((0..n).map(|_| {
+            rng.shuffle(&mut tree);
+            Forest::new_with_data(data.clone(), tree.clone())
+        }));
+
+        for i in 0..(n as usize) {
+            for j in 0..(n as usize) {
+                assert!(forests[i] == forests[j]);
+            }
+        }
+    }
+
+    fn data(
+        n: u32,
+    ) -> (Data<CompleteGraph, DefaultEdgePropMut<CompleteGraph, u64>>, Vec<Edge<CompleteGraph>>) {
+        let mut rng = rand::weak_rng();
+        let g = CompleteGraph::new(n);
         let w: DefaultEdgePropMut<CompleteGraph, u64> =
             g.edge_prop_from_fn(|_| rng.gen_range(0, 1_000_000));
-        let tree = vec(
-            StaticGraph::new_random_tree(100, &mut rng)
-                .edges_ends()
-                .map(|(u, v)| g.edge_by_ends(u, v)),
-        );
+        let tree = vec(StaticGraph::new_random_tree(n as usize, &mut rng).edges_ends().map(
+            |(u, v)| g.edge_by_ends(u, v),
+        ));
 
         (Data::new(g.clone(), w.clone(), rng), tree)
     }
@@ -878,13 +908,17 @@ mod tests {
         ($name:ident, $op:ident, $vertex:ident) => (
             #[test]
             fn $name() {
-                let (mut data, tree) = data();
+                let (mut data, tree) = data(100);
                 data.find_op_strategy = FindOpStrategy::$op;
                 data.find_vertex_strategy = FindVertexStrategy::$vertex;
                 let mut forest = Forest::new_with_data(Rc::new(RefCell::new(data)), tree);
                 for _ in 0..1000 {
-                    forest.op1();
-                    forest.check();
+                    let mut f = forest.clone();
+                    assert!(forest == f);
+                    f.op1();
+                    f.check();
+                    assert!(forest != f);
+                    forest = f;
                 }
             }
         )
