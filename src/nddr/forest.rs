@@ -47,7 +47,7 @@ where
     G: Graph
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgeProp<G, f64>,
+    W: EdgeProp<G, u64>,
 {
     g: G,
     w: W,
@@ -79,7 +79,7 @@ where
     G: Graph
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgeProp<G, f64>,
+    W: EdgeProp<G, u64>,
     DefaultVertexPropMut<G, bool>: Clone,
 {
     fn new(g: G, w: W, rng: XorShiftRng) -> Self {
@@ -128,7 +128,7 @@ where
         + Choose
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgeProp<G, f64>,
+    W: EdgeProp<G, u64>,
     Vertex<G>: Ord,
 {
     data: Rc<RefCell<Data<G, W>>>,
@@ -139,7 +139,7 @@ where
     // Edges (u, v) such that u and v are star tree vertices.
     star_edges: Rc<RefCell<Vec<Edge<G>>>>,
     // Sum of weight of the tree edges, including star edges
-    weight: f64,
+    weight: u64,
 
     // Used if find_vertex_strategy == Map
     //
@@ -158,7 +158,7 @@ where
 /*
    impl<G, W> Clone for Forest<G, W>
    where G: Graph + Choose,
-   W: EdgeProp<G, f64>,
+   W: EdgeProp<G, u64>,
    Vertex<G>: Ord
    {
    clone!{Forest, con, trees, star_edges, weight, maps, version, history;}
@@ -171,7 +171,7 @@ where
         + Choose
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgeProp<G, f64>,
+    W: EdgeProp<G, u64>,
     Vertex<G>: Ord,
 {
     type Target = Vec<Rc<NddTree<Vertex<G>>>>;
@@ -187,7 +187,7 @@ where
         + Choose
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgeProp<G, f64>,
+    W: EdgeProp<G, u64>,
     Vertex<G>: Ord,
 {
     fn eq(&self, _other: &Self) -> bool {
@@ -201,7 +201,7 @@ where
         + Choose
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgeProp<G, f64>,
+    W: EdgeProp<G, u64>,
     DefaultVertexPropMut<G, bool>: Clone,
     Vertex<G>: Ord,
 {
@@ -308,18 +308,21 @@ where
         self.trees.iter().any(|t| t.contains_edge(u, v))
     }
 
-    pub fn weight(&self) -> f64 {
+    pub fn weight(&self) -> u64 {
         self.weight
     }
 
     pub fn check(&self) {
+        let mut weight = 0;
         let edges = self.edges_vec();
         for &e in &edges {
             assert!(self.contains(e));
+            weight += self.w()[e];
         }
         let g = self.g();
         let sub = g.spanning_subgraph(self.edges_vec());
         assert!(sub.is_tree());
+        assert_eq!(weight, self.weight());
     }
 
     // Subtree ops
@@ -856,12 +859,12 @@ mod tests {
     }
 
     fn data()
-        -> (Data<CompleteGraph, DefaultEdgePropMut<CompleteGraph, f64>>, Vec<Edge<CompleteGraph>>)
+        -> (Data<CompleteGraph, DefaultEdgePropMut<CompleteGraph, u64>>, Vec<Edge<CompleteGraph>>)
     {
         let mut rng = rand::weak_rng();
         let g = CompleteGraph::new(100);
-        let w: DefaultEdgePropMut<CompleteGraph, f64> =
-            g.edge_prop_from_fn(|_| rng.gen_range(0.0, 1.0));
+        let w: DefaultEdgePropMut<CompleteGraph, u64> =
+            g.edge_prop_from_fn(|_| rng.gen_range(0, 1_000_000));
         let tree = vec(
             StaticGraph::new_random_tree(100, &mut rng)
                 .edges_ends()
