@@ -45,7 +45,6 @@ pub enum FindVertexStrategy {
 struct Data<G, W>
 where
     G: Graph
-        + WithVertexProp<DefaultVertexPropMut<G, OptionEdge<G>>>
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     W: EdgeProp<G, f64>,
 {
@@ -56,7 +55,6 @@ where
     pub dc: usize,
     pub find_op_strategy: FindOpStrategy,
     pub find_vertex_strategy: FindVertexStrategy,
-    edge_by_vertices: DefaultVertexPropMut<G, DefaultVertexPropMut<G, OptionEdge<G>>>,
 
     // Used if find_vertex_strategy == Map to map each vertex to a number in 0..n
     vertices_to_index: DefaultVertexPropMut<G, u16>,
@@ -78,21 +76,11 @@ where
 impl<G, W> Data<G, W>
 where
     G: Graph
-        + WithVertexProp<DefaultVertexPropMut<G, OptionEdge<G>>>
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     W: EdgeProp<G, f64>,
     DefaultVertexPropMut<G, bool>: Clone,
-    DefaultVertexPropMut<G, OptionEdge<G>>: Clone,
 {
     fn new(g: G, w: W, rng: XorShiftRng) -> Self {
-        // FIXME: use g.get_edge_by_ends
-        let mut edge_by_vertices = g.default_vertex_prop(g.default_vertex_prop(G::edge_none()));
-        for e in g.edges() {
-            let (u, v) = g.ends(e);
-            edge_by_vertices[u][v] = G::edge_some(e);
-            edge_by_vertices[v][u] = G::edge_some(g.reverse(e));
-        }
-
         // FIXME: use VertexIndexProp
         let mut vertices_to_index = g.default_vertex_prop(0u16);
         for (i, v) in g.vertices().enumerate() {
@@ -114,7 +102,6 @@ where
             dc: ::std::usize::MAX,
             find_op_strategy: FindOpStrategy::Balanced,
             find_vertex_strategy: FindVertexStrategy::FatNode,
-            edge_by_vertices: edge_by_vertices,
             vertices_to_index: vertices_to_index,
             tree_indices: tree_indices,
             m: m,
@@ -142,7 +129,6 @@ pub struct Forest<G, W>
 where
     G: Graph
         + Choose
-        + WithVertexProp<DefaultVertexPropMut<G, OptionEdge<G>>>
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     W: EdgeProp<G, f64>,
     Vertex<G>: Ord,
@@ -185,7 +171,6 @@ impl<G, W> Deref for Forest<G, W>
 where
     G: Graph
         + Choose
-        + WithVertexProp<DefaultVertexPropMut<G, OptionEdge<G>>>
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     W: EdgeProp<G, f64>,
     Vertex<G>: Ord,
@@ -201,7 +186,6 @@ impl<G, W> PartialEq for Forest<G, W>
 where
     G: Graph
         + Choose
-        + WithVertexProp<DefaultVertexPropMut<G, OptionEdge<G>>>
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     W: EdgeProp<G, f64>,
     Vertex<G>: Ord,
@@ -215,11 +199,9 @@ impl<G, W> Forest<G, W>
 where
     G: AdjacencyGraph
         + Choose
-        + WithVertexProp<DefaultVertexPropMut<G, OptionEdge<G>>>
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     W: EdgeProp<G, f64>,
     DefaultVertexPropMut<G, bool>: Clone,
-    DefaultVertexPropMut<G, OptionEdge<G>>: Clone,
     Vertex<G>: Ord,
 {
     pub fn new(g: G, w: W, rng: XorShiftRng, edges: Vec<Edge<G>>) -> Self {
@@ -247,7 +229,7 @@ where
                 for j in i + 1..roots.len() {
                     let u = roots[i];
                     let v = roots[j];
-                    if let Some(e) = data.edge_by_vertices[u][v].into_option() {
+                    if let Some(e) = data.g().get_edge_by_ends(u, v) {
                         star_edges.push(e);
                         star_edges.push(data.g().reverse(e));
                     }
@@ -344,8 +326,8 @@ where
     #[inline(never)]
     fn do_op1(&mut self, params: (usize, usize, usize, usize)) -> OptionEdge<G> {
         let (ifrom, p, ito, a) = params;
-        let ins = self.edge_by_vertices(self[ifrom][p].vertex(), self[ito][a].vertex());
-        let rem = self.edge_by_vertices(self[ifrom][p].vertex(), self[ifrom].parent_vertex(p));
+        let ins = self.edge_by_ends(self[ifrom][p].vertex(), self[ito][a].vertex());
+        let rem = self.edge_by_ends(self[ifrom][p].vertex(), self[ifrom].parent_vertex(p));
 
         if ifrom == ito {
             let new = one_tree_op1(&self[ifrom], p, a);
@@ -394,7 +376,7 @@ where
             assert!(to != 0);
 
             if self.can_insert_subtree_edge((from, p, to, a)) {
-                let e = self.edge_by_vertices(self[from][p].vertex(), self[to][a].vertex());
+                let e = self.edge_by_ends(self[from][p].vertex(), self[to][a].vertex());
                 return (e, from, p, to, a);
             }
         }
@@ -697,12 +679,12 @@ where
     fn edges_vec(&self) -> Vec<Edge<G>> {
         let v = vec(self.iter().map(|t| t.edges()));
         vec(v.iter().flat_map(|t| t.iter()).map(|&(u, v)| {
-            self.edge_by_vertices(u, v)
+            self.edge_by_ends(u, v)
         }))
     }
 
-    fn edge_by_vertices(&self, u: Vertex<G>, v: Vertex<G>) -> Edge<G> {
-        self.data().edge_by_vertices[u][v].into_option().unwrap()
+    fn edge_by_ends(&self, u: Vertex<G>, v: Vertex<G>) -> Edge<G> {
+        self.g().edge_by_ends(u, v)
     }
 
     fn find_op_strategy(&self) -> FindOpStrategy {
