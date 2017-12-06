@@ -50,7 +50,6 @@ where
 {
     g: G,
     w: W,
-    rng: RefCell<XorShiftRng>,
     nsqrt: usize,
     pub dc: usize,
     pub find_op_strategy: FindOpStrategy,
@@ -79,7 +78,7 @@ where
     W: EdgePropGet<G, u64>,
     DefaultVertexPropMut<G, bool>: Clone,
 {
-    fn new(g: G, w: W, rng: XorShiftRng) -> Self {
+    fn new(g: G, w: W) -> Self {
         let nsqrt = (g.num_vertices() as f64).sqrt().ceil() as usize;
         let m = g.vertex_prop(g.vertex_prop(false));
         let vertex_index = g.vertex_index();
@@ -91,7 +90,6 @@ where
         Data {
             g: g,
             w: w,
-            rng: RefCell::new(rng),
             nsqrt: nsqrt,
             dc: ::std::usize::MAX,
             find_op_strategy: FindOpStrategy::Balanced,
@@ -112,10 +110,6 @@ where
 
     fn w(&self) -> &W {
         &self.w
-    }
-
-    fn rng(&self) -> RefMut<XorShiftRng> {
-        self.rng.borrow_mut()
     }
 }
 
@@ -227,20 +221,19 @@ where
     DefaultVertexPropMut<G, bool>: Clone,
     Vertex<G>: Ord,
 {
-    pub fn new(g: G, w: W, rng: XorShiftRng, edges: Vec<Edge<G>>) -> Self {
-        Self::new_with_data(Rc::new(RefCell::new(Data::new(g, w, rng))), edges)
+    pub fn new<R: Rng>(g: G, w: W, edges: Vec<Edge<G>>, rng: R) -> Self {
+        Self::new_with_data(Rc::new(RefCell::new(Data::new(g, w))), edges, rng)
     }
 
-    fn new_with_data(data: Rc<RefCell<Data<G, W>>>, mut edges: Vec<Edge<G>>) -> Self {
+    fn new_with_data<R: Rng>(data: Rc<RefCell<Data<G, W>>>, mut edges: Vec<Edge<G>>, rng: R) -> Self {
         let data_rc = data.clone();
         let mut data = data.borrow_mut();
         let weight: u64 = sum_prop(data.w(), &edges);
         let nsqrt = data.nsqrt;
 
         let star_tree = {
-            let mut rng = data.rng().clone();
             let s = data.g().spanning_subgraph(&edges);
-            let r = s.choose_vertex(&mut rng).unwrap();
+            let r = s.choose_vertex(rng).unwrap();
             Rc::new(NddTree::new(s.find_star_tree(r, nsqrt)))
         };
 
@@ -312,9 +305,9 @@ where
         }
     }
 
-    pub fn op1(&mut self) {
+    pub fn op1<R: Rng>(&mut self, rng: &mut R) {
         loop {
-            let (e, from, p, to, a) = self.find_vertices_op1();
+            let (e, from, p, to, a) = self.find_vertices_op1(rng);
             let v = self.g().target(e);
             if !self.is_deg_max(v) {
                 self.do_op1((from, p, to, a));
@@ -386,17 +379,17 @@ where
     }
 
     #[inline(never)]
-    fn find_vertices_op1(&self) -> (Edge<G>, usize, usize, usize, usize) {
-        if self.should_mutate_star_tree() {
-            return self.find_op_star_edge();
+    fn find_vertices_op1<R: Rng>(&self, rng: &mut R) -> (Edge<G>, usize, usize, usize, usize) {
+        if self.should_mutate_star_tree(rng) {
+            return self.find_op_star_edge(rng);
         }
         // TODO: add limit
         loop {
             let (from, p, to, a) = match self.find_op_strategy() {
-                FindOpStrategy::Adj => self.find_op_adj(),
-                FindOpStrategy::AdjSmaller => self.find_op_adj_smaller(),
-                FindOpStrategy::Edge => self.find_op_edge(),
-                FindOpStrategy::Balanced => self.find_op_balanced(),
+                FindOpStrategy::Adj => self.find_op_adj(rng),
+                FindOpStrategy::AdjSmaller => self.find_op_adj_smaller(rng),
+                FindOpStrategy::Edge => self.find_op_edge(rng),
+                FindOpStrategy::Balanced => self.find_op_balanced(rng),
             };
 
             // cannot be the star_tree
@@ -411,19 +404,19 @@ where
     }
 
     #[inline(never)]
-    fn find_op_adj(&self) -> (usize, usize, usize, usize) {
+    fn find_op_adj<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize) {
         // Sec V-B - page 834
         // In this implementation p and a are indices, not vertices
         // v_p and v_a are vertices.
 
         // Step 1
-        let from = self.select_tree_if(|i| {
+        let from = self.select_tree_if(rng, |i| {
             // Must have more than one node so we can choose a node != root
             self[i].deg_in_g() > self[i].deg() && self[i].len() > 1
         }).expect("The graph is a forest");
 
         // Step 2
-        let p = self.select_tree_vertex_if(from, |i| {
+        let p = self.select_tree_vertex_if(from, rng, |i| {
             // i is not root and have an edge tha is not in this forest
             i != 0 && self[from][i].deg() < self.g().out_degree(self[from][i].vertex())
         });
@@ -444,7 +437,7 @@ where
             //                             &mut |v_a| !self[from].contains_edge(v_p, v_a))
             //
             self.g()
-                .choose_out_neighbor_iter(v_p, &mut *self.rng())
+                .choose_out_neighbor_iter(v_p, rng)
                 .filter(|&v_a| !m[v_p][v_a] && !m[v_a][v_p])
                 .next()
                 .unwrap()
@@ -460,8 +453,8 @@ where
     }
 
     #[inline(never)]
-    fn find_op_adj_smaller(&self) -> (usize, usize, usize, usize) {
-        let (from, p, to, a) = self.find_op_adj();
+    fn find_op_adj_smaller<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize) {
+        let (from, p, to, a) = self.find_op_adj(rng);
         if self[from].len() >= self[to].len() {
             (from, p, to, a)
         } else {
@@ -470,15 +463,15 @@ where
     }
 
     #[inline(never)]
-    fn find_op_edge(&self) -> (usize, usize, usize, usize) {
+    fn find_op_edge<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize) {
         let g = self.g();
         // TODO: use tournament without replacement
-        let mut e = g.choose_edge(&mut *self.rng()).unwrap();
+        let mut e = g.choose_edge(&mut *rng).unwrap();
         // The order of the vertices is important, so trying (u, v) is different from (v, u),
         // as only (u, v) or (v, u) can be returned from choose_edge, we trye th reverse with 50%
         // of change.
         // This is not necessary in the other methods because (u, v) and (v, u) can be choosed.
-        if self.rng().gen() {
+        if rng.gen() {
             e = self.g().reverse(e);
         }
         let (u, v) = g.ends(e);
@@ -488,11 +481,11 @@ where
     }
 
     #[inline(never)]
-    fn find_op_balanced(&self) -> (usize, usize, usize, usize) {
-        let from = self.select_tree();
-        let p = self.select_tree_vertex(from);
-        let to = self.select_tree();
-        let a = self.select_tree_vertex(to);
+    fn find_op_balanced<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize) {
+        let from = self.select_tree(rng);
+        let p = self.select_tree_vertex(from, rng);
+        let to = self.select_tree(rng);
+        let a = self.select_tree_vertex(to, rng);
         (from, p, to, a)
     }
 
@@ -514,9 +507,9 @@ where
     }
 
     #[inline(never)]
-    fn find_op_star_edge(&self) -> (Edge<G>, usize, usize, usize, usize) {
+    fn find_op_star_edge<R: Rng>(&self, rng: &mut R) -> (Edge<G>, usize, usize, usize, usize) {
         let e = {
-            *sample_without_replacement(&mut *self.star_edges.borrow_mut(), &mut *self.rng(), |e| {
+            *sample_without_replacement(&mut *self.star_edges.borrow_mut(), rng, |e| {
                 self.can_insert_star_edge(*e)
             }).unwrap()
         };
@@ -604,39 +597,39 @@ where
         }
     }
 
-    fn should_mutate_star_tree(&self) -> bool {
+    fn should_mutate_star_tree<R: Rng>(&self, rng: &mut R) -> bool {
         // TODO: explain
         self.trees[0].len() > 2 && 2 * self.star_edges.borrow().len() >= self.trees[0].len() &&
-            self.rng().gen_range(0, self.data().nsqrt + 1) == self.data().nsqrt
+            rng.gen_range(0, self.data().nsqrt + 1) == self.data().nsqrt
     }
 
     #[inline(never)]
-    fn select_tree_if<F>(&self, mut f: F) -> Option<usize>
+    fn select_tree_if<R, F>(&self, rng: &mut R, mut f: F) -> Option<usize>
     where
+        R: Rng,
         F: FnMut(usize) -> bool,
     {
-        let mut rng: XorShiftRng = self.rng().clone();
-        sample_without_replacement(&mut *self.data_mut().tree_indices, &mut rng, |&i| f(i)).cloned()
+        sample_without_replacement(&mut *self.data_mut().tree_indices, rng, |&i| f(i)).cloned()
     }
 
     #[inline(never)]
-    fn select_tree(&self) -> usize {
-        self.rng().gen_range(1, self.len())
+    fn select_tree<R: Rng>(&self, rng: &mut R) -> usize {
+        rng.gen_range(1, self.len())
     }
 
     #[inline(never)]
-    fn select_tree_vertex(&self, i: usize) -> usize {
-        self.rng().gen_range(0, self[i].len())
+    fn select_tree_vertex<R: Rng>(&self, i: usize, rng: &mut R) -> usize {
+        rng.gen_range(0, self[i].len())
     }
 
     #[inline(never)]
-    fn select_tree_vertex_if<F>(&self, i: usize, mut f: F) -> usize
+    fn select_tree_vertex_if<R: Rng, F>(&self, i: usize, rng: &mut R, mut f: F) -> usize
     where
         F: FnMut(usize) -> bool,
     {
         // TODO: add a limit or use sample without replacement
         loop {
-            let i = self.rng().gen_range(0, self[i].len());
+            let i = rng.gen_range(0, self[i].len());
             if f(i) {
                 return i;
             }
@@ -744,12 +737,6 @@ where
 
     fn g(&self) -> Ref<G> {
         Ref::map(self.data(), |d| d.g())
-    }
-
-    fn rng<'a>(&'a self) -> RefMut<'a, XorShiftRng> {
-        let d = self.data();
-        let x: RefMut<'a, XorShiftRng> = unsafe { ::std::mem::transmute(d.rng()) };
-        x
     }
 
     fn data(&self) -> Ref<Data<G, W>> {
@@ -882,7 +869,7 @@ mod tests {
         let data = Rc::new(RefCell::new(data));
         let forests = vec((0..n).map(|_| {
             rng.shuffle(&mut tree);
-            Forest::new_with_data(data.clone(), tree.clone())
+            Forest::new_with_data(data.clone(), tree.clone(), &mut rng)
         }));
 
         for i in 0..(n as usize) {
@@ -903,21 +890,22 @@ mod tests {
             |(u, v)| g.edge_by_ends(u, v),
         ));
 
-        (Data::new(g.clone(), w.clone(), rng), tree)
+        (Data::new(g.clone(), w.clone()), tree)
     }
 
     macro_rules! def_test {
         ($name:ident, $op:ident, $vertex:ident) => (
             #[test]
             fn $name() {
+                let mut rng = rand::weak_rng();
                 let (mut data, tree) = data(100);
                 data.find_op_strategy = FindOpStrategy::$op;
                 data.find_vertex_strategy = FindVertexStrategy::$vertex;
-                let mut forest = Forest::new_with_data(Rc::new(RefCell::new(data)), tree);
+                let mut forest = Forest::new_with_data(Rc::new(RefCell::new(data)), tree, &mut rng);
                 for _ in 0..1000 {
                     let mut f = forest.clone();
                     assert!(forest == f);
-                    f.op1();
+                    f.op1(&mut rng);
                     f.check();
                     assert!(forest != f);
                     forest = f;
