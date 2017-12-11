@@ -4,6 +4,7 @@ use std::hash::Hash;
 use std::ops::Deref;
 
 // See nddr module documentation for references.
+// TODO: make op1 and op2 receive &mut ?
 
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub struct Ndd<V: Copy + Eq + PartialEq + Debug> {
@@ -14,11 +15,7 @@ pub struct Ndd<V: Copy + Eq + PartialEq + Debug> {
 
 impl<V: Copy + Eq + PartialEq + Debug> Ndd<V> {
     pub fn new(vertex: V, dep: usize, deg: usize) -> Ndd<V> {
-        Ndd {
-            vertex: vertex,
-            dep: dep,
-            deg: deg,
-        }
+        Ndd { vertex, dep, deg }
     }
 
     pub fn deg(&self) -> usize {
@@ -34,7 +31,7 @@ impl<V: Copy + Eq + PartialEq + Debug> Ndd<V> {
 pub struct NddTree<V: Copy + Hash + Eq + PartialEq + Debug + Ord> {
     ndds: Vec<Ndd<V>>,
     // parents is used to cache the parent of each node.
-    // parent[i] is te parent of ndds[i-1].vertex
+    // parent[i] is the parent of ndds[i-1].vertex
     parents: RefCell<Vec<V>>,
     deg: usize,
     deg_in_g: usize,
@@ -61,7 +58,24 @@ where
     }
 }
 
-// TODO: add one_tree_op2
+pub fn one_tree_op2<V>(t: &NddTree<V>, p: usize, r: usize, a: usize) -> NddTree<V>
+where
+    V: Copy + Hash + Eq + PartialEq + Debug + Ord,
+{
+    assert!(!t.is_ancestor(p, a));
+    let new = t.without_subtree(p);
+    // TODO: avoid allocations
+    // See the comments of op2
+    let mut sub = NddTree::new(t.subtree(p).to_vec());
+    sub.ndds[0].deg -= 1;
+    sub.change_root(r - p);
+    sub.ndds[0].deg += 1;
+    if a < p {
+        new.with_subtree(a, &*sub)
+    } else {
+        new.with_subtree(a - sub.len(), &*sub)
+    }
+}
 
 pub fn op2<V>(
     from: &NddTree<V>,
@@ -151,6 +165,7 @@ where
     }
 
     pub fn change_root(&mut self, r: usize) {
+        // TODO: how to do it without allocating?
         let mut new = Vec::with_capacity(self.len());
         new.extend_from_slice(self.subtree(r));
         for ndd in &mut new {
@@ -474,5 +489,17 @@ mod tests {
 
         assert_eq!(exp_from, from);
         assert_eq!(exp_to, to);
+    }
+
+    #[test]
+    fn test_one_tree_op2() {
+        let t = t1();
+        let exp = NddTree::from_vecs(
+            &[3, 1, 2, 6, 4, 5, 7, 8, 9, 0],
+            &[0, 1, 2, 3, 4, 5, 5, 6, 6, 6],
+            &[1, 2, 2, 2, 3, 1, 4, 1, 1, 1],
+        );
+        let new = one_tree_op2(&t, 3, 8, 2); // vertex 7, 6 and 2
+        assert_eq!(exp, new);
     }
 }
