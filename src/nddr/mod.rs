@@ -1,4 +1,3 @@
-// TODO: port to sgps2
 // The NDDR structure is describe in
 // Efficient Forest Data Strucuture for Evolutionary Algorithms Applied to Network Design
 // Alexandre C. B. Delbem, Telam W. de Lima and Guilherme P. Telles.

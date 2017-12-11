@@ -6,7 +6,7 @@ use fera::graph::choose::Choose;
 use fera::graph::prelude::*;
 use fera::graph::sum_prop;
 use fera::graph::traverse::{continue_if, Control, Dfs, Visitor, OnDiscoverTreeEdge};
-use rand::{Rng, XorShiftRng};
+use rand::Rng;
 
 // system
 use std::cell::{Ref, RefMut, RefCell};
@@ -36,9 +36,16 @@ pub enum FindOpStrategy {
     Balanced,
 }
 
+// The strategy used to find the tree that contains a vertex.
 #[derive(PartialEq, Clone, Copy)]
 pub enum FindVertexStrategy {
+    // This is the strategy described in the article. This is called FatNode because it is like the
+    // fat node strategy used in persistent data structures.
     FatNode,
+    // This strategy avoids the use of PI matrix used in the FatNode strategy. It's uses a map in
+    // each tree to indicate if a vertex is present in that tree. To find the tree that contains a
+    // vertex, the trees are queried in sequence. There are O(sqrt(n)) trees, and each queries takes
+    // O(1), so the running time is O(sqrt(n)).
     Map,
 }
 
@@ -58,15 +65,19 @@ where
     // Used if find_vertex_strategy == Map to map each vertex to a number in 0..n
     vertex_index: VertexIndexProp<G>,
 
-    // The next two field are used if find_op_strategy = Adj or AdjSmaller
-    // used in sample without replacement in select_tree_if
+    // See section VI-B - 3
+    // The next two field are used if find_op_strategy = Adj or AdjSmaller used in sample without
+    // replacement in select_tree_if. This does the role of the L_O array described in the paper.
     tree_indices: Vec<usize>,
-    // used to mark edges in a tree
+    // Used to mark edges in a tree (M_E_T in the paper)
+    // TODO: use Option?
     m: DefaultVertexPropMut<G, DefaultVertexPropMut<G, bool>>,
 
-    // The next fields are use if find_vertex_strategy = FatNode
+    // The next fields are use if find_vertex_strategy = FatNode. In forest version h, the vertex
+    // x was in position pi_pos[x][h] of the tree with index pi_tree[x][h]
     version: usize,
-    // FIXME: reset
+    // FIXME: implements reinitialization (In section VI-B - 5 - is not said which value was
+    // used for k)
     pi_version: DefaultVertexPropMut<G, Vec<usize>>,
     pi_tree: DefaultVertexPropMut<G, Vec<usize>>,
     pi_pos: DefaultVertexPropMut<G, Vec<usize>>,
@@ -121,7 +132,7 @@ where
 {
     data: Rc<RefCell<Data<G, W>>>,
 
-    // The star tree is keeped in trees[0]. The star tree connects the roots of the trees.
+    // The star tree is kept in trees[0]. The star tree connects the roots of the trees.
     // TODO: Use RcArray
     trees: Vec<Rc<NddTree<Vertex<G>>>>,
     // Edges (u, v) such that u and v are star tree vertices.
@@ -138,7 +149,7 @@ where
 
     // Used if find_vertex_strategy = FatNode
     //
-    // FIXME: implent a scheme to reset the history
+    // FIXME: implements a scheme to reset the history
     version: usize,
     history: Vec<usize>,
 }
