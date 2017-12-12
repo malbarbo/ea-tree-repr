@@ -1,4 +1,5 @@
 extern crate fera;
+extern crate fera_array;
 extern crate rand;
 
 mod parent;
