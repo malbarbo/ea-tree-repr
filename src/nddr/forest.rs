@@ -55,7 +55,6 @@ where
 {
     g: G,
     nsqrt: usize,
-    pub dc: usize,
     pub find_op_strategy: FindOpStrategy,
     pub find_vertex_strategy: FindVertexStrategy,
 
@@ -97,7 +96,6 @@ where
         Data {
             g: g,
             nsqrt: nsqrt,
-            dc: ::std::usize::MAX,
             find_op_strategy: FindOpStrategy::Balanced,
             find_vertex_strategy: FindVertexStrategy::FatNode,
             vertex_index: vertex_index,
@@ -293,16 +291,11 @@ where
         }
     }
 
+    // TODO: create a version of op1 that take degree constraint
     pub fn op1<R: Rng>(&mut self, rng: &mut R) -> (Edge<G>, Edge<G>) {
-        loop {
-            let (e, from, p, to, a) = self.find_vertices_op1(rng);
-            let v = self.g().target(e);
-            if !self.is_deg_max(v) {
-                let (ins, rem) = self.do_op1((from, p, to, a));
-                assert!(self.is_deg_valid(v));
-                return (ins, rem);
-            }
-        }
+        let (from, p, to, a) = self.find_vertices_op1(rng);
+        let (ins, rem) = self.do_op1((from, p, to, a));
+        (ins, rem)
     }
 
     pub fn contains(&self, e: Edge<G>) -> bool {
@@ -355,7 +348,7 @@ where
     }
 
     #[inline(never)]
-    fn find_vertices_op1<R: Rng>(&self, rng: &mut R) -> (Edge<G>, usize, usize, usize, usize) {
+    fn find_vertices_op1<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize) {
         if self.should_mutate_star_tree(rng) {
             return self.find_op_star_edge(rng);
         }
@@ -373,8 +366,7 @@ where
             assert!(to != 0);
 
             if self.can_insert_subtree_edge((from, p, to, a)) {
-                let e = self.edge_by_ends(self[from][p].vertex(), self[to][a].vertex());
-                return (e, from, p, to, a);
+                return (from, p, to, a);
             }
         }
     }
@@ -483,7 +475,7 @@ where
     }
 
     #[inline(never)]
-    fn find_op_star_edge<R: Rng>(&self, rng: &mut R) -> (Edge<G>, usize, usize, usize, usize) {
+    fn find_op_star_edge<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize) {
         let e = {
             *sample_without_replacement(&mut *self.star_edges.borrow_mut(), rng, |e| {
                 self.can_insert_star_edge(*e)
@@ -492,7 +484,7 @@ where
         let (u, v) = self.g().ends(e);
         let p = self[0].find_vertex(u).unwrap();
         let a = self[0].find_vertex(v).unwrap();
-        (e, 0, p, 0, a)
+        (0, p, 0, a)
     }
 
     fn replace1(&mut self, i: usize, mut ti: NddTree<Vertex<G>>) {
@@ -684,7 +676,7 @@ where
         self.data().find_vertex_strategy
     }
 
-    fn degree(&self, u: Vertex<G>) -> usize {
+    fn _degree(&self, u: Vertex<G>) -> usize {
         let (t, i) = self.find_index(u);
         self[t][i].deg() +
             if i == 0 {
@@ -693,18 +685,6 @@ where
             } else {
                 0
             }
-    }
-
-    fn is_deg_max(&self, u: Vertex<G>) -> bool {
-        self.degree(u) == self.dc()
-    }
-
-    fn is_deg_valid(&self, u: Vertex<G>) -> bool {
-        self.degree(u) <= self.dc()
-    }
-
-    fn dc(&self) -> usize {
-        self.data().dc
     }
 
     fn g(&self) -> Ref<G> {
