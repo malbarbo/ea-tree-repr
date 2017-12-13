@@ -55,8 +55,8 @@ where
 {
     g: G,
     nsqrt: usize,
-    pub find_op_strategy: FindOpStrategy,
-    pub find_vertex_strategy: FindVertexStrategy,
+    find_op_strategy: FindOpStrategy,
+    find_vertex_strategy: FindVertexStrategy,
 
     // Used if find_vertex_strategy == Map to map each vertex to a number in 0..n
     vertex_index: VertexIndexProp<G>,
@@ -84,7 +84,7 @@ where
     G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     DefaultVertexPropMut<G, bool>: Clone,
 {
-    fn new(g: G) -> Self {
+    pub fn new(g: G, find_op: FindOpStrategy, find_vertex: FindVertexStrategy) -> Self {
         let nsqrt = (g.num_vertices() as f64).sqrt().ceil() as usize;
         let m = g.vertex_prop(g.vertex_prop(false));
         let vertex_index = g.vertex_index();
@@ -96,8 +96,8 @@ where
         Data {
             g: g,
             nsqrt: nsqrt,
-            find_op_strategy: FindOpStrategy::Balanced,
-            find_vertex_strategy: FindVertexStrategy::FatNode,
+            find_op_strategy: find_op,
+            find_vertex_strategy: find_vertex,
             vertex_index: vertex_index,
             tree_indices: tree_indices,
             m: m,
@@ -119,6 +119,8 @@ where
     Vertex<G>: Ord,
 {
     data: Rc<RefCell<Data<G>>>,
+
+    last_op1_size: usize,
 
     // The star tree is kept in trees[0]. The star tree connects the roots of the trees.
     // TODO: Use RcArray
@@ -150,6 +152,7 @@ where
     fn clone(&self) -> Self {
         Self {
             data: self.data.clone(),
+            last_op1_size: self.last_op1_size,
             trees: self.trees.clone(),
             star_edges: self.star_edges.clone(),
             maps: self.maps.clone(),
@@ -210,7 +213,27 @@ where
     Vertex<G>: Ord,
 {
     pub fn new<R: Rng>(g: G, edges: Vec<Edge<G>>, rng: R) -> Self {
-        Self::new_with_data(Rc::new(RefCell::new(Data::new(g))), edges, rng)
+        Self::new_with_strategies(
+            g,
+            edges,
+            FindOpStrategy::Adj,
+            FindVertexStrategy::FatNode,
+            rng,
+        )
+    }
+
+    pub fn new_with_strategies<R: Rng>(
+        g: G,
+        edges: Vec<Edge<G>>,
+        find_op: FindOpStrategy,
+        find_vertex: FindVertexStrategy,
+        rng: R,
+    ) -> Self {
+        Self::new_with_data(
+            Rc::new(RefCell::new(Data::new(g, find_op, find_vertex))),
+            edges,
+            rng,
+        )
     }
 
     fn new_with_data<R: Rng>(data: Rc<RefCell<Data<G>>>, mut edges: Vec<Edge<G>>, rng: R) -> Self {
@@ -283,6 +306,7 @@ where
 
         Forest {
             data: data_rc,
+            last_op1_size: 0,
             trees: trees,
             maps: maps,
             version: version,
@@ -291,9 +315,14 @@ where
         }
     }
 
+    pub fn last_op1_size(&self) -> usize {
+        self.last_op1_size
+    }
+
     // TODO: create a version of op1 that take degree constraint
     pub fn op1<R: Rng>(&mut self, rng: &mut R) -> (Edge<G>, Edge<G>) {
         let (from, p, to, a) = self.find_vertices_op1(rng);
+        self.last_op1_size = self[from].len() + self[to].len();
         let (ins, rem) = self.do_op1((from, p, to, a));
         (ins, rem)
     }
@@ -817,7 +846,7 @@ mod tests {
     fn test_eq() {
         let n = 30;
         let mut rng = rand::weak_rng();
-        let (data, mut tree) = data(n);
+        let (data, mut tree) = data(n, FindOpStrategy::Adj, FindVertexStrategy::FatNode);
         let data = Rc::new(RefCell::new(data));
         let forests = vec((0..n).map(|_| {
             rng.shuffle(&mut tree);
@@ -831,7 +860,11 @@ mod tests {
         }
     }
 
-    fn data(n: u32) -> (Data<CompleteGraph>, Vec<Edge<CompleteGraph>>) {
+    fn data(
+        n: u32,
+        find_op: FindOpStrategy,
+        find_vertex: FindVertexStrategy,
+    ) -> (Data<CompleteGraph>, Vec<Edge<CompleteGraph>>) {
         let mut rng = rand::weak_rng();
         let g = CompleteGraph::new(n);
         let tree = vec(
@@ -840,7 +873,7 @@ mod tests {
                 .map(|(u, v)| g.edge_by_ends(u, v)),
         );
 
-        (Data::new(g.clone()), tree)
+        (Data::new(g.clone(), find_op, find_vertex), tree)
     }
 
     macro_rules! def_test {
@@ -848,9 +881,7 @@ mod tests {
             #[test]
             fn $name() {
                 let mut rng = rand::weak_rng();
-                let (mut data, tree) = data(100);
-                data.find_op_strategy = FindOpStrategy::$op;
-                data.find_vertex_strategy = FindVertexStrategy::$vertex;
+                let (data, tree) = data(100, FindOpStrategy::$op, FindVertexStrategy::$vertex);
                 let mut forest = Forest::new_with_data(Rc::new(RefCell::new(data)), tree, &mut rng);
                 for _ in 0..1000 {
                     let mut f = forest.clone();
