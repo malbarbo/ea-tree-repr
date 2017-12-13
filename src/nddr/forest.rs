@@ -4,7 +4,6 @@ use fera::fun::vec;
 use fera::graph::algs::Trees;
 use fera::graph::choose::Choose;
 use fera::graph::prelude::*;
-use fera::graph::sum_prop;
 use fera::graph::traverse::{continue_if, Control, Dfs, Visitor, OnDiscoverTreeEdge};
 use rand::Rng;
 
@@ -50,13 +49,11 @@ pub enum FindVertexStrategy {
 }
 
 // One instance of Data is shared between many Forest instances.
-struct Data<G, W>
+struct Data<G>
 where
     G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgePropGet<G, u64>,
 {
     g: G,
-    w: W,
     nsqrt: usize,
     pub dc: usize,
     pub find_op_strategy: FindOpStrategy,
@@ -83,13 +80,12 @@ where
     pi_pos: DefaultVertexPropMut<G, Vec<usize>>,
 }
 
-impl<G, W> Data<G, W>
+impl<G> Data<G>
 where
     G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgePropGet<G, u64>,
     DefaultVertexPropMut<G, bool>: Clone,
 {
-    fn new(g: G, w: W) -> Self {
+    fn new(g: G) -> Self {
         let nsqrt = (g.num_vertices() as f64).sqrt().ceil() as usize;
         let m = g.vertex_prop(g.vertex_prop(false));
         let vertex_index = g.vertex_index();
@@ -100,7 +96,6 @@ where
         let pi_pos = g.vertex_prop(Vec::<usize>::new());
         Data {
             g: g,
-            w: w,
             nsqrt: nsqrt,
             dc: ::std::usize::MAX,
             find_op_strategy: FindOpStrategy::Balanced,
@@ -118,27 +113,20 @@ where
     fn g(&self) -> &G {
         &self.g
     }
-
-    fn w(&self) -> &W {
-        &self.w
-    }
 }
 
-pub struct Forest<G, W>
+pub struct Forest<G>
 where
     G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgePropGet<G, u64>,
     Vertex<G>: Ord,
 {
-    data: Rc<RefCell<Data<G, W>>>,
+    data: Rc<RefCell<Data<G>>>,
 
     // The star tree is kept in trees[0]. The star tree connects the roots of the trees.
     // TODO: Use RcArray
     trees: Vec<Rc<NddTree<Vertex<G>>>>,
     // Edges (u, v) such that u and v are star tree vertices.
     star_edges: Rc<RefCell<Vec<Edge<G>>>>,
-    // Sum of weight of the tree edges, including star edges
-    weight: u64,
 
     // Used if find_vertex_strategy == Map
     //
@@ -154,12 +142,11 @@ where
     history: Vec<usize>,
 }
 
-impl<G, W> Clone for Forest<G, W>
+impl<G> Clone for Forest<G>
 where
     G: Graph
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgePropGet<G, u64>,
     Vertex<G>: Ord,
 {
     fn clone(&self) -> Self {
@@ -167,7 +154,6 @@ where
             data: self.data.clone(),
             trees: self.trees.clone(),
             star_edges: self.star_edges.clone(),
-            weight: self.weight,
             maps: self.maps.clone(),
             version: self.version,
             // TODO: Should history be shared? How this affects running time?
@@ -176,13 +162,12 @@ where
     }
 }
 
-impl<G, W> Deref for Forest<G, W>
+impl<G> Deref for Forest<G>
 where
     G: Graph
         + Choose
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgePropGet<G, u64>,
     Vertex<G>: Ord,
 {
     type Target = Vec<Rc<NddTree<Vertex<G>>>>;
@@ -192,13 +177,12 @@ where
     }
 }
 
-impl<G, W> PartialEq for Forest<G, W>
+impl<G> PartialEq for Forest<G>
 where
     G: AdjacencyGraph
         + Choose
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgePropGet<G, u64>,
     DefaultVertexPropMut<G, bool>: Clone,
     Vertex<G>: Ord,
 {
@@ -207,14 +191,10 @@ where
             return true;
         }
 
-        if self.weight != other.weight {
-            return false;
-        }
-
         // TODO: make it faster
         for e in self.edges_vec() {
             if !other.contains(e) {
-                return false
+                return false;
             }
         }
 
@@ -222,24 +202,22 @@ where
     }
 }
 
-impl<G, W> Forest<G, W>
+impl<G> Forest<G>
 where
     G: AdjacencyGraph
         + Choose
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    W: EdgePropGet<G, u64>,
     DefaultVertexPropMut<G, bool>: Clone,
     Vertex<G>: Ord,
 {
-    pub fn new<R: Rng>(g: G, w: W, edges: Vec<Edge<G>>, rng: R) -> Self {
-        Self::new_with_data(Rc::new(RefCell::new(Data::new(g, w))), edges, rng)
+    pub fn new<R: Rng>(g: G, edges: Vec<Edge<G>>, rng: R) -> Self {
+        Self::new_with_data(Rc::new(RefCell::new(Data::new(g))), edges, rng)
     }
 
-    fn new_with_data<R: Rng>(data: Rc<RefCell<Data<G, W>>>, mut edges: Vec<Edge<G>>, rng: R) -> Self {
+    fn new_with_data<R: Rng>(data: Rc<RefCell<Data<G>>>, mut edges: Vec<Edge<G>>, rng: R) -> Self {
         let data_rc = data.clone();
         let mut data = data.borrow_mut();
-        let weight: u64 = sum_prop(data.w(), &edges);
         let nsqrt = data.nsqrt;
 
         let star_tree = {
@@ -291,7 +269,7 @@ where
             data.version += 1;
             let version = data.version;
             for (i, t) in trees[1..].iter().enumerate() {
-                Forest::<G, W>::add_fat_node(data, version, i + 1, &t);
+                Forest::<G>::add_fat_node(data, version, i + 1, &t);
             }
         }
 
@@ -299,7 +277,7 @@ where
         if data.find_vertex_strategy == FindVertexStrategy::Map {
             let indices = &data.vertex_index;
             for (i, t) in trees[1..].iter().enumerate() {
-                maps.push(Forest::<G, W>::new_map(indices, i + 1, &t));
+                maps.push(Forest::<G>::new_map(indices, i + 1, &t));
             }
         }
 
@@ -312,18 +290,17 @@ where
             version: version,
             history: vec![version],
             star_edges: Rc::new(RefCell::new(star_edges)),
-            weight: weight,
         }
     }
 
-    pub fn op1<R: Rng>(&mut self, rng: &mut R) {
+    pub fn op1<R: Rng>(&mut self, rng: &mut R) -> (Edge<G>, Edge<G>) {
         loop {
             let (e, from, p, to, a) = self.find_vertices_op1(rng);
             let v = self.g().target(e);
             if !self.is_deg_max(v) {
-                self.do_op1((from, p, to, a));
+                let (ins, rem) = self.do_op1((from, p, to, a));
                 assert!(self.is_deg_valid(v));
-                break;
+                return (ins, rem);
             }
         }
     }
@@ -332,10 +309,6 @@ where
         // TODO: what is the execution time?
         let (u, v) = self.g().ends(e);
         self.trees.iter().any(|t| t.contains_edge(u, v))
-    }
-
-    pub fn weight(&self) -> u64 {
-        self.weight
     }
 
     pub fn check(&self) {
@@ -347,16 +320,13 @@ where
         let g = self.g();
         let sub = g.spanning_subgraph(&edges);
         assert!(sub.is_tree());
-
-        let weight: u64 = sum_prop(&*self.w(), &edges);
-        assert_eq!(weight, self.weight());
     }
 
 
     // Subtree ops
 
     #[inline(never)]
-    fn do_op1(&mut self, params: (usize, usize, usize, usize)) -> OptionEdge<G> {
+    fn do_op1(&mut self, params: (usize, usize, usize, usize)) -> (Edge<G>, Edge<G>) {
         let (ifrom, p, ito, a) = params;
         let ins = self.edge_by_ends(self[ifrom][p].vertex(), self[ito][a].vertex());
         let rem = self.edge_by_ends(self[ifrom][p].vertex(), self[ifrom].parent_vertex(p));
@@ -369,12 +339,7 @@ where
             self.replace(ifrom, from, ito, to);
         }
 
-        let mut weight = self.weight;
-        weight -= self.w().get(rem);
-        weight += self.w().get(ins);
-        self.weight = weight;
-
-        G::edge_some(rem)
+        (ins, rem)
     }
 
     #[inline(never)]
@@ -596,7 +561,7 @@ where
         Rc::new(map)
     }
 
-    fn add_fat_node(data: &mut Data<G, W>, version: usize, i: usize, ti: &NddTree<Vertex<G>>) {
+    fn add_fat_node(data: &mut Data<G>, version: usize, i: usize, ti: &NddTree<Vertex<G>>) {
         if i == 0 {
             return;
         }
@@ -742,19 +707,15 @@ where
         self.data().dc
     }
 
-    fn w(&self) -> Ref<W> {
-        Ref::map(self.data(), |d| d.w())
-    }
-
     fn g(&self) -> Ref<G> {
         Ref::map(self.data(), |d| d.g())
     }
 
-    fn data(&self) -> Ref<Data<G, W>> {
+    fn data(&self) -> Ref<Data<G>> {
         self.data.borrow()
     }
 
-    fn data_mut(&self) -> RefMut<Data<G, W>> {
+    fn data_mut(&self) -> RefMut<Data<G>> {
         self.data.borrow_mut()
     }
 }
@@ -890,18 +851,16 @@ mod tests {
         }
     }
 
-    fn data(
-        n: u32,
-    ) -> (Data<CompleteGraph, DefaultEdgePropMut<CompleteGraph, u64>>, Vec<Edge<CompleteGraph>>) {
+    fn data(n: u32) -> (Data<CompleteGraph>, Vec<Edge<CompleteGraph>>) {
         let mut rng = rand::weak_rng();
         let g = CompleteGraph::new(n);
-        let w: DefaultEdgePropMut<CompleteGraph, u64> =
-            g.edge_prop_from_fn(|_| rng.gen_range(0, 1_000_000));
-        let tree = vec(StaticGraph::new_random_tree(n as usize, &mut rng).edges_ends().map(
-            |(u, v)| g.edge_by_ends(u, v),
-        ));
+        let tree = vec(
+            StaticGraph::new_random_tree(n as usize, &mut rng)
+                .edges_ends()
+                .map(|(u, v)| g.edge_by_ends(u, v)),
+        );
 
-        (Data::new(g.clone(), w.clone()), tree)
+        (Data::new(g.clone()), tree)
     }
 
     macro_rules! def_test {
@@ -916,7 +875,9 @@ mod tests {
                 for _ in 0..1000 {
                     let mut f = forest.clone();
                     assert!(forest == f);
-                    f.op1(&mut rng);
+                    let (ins, rem) = f.op1(&mut rng);
+                    assert!(f.contains(ins));
+                    assert!(!f.contains(rem));
                     f.check();
                     assert!(forest != f);
                     forest = f;
