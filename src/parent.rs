@@ -298,6 +298,7 @@ mod tests {
     use fera::graph::algs::Paths;
     use fera_array::Array;
     use rand::{self, Rng};
+    use random_sp;
 
     macro_rules! def_tests {
         ($m:ident, $t:ty, $($name:ident),+) => (
@@ -326,14 +327,8 @@ mod tests {
     );
 
     fn graph_tree(n: u32) -> (CompleteGraph, Vec<Edge<CompleteGraph>>) {
-        let mut rng = rand::weak_rng();
         let g = CompleteGraph::new(n);
-        let tree = vec(
-            StaticGraph::new_random_tree(n as usize, &mut rng)
-                .edges_ends()
-                .map(|(u, v)| g.edge_by_ends(u, v)),
-        );
-
+        let tree = random_sp(&g, rand::weak_rng());
         (g, tree)
     }
 
