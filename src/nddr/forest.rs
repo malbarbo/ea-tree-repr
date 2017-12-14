@@ -66,8 +66,7 @@ where
     // replacement in select_tree_if. This does the role of the L_O array described in the paper.
     tree_indices: Vec<usize>,
     // Used to mark edges in a tree (M_E_T in the paper)
-    // TODO: use Option?
-    m: DefaultVertexPropMut<G, DefaultVertexPropMut<G, bool>>,
+    m: Option<DefaultVertexPropMut<G, DefaultVertexPropMut<G, bool>>>,
 
     // The next fields are use if find_vertex_strategy = FatNode. In forest version h, the vertex
     // x was in position pi_pos[x][h] of the tree with index pi_tree[x][h]
@@ -86,7 +85,11 @@ where
 {
     pub fn new(g: G, find_op: FindOpStrategy, find_vertex: FindVertexStrategy) -> Self {
         let nsqrt = (g.num_vertices() as f64).sqrt().ceil() as usize;
-        let m = g.vertex_prop(g.vertex_prop(false));
+        let m = match find_op {
+            FindOpStrategy::Adj |
+            FindOpStrategy::AdjSmaller => Some(g.vertex_prop(g.vertex_prop(false))),
+            _ => None,
+        };
         let vertex_index = g.vertex_index();
         // 0 is the index of the star tree, so its keeped out
         let tree_indices = vec(1..nsqrt + 1);
@@ -128,7 +131,7 @@ where
     // Edges (u, v) such that u and v are star tree vertices.
     star_edges: Rc<RefCell<Vec<Edge<G>>>>,
 
-    // Used if find_vertex_strategy == Map
+    // Used if find_vertex_strategy == Map. This does not allocate if find_vertex_strategy != Map.
     //
     // if trees[i][maps[i][vertex_index[v]]].vertex == v,
     // so v is in tree[i] in position maps[i][vertex_index[v]]
@@ -422,7 +425,8 @@ where
         self.mark_edges(from);
 
         let v_a = {
-            let m = &self.data().m;
+            let data = self.data();
+            let m = data.m.as_ref().unwrap();
             // Choose an edge (v_p, v_a) not in trees[from], that is, not marked
             let v_p = self[from][p].vertex();
             // TODO: in a complete graph the chance of choosing a vertex v_a such that (v_p, v_a)
@@ -675,7 +679,8 @@ where
 
     #[inline(never)]
     fn set_edges_on_m(&self, t: usize, value: bool) {
-        let m = &mut self.data_mut().m;
+        let mut data = self.data_mut();
+        let m = data.m.as_mut().unwrap();
         self[t].for_each_edge(|u, v| m[u][v] = value);
     }
 
@@ -805,6 +810,7 @@ where
 mod tests {
     use super::*;
     use rand;
+    use random_sp;
 
     #[test]
     fn test_collect_trees() {
@@ -867,12 +873,7 @@ mod tests {
     ) -> (Data<CompleteGraph>, Vec<Edge<CompleteGraph>>) {
         let mut rng = rand::weak_rng();
         let g = CompleteGraph::new(n);
-        let tree = vec(
-            StaticGraph::new_random_tree(n as usize, &mut rng)
-                .edges_ends()
-                .map(|(u, v)| g.edge_by_ends(u, v)),
-        );
-
+        let tree = random_sp(&g, &mut rng);
         (Data::new(g.clone(), find_op, find_vertex), tree)
     }
 
