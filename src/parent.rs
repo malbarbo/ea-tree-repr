@@ -1,49 +1,62 @@
 use fera::graph::prelude::*;
 use fera::graph::choose::Choose;
 use fera::graph::traverse::{Dfs, OnDiscoverTreeEdge};
-use fera_array::{Array, VecArray};
+use fera_array::{Array, VecArray, CowNestedArray, CowNestedNestedArray};
 use rand::Rng;
 
+use std::rc::Rc;
 use std::mem;
 
-// This also works with forests, maybe we should change the name.
-pub struct ParentTree<'a, G, A = VecArray<OptionEdge<G>>>
-where
-    G: 'a + Graph + WithVertexIndexProp,
-    A: Array<OptionEdge<G>>,
-{
-    g: &'a G,
-    index: VertexIndexProp<G>,
-    parent: A,
-}
+pub type Parent2Tree<G> = ParentTree<G, CowNestedArray<OptionEdge<G>>>;
+pub type Parent3Tree<G> = ParentTree<G, CowNestedNestedArray<OptionEdge<G>>>;
 
-impl<'a, G, A> ParentTree<'a, G, A>
+// This also works with forests, maybe we should change the name.
+pub struct ParentTree<G, A = VecArray<OptionEdge<G>>>
 where
     G: Graph + WithVertexIndexProp,
     A: Array<OptionEdge<G>>,
 {
-    pub fn new(g: &'a G) -> Self {
+    g: Rc<G>,
+    index: VertexIndexProp<G>,
+    parent: A,
+}
+
+impl<G, A> ParentTree<G, A>
+where
+    G: Graph + WithVertexIndexProp,
+    A: Array<OptionEdge<G>>,
+{
+    pub fn new(g: G) -> Self {
+        let n = g.num_vertices();
+        let index = g.vertex_index();
         ParentTree {
-            g,
-            index: g.vertex_index(),
-            parent: A::with_value(G::edge_none(), g.num_vertices()),
+            g: Rc::new(g),
+            index: index,
+            parent: A::with_value(G::edge_none(), n),
         }
     }
 
-    pub fn from_iter<I>(g: &'a G, edges: I) -> Self
+    pub fn from_iter<I>(g: G, edges: I) -> Self
     where
         I: IntoIterator<Item = Edge<G>>,
     {
         let index = g.vertex_index();
-        let sub = g.spanning_subgraph(edges);
-        let r = sub.edges().next().map(|e| g.source(e));
-        let mut parent = A::with_value(G::edge_none(), g.num_vertices());
-        sub.dfs(OnDiscoverTreeEdge(|e| {
-            parent[index.get(g.target(e))] = g.reverse(e).into();
-        })).roots(r)
-            .run();
+        let parent = {
+            let sub = g.spanning_subgraph(edges);
+            let r = sub.edges().next().map(|e| g.source(e));
+            let mut parent = A::with_value(G::edge_none(), g.num_vertices());
+            sub.dfs(OnDiscoverTreeEdge(|e| {
+                parent[index.get(g.target(e))] = g.reverse(e).into();
+            })).roots(r)
+                .run();
+            parent
+        };
 
-        ParentTree { g, index, parent }
+        ParentTree {
+            g: Rc::new(g),
+            index,
+            parent,
+        }
     }
 
     pub fn contains(&self, e: Edge<G>) -> bool {
@@ -64,7 +77,8 @@ where
             true
         } else {
             self.make_root(v);
-            self.set_parent(v, self.g.reverse(e));
+            let e = self.g.reverse(e);
+            self.set_parent(v, e);
             true
         }
     }
@@ -104,7 +118,9 @@ where
     pub fn make_root(&mut self, u: Vertex<G>) {
         let mut parent = self.cut_parent(u);
         while let Some(e) = parent {
-            parent = self.set_parent(self.g.target(e), self.g.reverse(e));
+            let t = self.g.target(e);
+            let e = self.g.reverse(e);
+            parent = self.set_parent(t, e);
         }
     }
 
@@ -188,18 +204,19 @@ where
     }
 }
 
-impl<'a, G, A> ParentTree<'a, G, A>
+impl<G, A> ParentTree<G, A>
 where
-    G: 'a + Graph + Choose + WithVertexIndexProp,
+    G: Graph + Choose + WithVertexIndexProp,
     A: Array<OptionEdge<G>>,
 {
     pub fn change_parent<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Option<Edge<G>>) {
-        for ins in self.g.choose_edge_iter(&mut rng) {
+        for ins in self.g.clone().choose_edge_iter(&mut rng) {
             let (u, v) = self.g.ends(ins);
             if self.contains(ins) {
                 continue;
             } else if self.is_ancestor_of(u, v) {
-                return (ins, self.set_parent(v, self.g.reverse(ins)));
+                let rev = self.g.reverse(ins);
+                return (ins, self.set_parent(v, rev));
             } else {
                 return (ins, self.set_parent(u, ins));
             }
@@ -231,27 +248,27 @@ where
     }
 }
 
-impl<'a, G, A> Clone for ParentTree<'a, G, A>
+impl<G, A> Clone for ParentTree<G, A>
 where
     G: Graph + WithVertexIndexProp,
     A: Array<OptionEdge<G>> + Clone,
 {
     fn clone(&self) -> Self {
         Self {
-            g: self.g,
+            g: self.g.clone(),
             index: self.g.vertex_index(),
             parent: self.parent.clone(),
         }
     }
 
     fn clone_from(&mut self, other: &Self) {
-        self.g = other.g;
+        self.g = other.g.clone();
         self.index = other.g.vertex_index();
         self.parent.clone_from(&other.parent);
     }
 }
 
-impl<'a, G, A> PartialEq for ParentTree<'a, G, A>
+impl<G, A> PartialEq for ParentTree<G, A>
 where
     G: Graph + WithVertexIndexProp,
     A: Array<OptionEdge<G>>,
@@ -270,14 +287,14 @@ where
     G: 'a + Graph + WithVertexIndexProp,
     A: 'a + Array<OptionEdge<G>>,
 {
-    tree: &'a ParentTree<'a, G, A>,
+    tree: &'a ParentTree<G, A>,
     cur: Vertex<G>,
 }
 
 impl<'a, G, A> Iterator for PathToRoot<'a, G, A>
 where
-    G: 'a + Graph + WithVertexIndexProp,
-    A: 'a + Array<OptionEdge<G>>,
+    G: Graph + WithVertexIndexProp,
+    A: Array<OptionEdge<G>>,
 {
     type Item = Edge<G>;
 
@@ -303,7 +320,7 @@ mod tests {
     macro_rules! def_tests {
         ($m:ident, $t:ty, $($name:ident),+) => (
             mod $m {
-                use fera_array;
+                use fera_array::*;
                 $(
                     #[test]
                     fn $name() {
@@ -315,14 +332,20 @@ mod tests {
     }
 
     def_tests!(
-        vec,
-        fera_array::VecArray<_>,
+        parent,
+        VecArray<_>,
         eq, change_parent, change_any, make_root, find_root, paths
     );
 
     def_tests!(
-        cow,
-        fera_array::CowNestedArray<_>,
+        parent2,
+        CowNestedArray<_>,
+        eq, change_parent, change_any, make_root, find_root, paths
+    );
+
+    def_tests!(
+        parent3,
+        CowNestedNestedArray<_>,
         eq, change_parent, change_any, make_root, find_root, paths
     );
 
@@ -338,7 +361,7 @@ mod tests {
         let (g, mut tree) = graph_tree(n);
         let trees: Vec<ParentTree<CompleteGraph, A>> = vec((0..n).map(|_| {
             rng.shuffle(&mut *tree);
-            ParentTree::from_iter(&g, tree.clone())
+            ParentTree::from_iter(g, tree.clone())
         }));
         for i in 0..(n as usize) {
             for j in 0..(n as usize) {
@@ -351,7 +374,7 @@ mod tests {
         let mut rng = rand::weak_rng();
         let n = 30;
         let (g, tree) = graph_tree(n);
-        let mut tree: ParentTree<CompleteGraph, A> = ParentTree::from_iter(&g, tree);
+        let mut tree: ParentTree<CompleteGraph, A> = ParentTree::from_iter(g, tree);
         for _ in 0..1000 {
             let mut new = tree.clone();
             let (ins, rem) = new.change_parent(&mut rng);
@@ -368,7 +391,7 @@ mod tests {
         let mut buffer = vec![];
         let n = 30;
         let (g, tree) = graph_tree(n);
-        let mut tree: ParentTree<CompleteGraph, A> = ParentTree::from_iter(&g, tree);
+        let mut tree: ParentTree<CompleteGraph, A> = ParentTree::from_iter(g, tree);
         for _ in 0..1000 {
             let mut new = tree.clone();
             let (ins, rem) = new.change_any(&mut buffer, &mut rng);
@@ -384,7 +407,7 @@ mod tests {
         let mut rng = rand::weak_rng();
         let n = 30;
         let (g, tree) = graph_tree(n);
-        let mut tree: ParentTree<CompleteGraph, A> = ParentTree::from_iter(&g, tree);
+        let mut tree: ParentTree<CompleteGraph, A> = ParentTree::from_iter(g, tree);
         for u in g.choose_vertex_iter(&mut rng).take(1000) {
             let mut new = tree.clone();
             new.make_root(u);
@@ -399,7 +422,7 @@ mod tests {
         let n = 30;
         let (g, tree) = graph_tree(n);
         let r = g.source(tree[0]);
-        let tree: ParentTree<CompleteGraph, A> = ParentTree::from_iter(&g, tree);
+        let tree: ParentTree<CompleteGraph, A> = ParentTree::from_iter(g, tree);
         for v in g.vertices() {
             assert_eq!(r == v, tree.is_root(v));
             assert_eq!(r, tree.find_root(v));
@@ -421,7 +444,7 @@ mod tests {
         let e = |u, v| g.edge_by_ends(u, v);
 
         let tree: ParentTree<CompleteGraph, A> = ParentTree::from_iter(
-            &g,
+            g.clone(),
             vec![
                 e(0, 1),
                 e(2, 1),
