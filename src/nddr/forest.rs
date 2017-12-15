@@ -4,11 +4,11 @@ use fera::fun::vec;
 use fera::graph::algs::Trees;
 use fera::graph::choose::Choose;
 use fera::graph::prelude::*;
-use fera::graph::traverse::{continue_if, Control, Dfs, Visitor, OnDiscoverTreeEdge};
+use fera::graph::traverse::{continue_if, Control, Dfs, OnDiscoverTreeEdge, Visitor};
 use rand::Rng;
 
 // system
-use std::cell::{Ref, RefMut, RefCell};
+use std::cell::{Ref, RefCell, RefMut};
 use std::rc::Rc;
 use std::ops::Deref;
 
@@ -86,8 +86,9 @@ where
     pub fn new(g: G, find_op: FindOpStrategy, find_vertex: FindVertexStrategy) -> Self {
         let nsqrt = (g.num_vertices() as f64).sqrt().ceil() as usize;
         let m = match find_op {
-            FindOpStrategy::Adj |
-            FindOpStrategy::AdjSmaller => Some(g.vertex_prop(g.vertex_prop(false))),
+            FindOpStrategy::Adj | FindOpStrategy::AdjSmaller => {
+                Some(g.vertex_prop(g.vertex_prop(false)))
+            }
             _ => None,
         };
         let vertex_index = g.vertex_index();
@@ -147,9 +148,7 @@ where
 
 impl<G> Clone for Forest<G>
 where
-    G: Graph
-        + WithVertexIndexProp
-        + WithVertexProp<DefaultVertexPropMut<G, bool>>,
+    G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     Vertex<G>: Ord,
 {
     fn clone(&self) -> Self {
@@ -168,10 +167,7 @@ where
 
 impl<G> Deref for Forest<G>
 where
-    G: Graph
-        + Choose
-        + WithVertexIndexProp
-        + WithVertexProp<DefaultVertexPropMut<G, bool>>,
+    G: Graph + Choose + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     Vertex<G>: Ord,
 {
     type Target = Vec<Rc<NddTree<Vertex<G>>>>;
@@ -347,7 +343,6 @@ where
         assert!(sub.is_tree());
     }
 
-
     // Subtree ops
 
     #[inline(never)]
@@ -372,11 +367,11 @@ where
         let (from, p, to, a) = params;
         // The root of the subtree being transfered cannot be the root
         // p cannot be ancestor of a in one_tree_op1
-        !(p == 0 ||
-              from == to &&
-                  (p == a ||
-                       self[from].contains_edge(self[from][p].vertex(), self[from][a].vertex()) ||
-                       self[from].is_ancestor(p, a)))
+        !(p == 0
+            || from == to
+                && (p == a
+                    || self[from].contains_edge(self[from][p].vertex(), self[from][a].vertex())
+                    || self[from].is_ancestor(p, a)))
     }
 
     #[inline(never)]
@@ -490,7 +485,6 @@ where
         (from, p, to, a)
     }
 
-
     // Star edges
 
     #[inline(never)]
@@ -499,12 +493,11 @@ where
         // FIXME: contains_edge is linear!, this can compromisse O(sqrt(n)) time
         // for non complete graph
         // FIXME: whe this function is called from find_op_star_edge find_vertex in called twice
-        self[0][0].vertex() != u && !self[0].contains_edge(u, v) &&
-            {
-                let p = self[0].find_vertex(u).unwrap();
-                let a = self[0].find_vertex(v).unwrap();
-                !self[0].is_ancestor(p, a)
-            }
+        self[0][0].vertex() != u && !self[0].contains_edge(u, v) && {
+            let p = self[0].find_vertex(u).unwrap();
+            let a = self[0].find_vertex(v).unwrap();
+            !self[0].is_ancestor(p, a)
+        }
     }
 
     #[inline(never)]
@@ -539,7 +532,6 @@ where
         self.trees[i] = Rc::new(ti);
     }
 
-
     // Misc
 
     fn replace(
@@ -549,7 +541,6 @@ where
         j: usize,
         mut tj: NddTree<Vertex<G>>,
     ) {
-
         if self.find_vertex_strategy() == FindVertexStrategy::FatNode {
             self.new_version();
             let data = &mut *self.data_mut();
@@ -600,8 +591,8 @@ where
 
     fn should_mutate_star_tree<R: Rng>(&self, rng: &mut R) -> bool {
         // TODO: explain
-        self.trees[0].len() > 2 && 2 * self.star_edges.borrow().len() >= self.trees[0].len() &&
-            rng.gen_range(0, self.data().nsqrt + 1) == self.data().nsqrt
+        self.trees[0].len() > 2 && 2 * self.star_edges.borrow().len() >= self.trees[0].len()
+            && rng.gen_range(0, self.data().nsqrt + 1) == self.data().nsqrt
     }
 
     #[inline(never)]
@@ -693,9 +684,9 @@ where
 
     fn edges_vec(&self) -> Vec<Edge<G>> {
         let v = vec(self.iter().map(|t| t.edges()));
-        vec(v.iter().flat_map(|t| t.iter()).map(|&(u, v)| {
-            self.edge_by_ends(u, v)
-        }))
+        vec(v.iter()
+            .flat_map(|t| t.iter())
+            .map(|&(u, v)| self.edge_by_ends(u, v)))
     }
 
     fn edge_by_ends(&self, u: Vertex<G>, v: Vertex<G>) -> Edge<G> {
@@ -712,13 +703,12 @@ where
 
     fn _degree(&self, u: Vertex<G>) -> usize {
         let (t, i) = self.find_index(u);
-        self[t][i].deg() +
-            if i == 0 {
-                // u is a root so get the degree on start_edge
-                self[0][self[0].find_vertex(u).unwrap()].deg()
-            } else {
-                0
-            }
+        self[t][i].deg() + if i == 0 {
+            // u is a root so get the degree on start_edge
+            self[0][self[0].find_vertex(u).unwrap()].deg()
+        } else {
+            0
+        }
     }
 
     fn g(&self) -> Ref<G> {
@@ -733,7 +723,6 @@ where
         self.data.borrow_mut()
     }
 }
-
 
 // TODO: move to other file
 
@@ -778,11 +767,10 @@ impl<G: AdjacencyGraph> Visitor<G> for CompsVisitor<G> {
     fn discover_edge(&mut self, g: &G, e: Edge<G>) -> Control {
         let (u, v) = g.ends(e);
         self.depth[v] = self.depth[u] + 1;
-        self.trees.last_mut().unwrap().push(Ndd::new(
-            v,
-            self.depth[v],
-            g.out_degree(v),
-        ));
+        self.trees
+            .last_mut()
+            .unwrap()
+            .push(Ndd::new(v, self.depth[v], g.out_degree(v)));
         Control::Continue
     }
 }
@@ -802,7 +790,6 @@ where
     }
     None
 }
-
 
 // Tests
 

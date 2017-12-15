@@ -278,7 +278,6 @@ where
     }
 }
 
-
 impl<V> PartialEq for NddTree<V>
 where
     V: Copy + Hash + Eq + PartialEq + Debug + Ord,
@@ -288,7 +287,6 @@ where
         self.len() == other.len() && self.edges().iter().all(|e| other.contains_edge(e.0, e.1))
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -375,19 +373,17 @@ mod tests {
 
     #[test]
     fn test_edges() {
-        let exp = set(
-            &[
-                (1, 3),
-                (2, 1),
-                (7, 1),
-                (8, 7),
-                (9, 7),
-                (4, 7),
-                (5, 4),
-                (6, 4),
-                (0, 7),
-            ],
-        );
+        let exp = set(&[
+            (1, 3),
+            (2, 1),
+            (7, 1),
+            (8, 7),
+            (9, 7),
+            (4, 7),
+            (5, 4),
+            (6, 4),
+            (0, 7),
+        ]);
         let t = t1();
         assert_eq!(exp, set(t.edges().iter()));
     }

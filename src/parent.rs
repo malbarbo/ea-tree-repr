@@ -1,7 +1,7 @@
 use fera::graph::prelude::*;
 use fera::graph::choose::Choose;
 use fera::graph::traverse::{Dfs, OnDiscoverTreeEdge};
-use fera_array::{Array, VecArray, CowNestedArray, CowNestedNestedArray};
+use fera_array::{Array, CowNestedArray, CowNestedNestedArray, VecArray};
 use rand::Rng;
 
 use std::rc::Rc;
@@ -274,13 +274,13 @@ where
     A: Array<OptionEdge<G>>,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.num_edges() == other.num_edges() &&
-            self.g.vertices().filter_map(|v| self.parent(v)).all(|e| {
-                other.contains(e)
-            })
+        self.num_edges() == other.num_edges()
+            && self.g
+                .vertices()
+                .filter_map(|v| self.parent(v))
+                .all(|e| other.contains(e))
     }
 }
-
 
 pub struct PathToRoot<'a, G, A>
 where
@@ -306,7 +306,6 @@ where
         })
     }
 }
-
 
 #[cfg(test)]
 mod tests {
@@ -334,19 +333,34 @@ mod tests {
     def_tests!(
         parent,
         VecArray<_>,
-        eq, change_parent, change_any, make_root, find_root, paths
+        eq,
+        change_parent,
+        change_any,
+        make_root,
+        find_root,
+        paths
     );
 
     def_tests!(
         parent2,
         CowNestedArray<_>,
-        eq, change_parent, change_any, make_root, find_root, paths
+        eq,
+        change_parent,
+        change_any,
+        make_root,
+        find_root,
+        paths
     );
 
     def_tests!(
         parent3,
         CowNestedNestedArray<_>,
-        eq, change_parent, change_any, make_root, find_root, paths
+        eq,
+        change_parent,
+        change_any,
+        make_root,
+        find_root,
+        paths
     );
 
     fn graph_tree(n: u32) -> (CompleteGraph, Vec<Edge<CompleteGraph>>) {
