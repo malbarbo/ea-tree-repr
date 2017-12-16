@@ -66,6 +66,7 @@ where
     // replacement in select_tree_if. This does the role of the L_O array described in the paper.
     tree_indices: Vec<usize>,
     // Used to mark edges in a tree (M_E_T in the paper)
+    // TODO: Use a thread local bitmap
     m: Option<DefaultVertexPropMut<G, DefaultVertexPropMut<G, bool>>>,
 
     // The next fields are use if find_vertex_strategy = FatNode. In forest version h, the vertex
@@ -153,10 +154,10 @@ where
 {
     fn clone(&self) -> Self {
         Self {
-            data: self.data.clone(),
+            data: Rc::clone(&self.data),
             last_op1_size: self.last_op1_size,
             trees: self.trees.clone(),
-            star_edges: self.star_edges.clone(),
+            star_edges: Rc::clone(&self.star_edges),
             maps: self.maps.clone(),
             version: self.version,
             // TODO: Should history be shared? How this affects running time?
@@ -236,7 +237,9 @@ where
     }
 
     fn new_with_data<R: Rng>(data: Rc<RefCell<Data<G>>>, mut edges: Vec<Edge<G>>, rng: R) -> Self {
-        let data_rc = data.clone();
+        let data_ = data;
+        // use a clone to make the borrow checker happy
+        let data = Rc::clone(&data_);
         let mut data = data.borrow_mut();
         let nsqrt = data.nsqrt;
 
@@ -289,7 +292,7 @@ where
             data.version += 1;
             let version = data.version;
             for (i, t) in trees[1..].iter().enumerate() {
-                Forest::<G>::add_fat_node(data, version, i + 1, &t);
+                Forest::<G>::add_fat_node(data, version, i + 1, t);
             }
         }
 
@@ -297,14 +300,14 @@ where
         if data.find_vertex_strategy == FindVertexStrategy::Map {
             let indices = &data.vertex_index;
             for (i, t) in trees[1..].iter().enumerate() {
-                maps.push(Forest::<G>::new_map(indices, i + 1, &t));
+                maps.push(Forest::<G>::new_map(indices, i + 1, t));
             }
         }
 
         let version = data.version;
 
         Forest {
-            data: data_rc,
+            data: data_,
             last_op1_size: 0,
             trees: trees,
             maps: maps,
@@ -434,8 +437,7 @@ where
             //
             self.g()
                 .choose_out_neighbor_iter(v_p, rng)
-                .filter(|&v_a| !m[v_p][v_a] && !m[v_a][v_p])
-                .next()
+                .find(|&v_a| !m[v_p][v_a] && !m[v_a][v_p])
                 .unwrap()
         };
 
@@ -633,7 +635,7 @@ where
         match self.find_vertex_strategy() {
             FindVertexStrategy::FatNode => {
                 for ver in self.history.iter().rev() {
-                    if let Some(i) = self.data().pi_version[v].binary_search(ver).ok() {
+                    if let Ok(i) = self.data().pi_version[v].binary_search(ver) {
                         let t = self.data().pi_tree[v][i];
                         let p = self.data().pi_pos[v][i];
                         assert_eq!(v, self[t][p].vertex());
@@ -727,7 +729,7 @@ where
 // TODO: move to other file
 
 trait GraphForestExt: IncidenceGraph {
-    fn collect_trees(&self, roots: &Vec<Vertex<Self>>) -> Vec<Vec<Ndd<Vertex<Self>>>> {
+    fn collect_trees(&self, roots: &[Vertex<Self>]) -> Vec<Vec<Ndd<Vertex<Self>>>> {
         let mut vis = CompsVisitor {
             trees: vec![],
             depth: self.vertex_prop(0usize),

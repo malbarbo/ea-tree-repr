@@ -210,11 +210,13 @@ where
     A: Array<OptionEdge<G>>,
 {
     pub fn change_parent<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Option<Edge<G>>) {
-        for ins in self.g.clone().choose_edge_iter(&mut rng) {
+        // use clone to make the borrow checker happy
+        for ins in Rc::clone(&self.g).choose_edge_iter(&mut rng) {
             let (u, v) = self.g.ends(ins);
             if self.contains(ins) {
                 continue;
-            } else if self.is_ancestor_of(u, v) {
+            }
+            if self.is_ancestor_of(u, v) {
                 let rev = self.g.reverse(ins);
                 return (ins, self.set_parent(v, rev));
             } else {
@@ -242,8 +244,7 @@ where
     fn choose_nontree_edge<R: Rng>(&self, mut rng: R) -> Edge<G> {
         self.g
             .choose_edge_iter(&mut rng)
-            .filter(|e| !self.contains(*e))
-            .next()
+            .find(|e| !self.contains(*e))
             .unwrap()
     }
 }
@@ -255,14 +256,14 @@ where
 {
     fn clone(&self) -> Self {
         Self {
-            g: self.g.clone(),
+            g: Rc::clone(&self.g),
             index: self.g.vertex_index(),
             parent: self.parent.clone(),
         }
     }
 
     fn clone_from(&mut self, other: &Self) {
-        self.g = other.g.clone();
+        self.g.clone_from(&other.g);
         self.index = other.g.vertex_index();
         self.parent.clone_from(&other.parent);
     }

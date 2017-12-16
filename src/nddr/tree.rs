@@ -169,7 +169,7 @@ where
         let mut new = Vec::with_capacity(self.len());
         new.extend_from_slice(self.subtree(r));
         for ndd in &mut new {
-            ndd.dep = ndd.dep - self[r].dep;
+            ndd.dep -= self[r].dep;
         }
 
         // TODO: Pre-compute subtree_end. Benchmark
@@ -224,7 +224,7 @@ where
     {
         self.deg = 0;
         self.deg_in_g = 0;
-        for ndd in self.ndds.iter() {
+        for ndd in &self.ndds {
             self.deg += ndd.deg;
             self.deg_in_g += degree(ndd.vertex);
         }
