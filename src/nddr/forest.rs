@@ -48,7 +48,7 @@ pub enum FindVertexStrategy {
     Map,
 }
 
-// One instance of Data is shared between many Forest instances.
+// One instance of Data is shared between many NddrOneTreeForest instances.
 struct Data<G>
 where
     G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
@@ -118,7 +118,7 @@ where
     }
 }
 
-pub struct Forest<G>
+pub struct NddrOneTreeForest<G>
 where
     G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     Vertex<G>: Ord,
@@ -148,7 +148,7 @@ where
     history: Vec<usize>,
 }
 
-impl<G> Clone for Forest<G>
+impl<G> Clone for NddrOneTreeForest<G>
 where
     G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     Vertex<G>: Ord,
@@ -167,7 +167,7 @@ where
     }
 }
 
-impl<G> Deref for Forest<G>
+impl<G> Deref for NddrOneTreeForest<G>
 where
     G: Graph + Choose + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     Vertex<G>: Ord,
@@ -179,7 +179,7 @@ where
     }
 }
 
-impl<G> PartialEq for Forest<G>
+impl<G> PartialEq for NddrOneTreeForest<G>
 where
     G: AdjacencyGraph
         + Choose
@@ -204,7 +204,7 @@ where
     }
 }
 
-impl<G> Forest<G>
+impl<G> NddrOneTreeForest<G>
 where
     G: AdjacencyGraph
         + Choose
@@ -275,7 +275,7 @@ where
 
         let mut trees = vec![star_tree];
 
-        // TODO: try to create a balanced Forest
+        // TODO: try to create a balanced NddrOneTreeForest
         trees.extend({
             let s = data.g().spanning_subgraph(edges);
             s.collect_trees(&roots).into_iter().map(|t| {
@@ -293,7 +293,7 @@ where
             data.version += 1;
             let version = data.version;
             for (i, t) in trees[1..].iter().enumerate() {
-                Forest::<G>::add_fat_node(data, version, i + 1, t);
+                NddrOneTreeForest::<G>::add_fat_node(data, version, i + 1, t);
             }
         }
 
@@ -301,13 +301,13 @@ where
         if data.find_vertex_strategy == FindVertexStrategy::Map {
             let indices = &data.vertex_index;
             for (i, t) in trees[1..].iter().enumerate() {
-                maps.push(Forest::<G>::new_map(indices, i + 1, t));
+                maps.push(NddrOneTreeForest::<G>::new_map(indices, i + 1, t));
             }
         }
 
         let version = data.version;
 
-        Forest {
+        NddrOneTreeForest {
             data: data_,
             last_op_size: 0,
             trees: trees,
@@ -782,7 +782,7 @@ where
 
 // TODO: move to other file
 
-trait GraphForestExt: IncidenceGraph {
+trait GraphNddrOneTreeForestExt: IncidenceGraph {
     fn collect_trees(&self, roots: &[Vertex<Self>]) -> Vec<Vec<Ndd<Vertex<Self>>>> {
         let mut vis = CompsVisitor {
             trees: vec![],
@@ -807,7 +807,7 @@ trait GraphForestExt: IncidenceGraph {
     }
 }
 
-impl<G: IncidenceGraph> GraphForestExt for G {}
+impl<G: IncidenceGraph> GraphNddrOneTreeForestExt for G {}
 
 struct CompsVisitor<G: AdjacencyGraph> {
     trees: Vec<Vec<Ndd<Vertex<G>>>>,
@@ -899,7 +899,7 @@ mod tests {
         let data = Rc::new(RefCell::new(data));
         let forests = vec((0..n).map(|_| {
             rng.shuffle(&mut tree);
-            Forest::new_with_data(data.clone(), tree.clone(), &mut rng)
+            NddrOneTreeForest::new_with_data(data.clone(), tree.clone(), &mut rng)
         }));
 
         for i in 0..(n as usize) {
@@ -926,9 +926,9 @@ mod tests {
             fn $name() {
                 let mut rng = rand::weak_rng();
                 let (data, tree) = data(100, FindOpStrategy::$op, FindVertexStrategy::$vertex);
-                let mut forest = Forest::new_with_data(Rc::new(RefCell::new(data)), tree, &mut rng);
+                let mut forest = NddrOneTreeForest::new_with_data(Rc::new(RefCell::new(data)), tree, &mut rng);
                 for _ in 0..1000 {
-                    for op in &[Forest::op1, Forest::op2] {
+                    for op in &[NddrOneTreeForest::op1, NddrOneTreeForest::op2] {
                         let mut f = forest.clone();
                         assert!(forest == f);
                         let (ins, rem) = op(&mut f, &mut rng);
