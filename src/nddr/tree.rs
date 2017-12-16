@@ -62,6 +62,11 @@ pub fn one_tree_op2<V>(t: &NddTree<V>, p: usize, r: usize, a: usize) -> NddTree<
 where
     V: Copy + Hash + Eq + PartialEq + Debug + Ord,
 {
+    assert!(t.is_ancestor(p, r));
+    assert!(!t.is_ancestor(r, a));
+    // It is not clear in page 833 - C) Operations on One-Tree Forests - how op2 can be executed in
+    // one tree if p is ancestor of a, so for while we do not accept such case. Restricting the
+    // selection does not change the running time for complete graphs, see Forest::find_vertices_op2
     assert!(!t.is_ancestor(p, a));
     let new = t.without_subtree(p);
     // TODO: avoid allocations
@@ -238,11 +243,11 @@ where
         self.deg_in_g
     }
 
-    pub fn parent_vertex(&self, i: usize) -> V {
-        self[self.parent(i).unwrap()].vertex
+    pub fn parent_vertex(&self, i: usize) -> Option<V> {
+        self.parent(i).map(|p| self[p].vertex)
     }
 
-    fn parent(&self, i: usize) -> Option<usize> {
+    pub fn parent(&self, i: usize) -> Option<usize> {
         self[0..i].iter().rposition(|ndd| ndd.dep < self[i].dep)
     }
 

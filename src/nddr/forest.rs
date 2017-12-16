@@ -125,7 +125,7 @@ where
 {
     data: Rc<RefCell<Data<G>>>,
 
-    last_op1_size: usize,
+    last_op_size: usize,
 
     // The star tree is kept in trees[0]. The star tree connects the roots of the trees.
     // TODO: Use RcArray
@@ -143,6 +143,7 @@ where
     // Used if find_vertex_strategy = FatNode
     //
     // FIXME: implements a scheme to reset the history
+    // In page 836, B-5) L = history, what is the value of k?
     version: usize,
     history: Vec<usize>,
 }
@@ -155,7 +156,7 @@ where
     fn clone(&self) -> Self {
         Self {
             data: Rc::clone(&self.data),
-            last_op1_size: self.last_op1_size,
+            last_op_size: self.last_op_size,
             trees: self.trees.clone(),
             star_edges: Rc::clone(&self.star_edges),
             maps: self.maps.clone(),
@@ -308,7 +309,7 @@ where
 
         Forest {
             data: data_,
-            last_op1_size: 0,
+            last_op_size: 0,
             trees: trees,
             maps: maps,
             version: version,
@@ -317,16 +318,21 @@ where
         }
     }
 
-    pub fn last_op1_size(&self) -> usize {
-        self.last_op1_size
+    pub fn last_op_size(&self) -> usize {
+        self.last_op_size
     }
 
-    // TODO: create a version of op1 that take degree constraint
+    // TODO: create a version of op1 and op2 that takes degree constraint parameter
     pub fn op1<R: Rng>(&mut self, rng: &mut R) -> (Edge<G>, Edge<G>) {
         let (from, p, to, a) = self.find_vertices_op1(rng);
-        self.last_op1_size = self[from].len() + self[to].len();
-        let (ins, rem) = self.do_op1((from, p, to, a));
-        (ins, rem)
+        self.last_op_size = self[from].len() + self[to].len();
+        self.do_op1((from, p, to, a))
+    }
+
+    pub fn op2<R: Rng>(&mut self, rng: &mut R) -> (Edge<G>, Edge<G>) {
+        let (from, p, r, to, a) = self.find_vertices_op2(rng);
+        self.last_op_size = self[from].len() + self[to].len();
+        self.do_op2((from, p, r, to, a))
     }
 
     pub fn contains(&self, e: Edge<G>) -> bool {
@@ -352,13 +358,36 @@ where
     fn do_op1(&mut self, params: (usize, usize, usize, usize)) -> (Edge<G>, Edge<G>) {
         let (ifrom, p, ito, a) = params;
         let ins = self.edge_by_ends(self[ifrom][p].vertex(), self[ito][a].vertex());
-        let rem = self.edge_by_ends(self[ifrom][p].vertex(), self[ifrom].parent_vertex(p));
+        let rem = self.edge_by_ends(
+            self[ifrom][p].vertex(),
+            self[ifrom].parent_vertex(p).unwrap(),
+        );
 
         if ifrom == ito {
             let new = one_tree_op1(&self[ifrom], p, a);
             self.replace1(ifrom, new);
         } else {
             let (from, to) = op1(&self[ifrom], p, &self[ito], a);
+            self.replace(ifrom, from, ito, to);
+        }
+
+        (ins, rem)
+    }
+
+    #[inline(never)]
+    fn do_op2(&mut self, params: (usize, usize, usize, usize, usize)) -> (Edge<G>, Edge<G>) {
+        let (ifrom, p, r, ito, a) = params;
+        let ins = self.edge_by_ends(self[ifrom][r].vertex(), self[ito][a].vertex());
+        let rem = self.edge_by_ends(
+            self[ifrom][p].vertex(),
+            self[ifrom].parent_vertex(p).unwrap(),
+        );
+
+        if ifrom == ito {
+            let new = one_tree_op2(&self[ifrom], p, r, a);
+            self.replace1(ifrom, new);
+        } else {
+            let (from, to) = op2(&self[ifrom], p, r, &self[ito], a);
             self.replace(ifrom, from, ito, to);
         }
 
@@ -397,6 +426,31 @@ where
 
             if self.can_insert_subtree_edge((from, p, to, a)) {
                 return (from, p, to, a);
+            }
+        }
+    }
+
+    #[inline(never)]
+    fn find_vertices_op2<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize, usize) {
+        loop {
+            let (from, r, to, a) = self.find_vertices_op1(rng);
+            let mut count = 0;
+            let mut p = r;
+            while let Some(pp) = self[from].parent(p) {
+                count += 1;
+                p = pp;
+            }
+
+            p = r;
+            for _ in 0..rng.gen_range(0, count) {
+                p = self[from].parent(p).unwrap()
+            }
+            // If from == to, then one_tree_op2 will be called, for now, we restrict the value of p
+            // of not an ancestor of a, see the comments on one_tree_op2 function. In the unit
+            // tests, the loop is execute 1.361 times to find valid operands.
+            // This is enough to run the experiments in complete graphs.
+            if from != to || !self[from].is_ancestor(p, a) {
+                return (from, p, r, to, a);
             }
         }
     }
@@ -874,14 +928,16 @@ mod tests {
                 let (data, tree) = data(100, FindOpStrategy::$op, FindVertexStrategy::$vertex);
                 let mut forest = Forest::new_with_data(Rc::new(RefCell::new(data)), tree, &mut rng);
                 for _ in 0..1000 {
-                    let mut f = forest.clone();
-                    assert!(forest == f);
-                    let (ins, rem) = f.op1(&mut rng);
-                    assert!(f.contains(ins));
-                    assert!(!f.contains(rem));
-                    f.check();
-                    assert!(forest != f);
-                    forest = f;
+                    for op in &[Forest::op1, Forest::op2] {
+                        let mut f = forest.clone();
+                        assert!(forest == f);
+                        let (ins, rem) = op(&mut f, &mut rng);
+                        assert!(f.contains(ins));
+                        assert!(!f.contains(rem));
+                        f.check();
+                        assert!(forest != f);
+                        forest = f;
+                    }
                 }
             }
         )
