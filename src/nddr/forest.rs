@@ -13,7 +13,7 @@ use std::rc::Rc;
 use std::ops::Deref;
 
 // internal
-use nddr::tree::*;
+use nddr::ndd::*;
 
 // See nddr module documentation for references.
 //

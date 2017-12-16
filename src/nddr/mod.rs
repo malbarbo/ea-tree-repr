@@ -3,7 +3,7 @@
 // Alexandre C. B. Delbem, Telam W. de Lima and Guilherme P. Telles.
 
 mod forest;
-mod tree;
+mod ndd;
 
 pub use self::forest::*;
-pub use self::tree::*;
+pub use self::ndd::*;
