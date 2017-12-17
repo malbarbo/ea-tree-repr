@@ -4,7 +4,6 @@ use fera::fun::vec;
 use fera::graph::algs::Trees;
 use fera::graph::choose::Choose;
 use fera::graph::prelude::*;
-use fera::graph::traverse::{continue_if, Control, Dfs, OnDiscoverTreeEdge, Visitor};
 use rand::Rng;
 
 // system
@@ -13,19 +12,7 @@ use std::rc::Rc;
 use std::ops::Deref;
 
 // internal
-use nddr::ndd::*;
-
-// See nddr module documentation for references.
-//
-// The following is missing to get the paper implementation
-//     - Op2
-//     - Reset pi_* (PI_x) and history (L), so they do not get too large
-//     - do not replace the worst individual on the GA of bin/main.rs, replace the parent
-//
-// There is a lot of TODOs in this file, some of them are aesthetics, others are small
-// optimizations. I don't know if its worth to implement that...
-//
-// FIXME: Cannot find optimal solution for OTMP...
+use {collect_ndds, find_star_tree, NddTree, one_tree_op1, one_tree_op2, op1, op2};
 
 #[derive(PartialEq, Clone, Copy)]
 pub enum FindOpStrategy {
@@ -242,7 +229,7 @@ where
         let star_tree = {
             let s = data.g().spanning_subgraph(&edges);
             let r = s.choose_vertex(rng).unwrap();
-            Rc::new(NddTree::new(s.find_star_tree(r, nsqrt)))
+            Rc::new(NddTree::new(find_star_tree(&s, r, nsqrt)))
         };
 
         let roots = vec(star_tree.iter().map(|ndd| ndd.vertex()));
@@ -273,7 +260,7 @@ where
         // TODO: try to create a balanced NddrOneTreeForest
         trees.extend({
             let s = data.g().spanning_subgraph(edges);
-            s.collect_trees(&roots).into_iter().map(|t| {
+            collect_ndds(&s, &roots).into_iter().map(|t| {
                 let mut t = NddTree::new(t);
                 // TODO: find an away to not pass this closure
                 t.calc_degs(|v| data.g().out_degree(v));
@@ -775,57 +762,6 @@ where
     }
 }
 
-// TODO: move to other file
-
-trait GraphNddrOneTreeForestExt: IncidenceGraph {
-    fn collect_trees(&self, roots: &[Vertex<Self>]) -> Vec<Vec<Ndd<Vertex<Self>>>> {
-        let mut vis = CompsVisitor {
-            trees: vec![],
-            depth: self.vertex_prop(0usize),
-        };
-        self.dfs(&mut vis).roots(roots.iter().cloned()).run();
-        vis.trees
-    }
-
-    fn find_star_tree(&self, v: Vertex<Self>, n: usize) -> Vec<Ndd<Vertex<Self>>> {
-        let mut edges = vec![];
-        // TODO: use a randwalk, so star_edges do not have a tendency
-        self.dfs(&mut OnDiscoverTreeEdge(|e| {
-            edges.push(e);
-            continue_if(edges.len() + 1 < n)
-        })).root(v)
-            .run();
-
-        let s = self.edge_induced_subgraph(edges);
-        let roots = vec![v];
-        s.collect_trees(&roots).into_iter().next().unwrap()
-    }
-}
-
-impl<G: IncidenceGraph> GraphNddrOneTreeForestExt for G {}
-
-struct CompsVisitor<G: AdjacencyGraph> {
-    trees: Vec<Vec<Ndd<Vertex<G>>>>,
-    depth: DefaultVertexPropMut<G, usize>,
-}
-
-impl<G: AdjacencyGraph> Visitor<G> for CompsVisitor<G> {
-    fn discover_root_vertex(&mut self, g: &G, v: Vertex<G>) -> Control {
-        self.trees.push(vec![Ndd::new(v, 0, g.out_degree(v))]);
-        Control::Continue
-    }
-
-    fn discover_edge(&mut self, g: &G, e: Edge<G>) -> Control {
-        let (u, v) = g.ends(e);
-        self.depth[v] = self.depth[u] + 1;
-        self.trees
-            .last_mut()
-            .unwrap()
-            .push(Ndd::new(v, self.depth[v], g.out_degree(v)));
-        Control::Continue
-    }
-}
-
 fn sample_without_replacement<T, R, F>(data: &mut [T], mut rng: R, mut accept: F) -> Option<&T>
 where
     R: Rng,
@@ -849,42 +785,6 @@ mod tests {
     use super::*;
     use rand;
     use random_sp;
-
-    #[test]
-    fn test_collect_trees() {
-        //      . 0
-        //    .   .  \
-        //   1    2   3
-        //  / \   |   |
-        // 4   5  6   7
-        //            .
-        //            8
-
-        let mut b = StaticGraph::builder(9, 5);
-        b.add_edge(1, 4);
-        b.add_edge(1, 5);
-        b.add_edge(2, 6);
-        b.add_edge(0, 3);
-        b.add_edge(3, 7);
-        let g = b.finalize();
-
-        let trees = g.collect_trees(&vec![0, 1, 2, 8]);
-
-        assert_eq!(
-            NddTree::new(trees[0].clone()),
-            NddTree::from_vecs(&[0, 3, 7], &[0, 1, 2], &[1, 2, 1])
-        );
-
-        assert_eq!(
-            NddTree::new(trees[1].clone()),
-            NddTree::from_vecs(&[1, 4, 5], &[0, 1, 1], &[2, 1, 1])
-        );
-
-        assert_eq!(
-            NddTree::new(trees[2].clone()),
-            NddTree::from_vecs(&[2, 6], &[0, 1], &[1, 1])
-        );
-    }
 
     #[test]
     fn test_eq() {
