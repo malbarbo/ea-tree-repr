@@ -336,7 +336,6 @@ where
 
     // Subtree ops
 
-    #[inline(never)]
     fn do_op1(&mut self, params: (usize, usize, usize, usize)) -> (Edge<G>, Edge<G>) {
         let (ifrom, p, ito, a) = params;
         let ins = self.edge_by_ends(self[ifrom][p].vertex(), self[ito][a].vertex());
@@ -356,7 +355,6 @@ where
         (ins, rem)
     }
 
-    #[inline(never)]
     fn do_op2(&mut self, params: (usize, usize, usize, usize, usize)) -> (Edge<G>, Edge<G>) {
         let (ifrom, p, r, ito, a) = params;
         let ins = self.edge_by_ends(self[ifrom][r].vertex(), self[ito][a].vertex());
@@ -376,7 +374,6 @@ where
         (ins, rem)
     }
 
-    #[inline(never)]
     fn can_insert_subtree_edge(&self, params: (usize, usize, usize, usize)) -> bool {
         let (from, p, to, a) = params;
         // The root of the subtree being transfered cannot be the root
@@ -388,7 +385,6 @@ where
                     || self[from].is_ancestor(p, a)))
     }
 
-    #[inline(never)]
     fn find_vertices_op1<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize) {
         if self.should_mutate_star_tree(rng) {
             return self.find_op_star_edge(rng);
@@ -412,7 +408,6 @@ where
         }
     }
 
-    #[inline(never)]
     fn find_vertices_op2<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize, usize) {
         loop {
             let (from, r, to, a) = self.find_vertices_op1(rng);
@@ -437,7 +432,6 @@ where
         }
     }
 
-    #[inline(never)]
     fn find_op_adj<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize) {
         // Sec V-B - page 834
         // In this implementation p and a are indices, not vertices
@@ -486,7 +480,6 @@ where
         (from, p, to, a)
     }
 
-    #[inline(never)]
     fn find_op_adj_smaller<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize) {
         let (from, p, to, a) = self.find_op_adj(rng);
         if self[from].len() >= self[to].len() {
@@ -496,7 +489,6 @@ where
         }
     }
 
-    #[inline(never)]
     fn find_op_edge<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize) {
         let g = self.g();
         // TODO: use tournament without replacement
@@ -514,7 +506,6 @@ where
         (from, p, to, a)
     }
 
-    #[inline(never)]
     fn find_op_balanced<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize) {
         let from = self.select_tree(rng);
         let p = self.select_tree_vertex(from, rng);
@@ -525,7 +516,6 @@ where
 
     // Star edges
 
-    #[inline(never)]
     fn can_insert_star_edge(&self, ins: Edge<G>) -> bool {
         let (u, v) = self.g().ends(ins);
         // FIXME: contains_edge is linear!, this can compromisse O(sqrt(n)) time
@@ -538,7 +528,6 @@ where
         }
     }
 
-    #[inline(never)]
     fn find_op_star_edge<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize) {
         let e = {
             *sample_without_replacement(&mut *self.star_edges.borrow_mut(), rng, |e| {
@@ -600,7 +589,6 @@ where
         self.trees[j] = Rc::new(tj);
     }
 
-    #[inline(never)]
     fn new_map(indices: &VertexIndexProp<G>, i: usize, ti: &NddTree<Vertex<G>>) -> Rc<Vec<usize>> {
         if i == 0 {
             // TODO: do not create
@@ -633,7 +621,6 @@ where
             && rng.gen_range(0, self.data().nsqrt + 1) == self.data().nsqrt
     }
 
-    #[inline(never)]
     fn select_tree_if<R, F>(&self, rng: &mut R, mut f: F) -> Option<usize>
     where
         R: Rng,
@@ -642,17 +629,14 @@ where
         sample_without_replacement(&mut *self.data_mut().tree_indices, rng, |&i| f(i)).cloned()
     }
 
-    #[inline(never)]
     fn select_tree<R: Rng>(&self, rng: &mut R) -> usize {
         rng.gen_range(1, self.len())
     }
 
-    #[inline(never)]
     fn select_tree_vertex<R: Rng>(&self, i: usize, rng: &mut R) -> usize {
         rng.gen_range(0, self[i].len())
     }
 
-    #[inline(never)]
     fn select_tree_vertex_if<R: Rng, F>(&self, i: usize, rng: &mut R, mut f: F) -> usize
     where
         F: FnMut(usize) -> bool,
@@ -666,7 +650,6 @@ where
         }
     }
 
-    #[inline(never)]
     fn find_index(&self, v: Vertex<G>) -> (usize, usize) {
         match self.find_vertex_strategy() {
             FindVertexStrategy::FatNode => {
@@ -706,7 +689,6 @@ where
         self.set_edges_on_m(t, false);
     }
 
-    #[inline(never)]
     fn set_edges_on_m(&self, t: usize, value: bool) {
         let mut data = self.data_mut();
         let m = data.m.as_mut().unwrap();
