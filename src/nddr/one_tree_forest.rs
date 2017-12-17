@@ -822,7 +822,7 @@ mod tests {
                 let mut rng = rand::weak_rng();
                 let (data, tree) = data(100, FindOpStrategy::$op, FindVertexStrategy::$vertex);
                 let mut forest = NddrOneTreeForest::new_with_data(Rc::new(RefCell::new(data)), tree, &mut rng);
-                for _ in 0..1000 {
+                for _ in 0..100 {
                     for op in &[NddrOneTreeForest::op1, NddrOneTreeForest::op2] {
                         let mut f = forest.clone();
                         assert!(forest == f);

@@ -11,9 +11,9 @@
 // FIXME: Cannot find optimal solution for OTMP using NddrOneTreeForest...
 
 mod collect;
-mod forest;
 mod ndd;
+mod one_tree_forest;
 
 pub use self::collect::*;
-pub use self::forest::*;
 pub use self::ndd::*;
+pub use self::one_tree_forest::*;
