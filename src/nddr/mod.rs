@@ -12,8 +12,10 @@
 
 mod collect;
 mod ndd;
+mod one_tree;
 mod one_tree_forest;
 
 pub use self::collect::*;
 pub use self::ndd::*;
+pub use self::one_tree::*;
 pub use self::one_tree_forest::*;
