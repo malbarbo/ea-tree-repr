@@ -28,7 +28,7 @@ impl<V: Copy + Eq + PartialEq + Debug> Ndd<V> {
 }
 
 #[derive(Clone, Debug)]
-pub struct NddTree<V: Copy + Hash + Eq + PartialEq + Debug + Ord> {
+pub struct NddTree<V: Copy + Hash + Eq + PartialEq + Debug> {
     ndds: Vec<Ndd<V>>,
     // parents is used to cache the parent of each node.
     // parent[i] is the parent of ndds[i-1].vertex
@@ -39,14 +39,14 @@ pub struct NddTree<V: Copy + Hash + Eq + PartialEq + Debug + Ord> {
 
 pub fn op1<V>(from: &NddTree<V>, p: usize, to: &NddTree<V>, a: usize) -> (NddTree<V>, NddTree<V>)
 where
-    V: Copy + Hash + Eq + PartialEq + Debug + Ord,
+    V: Copy + Hash + Eq + PartialEq + Debug,
 {
     (from.without_subtree(p), to.with_subtree(a, from.subtree(p)))
 }
 
 pub fn one_tree_op1<V>(t: &NddTree<V>, p: usize, a: usize) -> NddTree<V>
 where
-    V: Copy + Hash + Eq + PartialEq + Debug + Ord,
+    V: Copy + Hash + Eq + PartialEq + Debug,
 {
     assert!(!t.is_ancestor(p, a));
     let new = t.without_subtree(p);
@@ -60,7 +60,7 @@ where
 
 pub fn one_tree_op2<V>(t: &NddTree<V>, p: usize, r: usize, a: usize) -> NddTree<V>
 where
-    V: Copy + Hash + Eq + PartialEq + Debug + Ord,
+    V: Copy + Hash + Eq + PartialEq + Debug,
 {
     assert!(t.is_ancestor(p, r));
     assert!(!t.is_ancestor(r, a));
@@ -90,7 +90,7 @@ pub fn op2<V>(
     a: usize,
 ) -> (NddTree<V>, NddTree<V>)
 where
-    V: Copy + Hash + Eq + PartialEq + Debug + Ord,
+    V: Copy + Hash + Eq + PartialEq + Debug,
 {
     assert!(from.is_ancestor(p, r));
     // subtree returns a slice, so we make a new tree of it and decrement the root deg
@@ -107,7 +107,7 @@ where
 
 impl<V> Deref for NddTree<V>
 where
-    V: Copy + Hash + Eq + PartialEq + Debug + Ord,
+    V: Copy + Hash + Eq + PartialEq + Debug,
 {
     type Target = Vec<Ndd<V>>;
 
@@ -118,7 +118,7 @@ where
 
 impl<V> NddTree<V>
 where
-    V: Copy + Hash + Eq + PartialEq + Debug + Ord,
+    V: Copy + Hash + Eq + PartialEq + Debug,
 {
     pub fn from_vecs(vertices: &[V], dep: &[usize], deg: &[usize]) -> Self {
         // TODO: Validade input or make private
@@ -285,7 +285,7 @@ where
 
 impl<V> PartialEq for NddTree<V>
 where
-    V: Copy + Hash + Eq + PartialEq + Debug + Ord,
+    V: Copy + Hash + Eq + PartialEq + Debug,
 {
     fn eq(&self, other: &Self) -> bool {
         // TODO: Write test

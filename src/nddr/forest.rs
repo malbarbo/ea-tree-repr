@@ -121,7 +121,6 @@ where
 pub struct NddrOneTreeForest<G>
 where
     G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    Vertex<G>: Ord,
 {
     data: Rc<RefCell<Data<G>>>,
 
@@ -151,7 +150,6 @@ where
 impl<G> Clone for NddrOneTreeForest<G>
 where
     G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    Vertex<G>: Ord,
 {
     fn clone(&self) -> Self {
         Self {
@@ -170,7 +168,6 @@ where
 impl<G> Deref for NddrOneTreeForest<G>
 where
     G: Graph + Choose + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    Vertex<G>: Ord,
 {
     type Target = Vec<Rc<NddTree<Vertex<G>>>>;
 
@@ -186,7 +183,6 @@ where
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     DefaultVertexPropMut<G, bool>: Clone,
-    Vertex<G>: Ord,
 {
     fn eq(&self, other: &Self) -> bool {
         if (self as *const _) == (other as *const _) {
@@ -211,7 +207,6 @@ where
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     DefaultVertexPropMut<G, bool>: Clone,
-    Vertex<G>: Ord,
 {
     pub fn new<R: Rng>(g: G, edges: Vec<Edge<G>>, rng: R) -> Self {
         Self::new_with_strategies(
