@@ -66,8 +66,9 @@ where
     assert!(t.is_ancestor(p, r));
     assert!(!t.is_ancestor(r, a));
     // It is not clear in page 833 - C) Operations on One-Tree Forests - how op2 can be executed in
-    // one tree if p is ancestor of a, so for while we do not accept such case. Restricting the
-    // selection does not change the running time for complete graphs, see Forest::find_vertices_op2
+    // one tree if p is ancestor of a, so for now we do not accept such case. Restricting the
+    // selection does not change the running time for complete graphs, see
+    // Forest::find_vertices_op2
     assert!(!t.is_ancestor(p, a));
     let new = t.without_subtree(p);
     // TODO: avoid allocations

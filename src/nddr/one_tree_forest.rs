@@ -617,7 +617,10 @@ where
 
     fn should_mutate_star_tree<R: Rng>(&self, rng: &mut R) -> bool {
         // TODO: explain
-        self.trees[0].len() > 2 && 2 * self.star_edges.borrow().len() >= self.trees[0].len()
+        // For now, we are only interested in moving subtrees. When we implement a real GA, we should
+        // enable this
+        false && self.trees[0].len() > 2
+            && 2 * self.star_edges.borrow().len() >= self.trees[0].len()
             && rng.gen_range(0, self.data().nsqrt + 1) == self.data().nsqrt
     }
 
