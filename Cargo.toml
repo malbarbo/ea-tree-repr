@@ -4,6 +4,7 @@ version = "0.1.0"
 authors = ["mabarbo"]
 
 [dependencies]
+clap = { version = "2.29", default-features = false, features = ["wrap_help"] }
 fera = { version = "0.1", features = ["ext", "fun", "graph"] }
 fera-array = { path = "../fera/array" }
 pbr = "1.0"

@@ -1,6 +1,5 @@
 #![feature(slice_rotate)]
 
-extern crate croaring;
 extern crate fera;
 extern crate fera_array;
 extern crate pbr;
@@ -11,6 +10,7 @@ mod nddr;
 mod parent;
 mod progress;
 mod random;
+mod tour;
 mod tree;
 
 pub use self::euler::*;
