@@ -268,7 +268,6 @@ where
             })
         });
 
-        // FIXME: fails if n >= 93000
         assert_eq!(nsqrt + 1, trees.len());
 
         if data.find_vertex_strategy == FindVertexStrategy::FatNode {
