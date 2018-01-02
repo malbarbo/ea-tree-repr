@@ -1,0 +1,146 @@
+extern crate ec_tree_repr;
+extern crate fera;
+extern crate rand;
+
+#[macro_use]
+extern crate clap;
+
+use ec_tree_repr::*;
+use fera::graph::prelude::*;
+use rand::Rng;
+
+use std::time::{Duration, Instant};
+
+pub fn main() {
+    let (sizes, diameter, repr, op, times) = args();
+
+    let time = match repr {
+        Repr::EulerTour => run::<EulerTourTree<_>>(&*sizes, diameter, op, times),
+        Repr::NddrAdj => run::<NddrAdjTree>(&*sizes, diameter, op, times),
+        Repr::NddrBalanced => run::<NddrBalancedTree>(&*sizes, diameter, op, times),
+        Repr::Parent => run::<ParentTree<_>>(&*sizes, diameter, op, times),
+        Repr::Parent2 => run::<Parent2Tree<_>>(&*sizes, diameter, op, times),
+    };
+
+    println!("size time");
+    for (s, t) in sizes.into_iter().zip(time) {
+        println!("{} {}", s, micro_secs(t));
+    }
+}
+
+fn args() -> (Vec<usize>, Option<f32>, Repr, usize, usize) {
+    let app = clap_app!(
+        ("time") =>
+            (version: "0.1")
+            (author: "Marco A L Barbosa <https://github.com/malbarbo/ec-tree-repr>")
+            (@arg repr:
+                +required
+                possible_values(&[
+                    "euler-tour",
+                    "nddr-adj",
+                    "nddr-balanced",
+                    "parent",
+                    "parent2",
+                    "parent3",
+                ])
+                "tree representation"
+            )
+            (@arg op:
+                +required
+                possible_values(&["1", "2"])
+                "operation number"
+            )
+            (@arg diameter: -d --diameter +takes_value
+                "the diamenter of the random trees [0, 1] - (0.0 = diameter 2, 1.0 = diamenter n - 1). Default is to generate trees with random diameters."
+            )
+            (@arg times:
+                +required
+                "number of times to executed the experiment"
+            )
+            (@arg sizes:
+                +required
+                multiple(true)
+                "list of number of vertices"
+            )
+    );
+
+    let matches = app.get_matches();
+    let repr = match matches.value_of("repr").unwrap() {
+        "euler-tour" => Repr::EulerTour,
+        "nddr-adj" => Repr::NddrAdj,
+        "nddr-balanced" => Repr::NddrBalanced,
+        "parent" => Repr::Parent,
+        "parent2" => Repr::Parent2,
+        _ => unreachable!(),
+    };
+    let op = value_t_or_exit!(matches, "op", usize);
+    let diameter = if matches.is_present("diameter") {
+        let d = value_t_or_exit!(matches, "diameter", f32);
+        if d < 0.0 || d > 1.0 {
+            panic!("Invalid value for diameter: {}", d)
+        }
+        Some(d)
+    } else {
+        None
+    };
+    let times = value_t_or_exit!(matches, "times", usize);
+    let sizes = matches
+        .values_of("sizes")
+        .unwrap()
+        .map(|x| x.parse::<usize>().unwrap())
+        .collect();
+    (sizes, diameter, repr, op, times)
+}
+
+pub fn run<T: Tree>(
+    sizes: &[usize],
+    diameter: Option<f32>,
+    op: usize,
+    times: usize,
+) -> Vec<Duration> {
+    let mut rng = rand::weak_rng();
+    let mut time = vec![Duration::default(); sizes.len()];
+    for _ in progress(0..times) {
+        for (t, &n) in time.iter_mut().zip(sizes) {
+            let (g, tree) = graph_tree(n, diameter, &mut rng);
+            let tree = T::new(g, &*tree, &mut rng);
+            let start = Instant::now();
+            for _ in 0..10_000 {
+                let mut changed = tree.clone();
+                if op == 1 {
+                    changed.op1(&mut rng);
+                } else {
+                    changed.op2(&mut rng);
+                }
+            }
+            *t += start.elapsed() / 10_000;
+        }
+    }
+    for t in &mut time {
+        *t /= times as u32;
+    }
+    time
+}
+
+fn graph_tree<R: Rng>(
+    n: usize,
+    diameter: Option<f32>,
+    rng: R,
+) -> (CompleteGraph, Vec<Edge<CompleteGraph>>) {
+    let g = CompleteGraph::new(n as u32);
+    let tree = if let Some(d) = diameter {
+        let d = 2 + (d * (n - 3) as f32) as usize;
+        random_sp_with_diameter(&g, d, rng)
+    } else {
+        random_sp(&g, rng)
+    };
+    (g, tree)
+}
+
+enum Repr {
+    EulerTour,
+    NddrAdj,
+    NddrBalanced,
+    Parent,
+    Parent2,
+}
