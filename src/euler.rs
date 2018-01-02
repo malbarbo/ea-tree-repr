@@ -89,13 +89,8 @@ impl<G: IncidenceGraph> EulerTourTree<G> {
 
     #[cfg(test)]
     fn contains(&self, e: Edge<G>) -> bool {
-        // TODO: Add Array::contains
-        for i in 0..self.g.num_vertices() - 1 {
-            if self.edges[i] == e {
-                return true;
-            }
-        }
-        false
+        use fera_array::Array;
+        self.edges.contains(&e)
     }
 
     #[cfg(test)]

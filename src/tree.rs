@@ -30,13 +30,12 @@ impl Tree for NddrAdjTree {
         NddrAdjTree(nddr)
     }
 
-    fn op1<R: Rng>(&mut self, mut rng: R) {
-        // TODO: why &mut?
-        self.0.op1(&mut rng);
+    fn op1<R: Rng>(&mut self, rng: R) {
+        self.0.op1(rng);
     }
 
-    fn op2<R: Rng>(&mut self, mut rng: R) {
-        self.0.op2(&mut rng);
+    fn op2<R: Rng>(&mut self, rng: R) {
+        self.0.op2(rng);
     }
 }
 
@@ -55,12 +54,12 @@ impl Tree for NddrBalancedTree {
         NddrBalancedTree(nddr)
     }
 
-    fn op1<R: Rng>(&mut self, mut rng: R) {
-        self.0.op1(&mut rng);
+    fn op1<R: Rng>(&mut self, rng: R) {
+        self.0.op1(rng);
     }
 
-    fn op2<R: Rng>(&mut self, mut rng: R) {
-        self.0.op2(&mut rng);
+    fn op2<R: Rng>(&mut self, rng: R) {
+        self.0.op2(rng);
     }
 }
 

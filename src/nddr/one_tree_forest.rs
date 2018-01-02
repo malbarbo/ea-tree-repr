@@ -305,13 +305,13 @@ where
     }
 
     // TODO: create a version of op1 and op2 that takes degree constraint parameter
-    pub fn op1<R: Rng>(&mut self, rng: &mut R) -> (Edge<G>, Edge<G>) {
+    pub fn op1<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
         let (from, p, to, a) = self.find_vertices_op1(rng);
         self.last_op_size = self[from].len() + self[to].len();
         self.do_op1((from, p, to, a))
     }
 
-    pub fn op2<R: Rng>(&mut self, rng: &mut R) -> (Edge<G>, Edge<G>) {
+    pub fn op2<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
         let (from, p, r, to, a) = self.find_vertices_op2(rng);
         self.last_op_size = self[from].len() + self[to].len();
         self.do_op2((from, p, r, to, a))
@@ -385,17 +385,17 @@ where
                     || self[from].is_ancestor(p, a)))
     }
 
-    fn find_vertices_op1<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize) {
-        if self.should_mutate_star_tree(rng) {
-            return self.find_op_star_edge(rng);
+    fn find_vertices_op1<R: Rng>(&self, mut rng: R) -> (usize, usize, usize, usize) {
+        if self.should_mutate_star_tree(&mut rng) {
+            return self.find_op_star_edge(&mut rng);
         }
         // TODO: add limit
         loop {
             let (from, p, to, a) = match self.find_op_strategy() {
-                FindOpStrategy::Adj => self.find_op_adj(rng),
-                FindOpStrategy::AdjSmaller => self.find_op_adj_smaller(rng),
-                FindOpStrategy::Edge => self.find_op_edge(rng),
-                FindOpStrategy::Balanced => self.find_op_balanced(rng),
+                FindOpStrategy::Adj => self.find_op_adj(&mut rng),
+                FindOpStrategy::AdjSmaller => self.find_op_adj_smaller(&mut rng),
+                FindOpStrategy::Edge => self.find_op_edge(&mut rng),
+                FindOpStrategy::Balanced => self.find_op_balanced(&mut rng),
             };
 
             // cannot be the star_tree
@@ -408,9 +408,9 @@ where
         }
     }
 
-    fn find_vertices_op2<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize, usize) {
+    fn find_vertices_op2<R: Rng>(&self, mut rng: R) -> (usize, usize, usize, usize, usize) {
         loop {
-            let (from, r, to, a) = self.find_vertices_op1(rng);
+            let (from, r, to, a) = self.find_vertices_op1(&mut rng);
             let mut count = 0;
             let mut p = r;
             while let Some(pp) = self[from].parent(p) {
@@ -432,19 +432,19 @@ where
         }
     }
 
-    fn find_op_adj<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize) {
+    fn find_op_adj<R: Rng>(&self, mut rng: R) -> (usize, usize, usize, usize) {
         // Sec V-B - page 834
         // In this implementation p and a are indices, not vertices
         // v_p and v_a are vertices.
 
         // Step 1
-        let from = self.select_tree_if(rng, |i| {
+        let from = self.select_tree_if(&mut rng, |i| {
             // Must have more than one node so we can choose a node != root
             self[i].deg_in_g() > self[i].deg() && self[i].len() > 1
         }).expect("The graph is a forest");
 
         // Step 2
-        let p = self.select_tree_vertex_if(from, rng, |i| {
+        let p = self.select_tree_vertex_if(from, &mut rng, |i| {
             // i is not root and have an edge tha is not in this forest
             i != 0 && self[from][i].deg() < self.g().out_degree(self[from][i].vertex())
         });
@@ -480,7 +480,7 @@ where
         (from, p, to, a)
     }
 
-    fn find_op_adj_smaller<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize) {
+    fn find_op_adj_smaller<R: Rng>(&self, rng: R) -> (usize, usize, usize, usize) {
         let (from, p, to, a) = self.find_op_adj(rng);
         if self[from].len() >= self[to].len() {
             (from, p, to, a)
@@ -489,10 +489,10 @@ where
         }
     }
 
-    fn find_op_edge<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize) {
+    fn find_op_edge<R: Rng>(&self, mut rng: R) -> (usize, usize, usize, usize) {
         let g = self.g();
         // TODO: use tournament without replacement
-        let mut e = g.choose_edge(&mut *rng).unwrap();
+        let mut e = g.choose_edge(&mut rng).unwrap();
         // The order of the vertices is important, so trying (u, v) is different from (v, u),
         // as only (u, v) or (v, u) can be returned from choose_edge, we trye th reverse with 50%
         // of change.
@@ -506,11 +506,11 @@ where
         (from, p, to, a)
     }
 
-    fn find_op_balanced<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize) {
-        let from = self.select_tree(rng);
-        let p = self.select_tree_vertex(from, rng);
-        let to = self.select_tree(rng);
-        let a = self.select_tree_vertex(to, rng);
+    fn find_op_balanced<R: Rng>(&self, mut rng: R) -> (usize, usize, usize, usize) {
+        let from = self.select_tree(&mut rng);
+        let p = self.select_tree_vertex(from, &mut rng);
+        let to = self.select_tree(&mut rng);
+        let a = self.select_tree_vertex(to, &mut rng);
         (from, p, to, a)
     }
 
@@ -810,10 +810,15 @@ mod tests {
                 let data = Rc::new(RefCell::new(data));
                 let mut forest = NddrOneTreeForest::new_with_data(data, tree, &mut rng);
                 for _ in 0..100 {
-                    for op in &[NddrOneTreeForest::op1, NddrOneTreeForest::op2] {
+                    let mut rng = rand::weak_rng();
+                    for &op in &[1, 2] {
                         let mut f = forest.clone();
                         assert!(forest == f);
-                        let (ins, rem) = op(&mut f, &mut rng);
+                        let (ins, rem) = if op == 1 {
+                            f.op1(&mut rng)
+                        } else {
+                            f.op2(&mut rng)
+                        };
                         assert!(f.contains(ins));
                         assert!(!f.contains(rem));
                         f.check();
