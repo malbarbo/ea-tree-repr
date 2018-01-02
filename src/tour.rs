@@ -29,45 +29,12 @@ impl Tour {
         loop {
             // TODO: direct selection
             let to = self.choose_pos(&mut rng);
-            // TODO: create a function
             if start != (0, 0) && to < self.prev_pos(start) {
-                let mut new = Self {
-                    segs: Rc::new(Vec::with_capacity(self.segs.len())),
-                    len: self.len(),
-                };
-                {
-                    let mut iter = self.seg_iter(self.first_pos(), self.next_pos(to));
-                    let mut last = iter.next().unwrap();
-                    last = new.extend(last, iter);
-                    last = new.extend(last, self.seg_iter(start, self.next_pos(end)));
-                    last = new.extend(last, self.seg_iter(self.next_pos(to), start));
-                    last = new.extend(last, self.seg_iter(self.next_pos(end), self.nlast_pos()));
-                    new.push(last);
-                }
-                *self = new;
+                self.move_before(to, start, end);
                 break;
             }
-            // TODO: create a function
             if to > end {
-                let mut new = Self {
-                    segs: Rc::new(Vec::with_capacity(self.segs.len())),
-                    len: self.len(),
-                };
-                {
-                    let mut iter = self.seg_iter(self.first_pos(), start);
-                    let mut last = if let Some(mut last) = iter.next() {
-                        last = new.extend(last, iter);
-                        new.extend(last, self.seg_iter(self.next_pos(end), self.next_pos(to)))
-                    } else {
-                        let mut iter = self.seg_iter(self.next_pos(end), self.next_pos(to));
-                        let mut last = iter.next().unwrap();
-                        new.extend(last, iter)
-                    };
-                    last = new.extend(last, self.seg_iter(start, self.next_pos(end)));
-                    last = new.extend(last, self.seg_iter(self.next_pos(to), self.nlast_pos()));
-                    new.push(last);
-                }
-                *self = new;
+                self.move_after(to, start, end);
                 break;
             }
         }
@@ -91,21 +58,61 @@ impl Tour {
         self.get(self.prev_pos(p))
     }
 
-    fn extend<'a>(&mut self, mut last: Seg<'a>, iter: SegIter<'a>) -> Seg<'a> {
+    fn move_before(&mut self, to: (usize, usize), start: (usize, usize), end: (usize, usize)) {
+        let mut segs = Vec::with_capacity(self.segs.len());
+        {
+            let segs = &mut segs;
+            let mut iter = self.seg_iter(self.first_pos(), self.next_pos(to));
+            let mut last = iter.next().unwrap();
+            last = Self::extend(segs, last, iter);
+            last = Self::extend(segs, last, self.seg_iter(start, self.next_pos(end)));
+            last = Self::extend(segs, last, self.seg_iter(self.next_pos(to), start));
+            last = Self::extend(
+                segs,
+                last,
+                self.seg_iter(self.next_pos(end), self.end_pos()),
+            );
+            Self::push(segs, last);
+        }
+        self.segs = segs.into();
+    }
+
+    fn move_after(&mut self, to: (usize, usize), start: (usize, usize), end: (usize, usize)) {
+        let mut segs = Vec::with_capacity(self.segs.len());
+        {
+            let segs = &mut segs;
+            let mut iter = self.seg_iter(self.first_pos(), start);
+            let mut last = if let Some(mut last) = iter.next() {
+                last = Self::extend(segs, last, iter);
+                Self::extend(
+                    segs,
+                    last,
+                    self.seg_iter(self.next_pos(end), self.next_pos(to)),
+                )
+            } else {
+                let mut iter = self.seg_iter(self.next_pos(end), self.next_pos(to));
+                let mut last = iter.next().unwrap();
+                Self::extend(segs, last, iter)
+            };
+            last = Self::extend(segs, last, self.seg_iter(start, self.next_pos(end)));
+            last = Self::extend(segs, last, self.seg_iter(self.next_pos(to), self.end_pos()));
+            Self::push(segs, last);
+        }
+        self.segs = segs.into();
+    }
+
+    fn extend<'a>(segs: &mut Vec<Rc<Segment>>, mut last: Seg<'a>, iter: SegIter<'a>) -> Seg<'a> {
         for seg in iter {
-            self.push(last);
+            Self::push(segs, last);
             last = seg;
         }
         last
     }
 
-    fn push<'a>(&mut self, last: Seg<'a>) {
-        // TODO: remove make_mut
+    fn push<'a>(segs: &mut Vec<Rc<Segment>>, last: Seg<'a>) {
         match last {
-            Seg::Complete(seg) => Rc::make_mut(&mut self.segs).push(Rc::clone(seg)),
-            Seg::Partial(values) => {
-                Rc::make_mut(&mut self.segs).push(Rc::new(Segment::new(values.into())))
-            }
+            Seg::Complete(seg) => segs.push(Rc::clone(seg)),
+            Seg::Partial(values) => segs.push(Rc::new(Segment::new(values.into()))),
         }
     }
 
@@ -171,7 +178,7 @@ impl Tour {
         (self.segs.len() - 1, self.segs.last().unwrap().len() - 1)
     }
 
-    fn nlast_pos(&self) -> (usize, usize) {
+    fn end_pos(&self) -> (usize, usize) {
         (self.segs.len() - 1, self.segs.last().unwrap().len())
     }
 
@@ -479,5 +486,4 @@ mod tests {
             assert!(stack.is_empty(), "{:?}", self.values);
         }
     }
-
 }
