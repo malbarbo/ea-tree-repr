@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 #[derive(Clone, Debug)]
 pub struct Tour {
-    segs: Vec<Rc<Segment>>,
+    segs: Rc<Vec<Rc<Segment>>>,
     len: usize,
 }
 
@@ -16,7 +16,7 @@ impl Tour {
             .map(|t| Rc::new(Segment::new(t.into())))
             .collect();
         Self {
-            segs,
+            segs: Rc::new(segs),
             len: values.len(),
         }
     }
@@ -29,9 +29,10 @@ impl Tour {
         loop {
             // TODO: direct selection
             let to = self.choose_pos(&mut rng);
+            // TODO: create a function
             if start != (0, 0) && to < self.prev_pos(start) {
                 let mut new = Self {
-                    segs: Vec::with_capacity(self.segs.len()),
+                    segs: Rc::new(Vec::with_capacity(self.segs.len())),
                     len: self.len(),
                 };
                 {
@@ -46,9 +47,10 @@ impl Tour {
                 *self = new;
                 break;
             }
+            // TODO: create a function
             if to > end {
                 let mut new = Self {
-                    segs: Vec::with_capacity(self.segs.len()),
+                    segs: Rc::new(Vec::with_capacity(self.segs.len())),
                     len: self.len(),
                 };
                 {
@@ -72,6 +74,23 @@ impl Tour {
         e
     }
 
+    pub fn range(&self, e: TourEdge) -> Option<((usize, usize), (usize, usize))> {
+        self.position(e)
+            .and_then(|start| self.rposition(e).map(|end| (start, end)))
+    }
+
+    pub fn get(&self, (i, j): (usize, usize)) -> TourEdge {
+        self.segs[i].values[j]
+    }
+
+    pub fn get_next(&self, p: (usize, usize)) -> TourEdge {
+        self.get(self.next_pos(p))
+    }
+
+    pub fn get_prev(&self, p: (usize, usize)) -> TourEdge {
+        self.get(self.prev_pos(p))
+    }
+
     fn extend<'a>(&mut self, mut last: Seg<'a>, iter: SegIter<'a>) -> Seg<'a> {
         for seg in iter {
             self.push(last);
@@ -82,8 +101,9 @@ impl Tour {
 
     fn push<'a>(&mut self, last: Seg<'a>) {
         match last {
-            Seg::Complete(seg) => self.segs.push(seg),
-            Seg::Partial(values) => self.segs.push(Rc::new(Segment::new(values.into()))),
+            Seg::Complete(seg) => Rc::make_mut(&mut self.segs).push(seg),
+            Seg::Partial(values) => Rc::make_mut(&mut self.segs)
+                .push(Rc::new(Segment::new(values.into()))),
         }
     }
 
@@ -102,11 +122,6 @@ impl Tour {
 
     fn choose<R: Rng>(&self, rng: R) -> TourEdge {
         self.get(self.choose_pos(rng))
-    }
-
-    pub fn range(&self, e: TourEdge) -> Option<((usize, usize), (usize, usize))> {
-        self.position(e)
-            .and_then(|start| self.rposition(e).map(|end| (start, end)))
     }
 
     fn position(&self, e: TourEdge) -> Option<(usize, usize)> {
@@ -175,22 +190,11 @@ impl Tour {
         self.len
     }
 
-    pub fn get(&self, (i, j): (usize, usize)) -> TourEdge {
-        self.segs[i].values[j]
-    }
-
-    pub fn get_next(&self, p: (usize, usize)) -> TourEdge {
-        self.get(self.next_pos(p))
-    }
-
-    pub fn get_prev(&self, p: (usize, usize)) -> TourEdge {
-        self.get(self.prev_pos(p))
-    }
-
     fn seg_iter(&self, start: (usize, usize), end: (usize, usize)) -> SegIter {
         SegIter::new(&self.segs, start, end)
     }
 
+    #[cfg(test)]
     pub fn to_vec(&self) -> Vec<TourEdge> {
         self.segs
             .iter()
@@ -199,7 +203,7 @@ impl Tour {
     }
 
     #[cfg(test)]
-    fn check(&self) {
+    pub fn check(&self) {
         let mut seen = vec![0u8; self.len()];
         let mut stack = vec![];
         for value in self.to_vec() {
@@ -226,11 +230,19 @@ impl Tour {
 #[derive(Clone, Debug)]
 struct Segment {
     values: Vec<TourEdge>,
+    pos: Vec<usize>,
 }
 
 impl Segment {
     fn new(values: Vec<TourEdge>) -> Self {
-        Self { values }
+        use fera::ext::VecExt;
+        let m = values.iter().map(|e| e.index()).max().unwrap();
+        let mut pos = unsafe { Vec::new_uninitialized(m + 1) };
+        unsafe { pos.set_len(m + 1); }
+        for (i, &value) in values.iter().enumerate() {
+            pos[value.index()] = i;
+        }
+        Self { values, pos }
     }
 
     fn len(&self) -> usize {
@@ -238,8 +250,8 @@ impl Segment {
     }
 
     fn contains(&self, e: TourEdge) -> bool {
-        // TODO: implements
-        self.values.contains(&e)
+        let index = e.index();
+        self.pos.get(index).map(|&i| self.values.get(i) == Some(&e)).unwrap_or(false)
     }
 
     fn position(&self, e: TourEdge) -> Option<usize> {
@@ -284,6 +296,7 @@ impl<'a> SegIter<'a> {
 impl<'a> Iterator for SegIter<'a> {
     type Item = Seg<'a>;
 
+    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         if self.cur.0 < self.end.0 {
             let (i, j) = self.cur;

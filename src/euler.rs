@@ -1,6 +1,4 @@
-// TODO: remove
-#![allow(dead_code)]
-
+use fera_array::{CowNestedArray, DynamicArray};
 use fera::graph::prelude::*;
 use fera::graph::traverse::{Dfs, OnTraverseEvent, TraverseEvent};
 use rand::Rng;
@@ -10,20 +8,18 @@ use std::rc::Rc;
 use tour::{Tour, TourEdge};
 
 #[derive(Clone)]
-pub struct EulerTourTree<G: Graph>
-{
+pub struct EulerTourTree<G: Graph> {
     g: Rc<G>,
     tour: Tour,
-    edges: Vec<Edge<G>>,
+    edges: CowNestedArray<Edge<G>>,
 }
 
-impl<G: Graph> EulerTourTree<G>
-{
+impl<G: IncidenceGraph> EulerTourTree<G> {
     #[inline(never)]
     pub fn new(g: G, edges: &[Edge<G>]) -> Self {
         // TODO: avoid using this intermediary vector
         let mut tour = Vec::with_capacity(2 * (g.num_vertices() - 1));
-        let mut eds = Vec::with_capacity(g.num_vertices() - 1);
+        let mut eds = CowNestedArray::with_capacity(g.num_vertices() - 1);
         let mut stack = vec![];
         let mut id = 0;
         g.spanning_subgraph(edges)
@@ -33,7 +29,7 @@ impl<G: Graph> EulerTourTree<G>
                     tour.push(TourEdge::new(id));
                     stack.push(id);
                     id += 1;
-                },
+                }
                 TraverseEvent::FinishEdge(e) => {
                     let id = stack.pop().unwrap();
                     assert_eq!(eds[id], e);
@@ -53,11 +49,7 @@ impl<G: Graph> EulerTourTree<G>
     pub fn change_parent<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
         let rem = self.tour.change_parent(rng);
         let (start, end) = self.tour.range(rem).unwrap();
-        let p = if start != (0, 0) {
-            start
-        } else {
-            end
-        };
+        let p = if start != (0, 0) { start } else { end };
         // create a function
         let parent = {
             let e = self.tour.get_prev(p);
@@ -88,17 +80,42 @@ impl<G: Graph> EulerTourTree<G>
         (ins, re)
     }
 
+    // TODO: add change_any
+
+    #[cfg(test)]
     fn contains(&self, e: Edge<G>) -> bool {
-        self.edges.contains(&e)
+        // TODO: Add Array::contains
+        for i in 0..self.g.num_vertices() - 1 {
+            if self.edges[i] == e {
+                return true;
+            }
+        }
+        false
     }
 
+    #[cfg(test)]
     fn to_vec(&self) -> Vec<Edge<G>> {
-        self.tour.to_vec().into_iter().map(|e| self.edges[e.index()]).collect()
+        self.tour
+            .to_vec()
+            .into_iter()
+            .map(|e| {
+                if e.is_reverse() {
+                    self.g.reverse(self.edges[e.index()])
+                } else {
+                    self.edges[e.index()]
+                }
+            })
+            .collect()
     }
 
+    #[cfg(test)]
     fn check(&self) {
-        use fera::graph::algs::Trees;
-        assert!(self.g.spanning_subgraph(&self.edges).is_tree());
+        use fera::graph::algs::{Paths, Trees};
+        let edges = || (0..self.g.num_vertices() - 1).map(|i| self.edges[i]);
+        self.tour.check();
+        assert!(self.g.spanning_subgraph(edges()).is_tree());
+        assert!(edges().all(|e| self.contains(e)));
+        assert!(self.g.is_walk(self.to_vec()));
     }
 }
 
@@ -145,11 +162,11 @@ mod tests {
         }
     }
 
-    fn ptree(g: &CompleteGraph, tour: Vec<Edge<CompleteGraph>>) {
-        for e in tour {
-            print!("{:?} ", g.end_vertices(e));
+    #[test]
+    fn change_parent() {
+        for &n in &[3, 4, 5, 6, 10, 30] {
+            _change_parent(n);
         }
-        println!("");
     }
 
     fn _change_parent(n: u32) {
@@ -167,10 +184,10 @@ mod tests {
         }
     }
 
-    #[test]
-    fn change_parent() {
-        for &n in &[3, 4, 5, 6, 10, 30] {
-            _change_parent(n);
+    fn _ptree(g: &CompleteGraph, tour: Vec<Edge<CompleteGraph>>) {
+        for e in tour {
+            print!("{:?} ", g.end_vertices(e));
         }
+        println!("");
     }
 }
