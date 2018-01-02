@@ -45,42 +45,47 @@ impl<G: IncidenceGraph> EulerTourTree<G> {
         }
     }
 
-    #[inline(never)]
     pub fn change_parent<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
         let rem = self.tour.change_parent(rng);
         let (start, end) = self.tour.range(rem).unwrap();
         let p = if start != (0, 0) { start } else { end };
-        // create a function
-        let parent = {
-            let e = self.tour.get_prev(p);
-            let i = e.index();
-            if e.is_reverse() {
-                self.g.source(self.edges[i])
-            } else {
-                self.g.target(self.edges[i])
-            }
-        };
-        let subroot = {
-            let e = self.tour.get_next(p);
-            let i = e.index();
-            if e.is_reverse() {
-                self.g.target(self.edges[i])
-            } else {
-                self.g.source(self.edges[i])
-            }
-        };
+        let parent = self.get_target(self.tour.get_prev(p));
+        let subroot = self.get_source(self.tour.get_next(p));
         let ins = self.g.edge_by_ends(parent, subroot);
-        let re = self.edges[rem.index()];
-        if rem.is_reverse() {
-            self.edges[rem.index()] = self.g.reverse(ins);
-        } else {
-            self.edges[rem.index()] = ins;
-        }
+        let rem = self.replace_edge(rem, ins);
         // FIXME: make sure that ins != re
-        (ins, re)
+        (ins, rem)
     }
 
     // TODO: add change_any
+
+    fn replace_edge(&mut self, rem: TourEdge, new: Edge<G>) -> Edge<G> {
+        let old = self.edges[rem.index()];
+        if rem.is_reverse() {
+            self.edges[rem.index()] = self.g.reverse(new);
+        } else {
+            self.edges[rem.index()] = new;
+        }
+        old
+    }
+
+    fn get_source(&self, e: TourEdge) -> Vertex<G> {
+        let i = e.index();
+        if e.is_reverse() {
+            self.g.target(self.edges[i])
+        } else {
+            self.g.source(self.edges[i])
+        }
+    }
+
+    fn get_target(&self, e: TourEdge) -> Vertex<G> {
+        let i = e.index();
+        if e.is_reverse() {
+            self.g.source(self.edges[i])
+        } else {
+            self.g.target(self.edges[i])
+        }
+    }
 
     #[cfg(test)]
     fn contains(&self, e: Edge<G>) -> bool {
