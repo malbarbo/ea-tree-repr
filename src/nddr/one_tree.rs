@@ -78,12 +78,10 @@ impl<G: AdjacencyGraph + Choose> NddrOneTree<G> {
             let v = self.tree.find_vertex(v).unwrap();
 
             if u != 0 && !self.tree.is_ancestor(u, v) {
-                println!("1");
                 return (ins, u, v);
             }
 
             if v != 0 && !self.tree.is_ancestor(v, u) {
-                println!("2");
                 return (ins, v, u);
             }
         }
