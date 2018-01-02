@@ -100,8 +100,9 @@ impl Tour {
     }
 
     fn push<'a>(&mut self, last: Seg<'a>) {
+        // TODO: remove make_mut
         match last {
-            Seg::Complete(seg) => Rc::make_mut(&mut self.segs).push(seg),
+            Seg::Complete(seg) => Rc::make_mut(&mut self.segs).push(Rc::clone(seg)),
             Seg::Partial(values) => {
                 Rc::make_mut(&mut self.segs).push(Rc::new(Segment::new(values.into())))
             }
@@ -281,10 +282,10 @@ impl Segment {
     }
 }
 
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 enum Seg<'a> {
     Partial(&'a [TourEdge]),
-    Complete(Rc<Segment>),
+    Complete(&'a Rc<Segment>),
 }
 
 struct SegIter<'a> {
@@ -308,7 +309,7 @@ impl<'a> Iterator for SegIter<'a> {
             let (i, j) = self.cur;
             self.cur = (i + 1, 0);
             if j == 0 {
-                Some(Seg::Complete(self.segs[i].clone()))
+                Some(Seg::Complete(&self.segs[i]))
             } else {
                 Some(Seg::Partial(&self.segs[i].values[j..]))
             }
@@ -320,7 +321,7 @@ impl<'a> Iterator for SegIter<'a> {
             if a == b {
                 None
             } else if a == 0 && b == self.segs[i].len() {
-                Some(Seg::Complete(self.segs[i].clone()))
+                Some(Seg::Complete(&self.segs[i]))
             } else {
                 Some(Seg::Partial(&self.segs[i].values[a..b]))
             }
