@@ -14,7 +14,11 @@ pub fn progress<I: ExactSizeIterator>(iter: I) -> ProgressIter<I> {
     let mut pb = ProgressBar::on(stderr(), len);
     pb.show_time_left = true;
     pb.set_max_refresh_rate(Some(Duration::from_millis(100)));
-    ProgressIter { iter, pb, first: true}
+    ProgressIter {
+        iter,
+        pb,
+        first: true,
+    }
 }
 
 impl<I: Iterator> Iterator for ProgressIter<I> {

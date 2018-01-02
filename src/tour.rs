@@ -102,8 +102,9 @@ impl Tour {
     fn push<'a>(&mut self, last: Seg<'a>) {
         match last {
             Seg::Complete(seg) => Rc::make_mut(&mut self.segs).push(seg),
-            Seg::Partial(values) => Rc::make_mut(&mut self.segs)
-                .push(Rc::new(Segment::new(values.into()))),
+            Seg::Partial(values) => {
+                Rc::make_mut(&mut self.segs).push(Rc::new(Segment::new(values.into())))
+            }
         }
     }
 
@@ -238,7 +239,9 @@ impl Segment {
         use fera::ext::VecExt;
         let m = values.iter().map(|e| e.index()).max().unwrap();
         let mut pos = unsafe { Vec::new_uninitialized(m + 1) };
-        unsafe { pos.set_len(m + 1); }
+        unsafe {
+            pos.set_len(m + 1);
+        }
         for (i, &value) in values.iter().enumerate() {
             pos[value.index()] = i;
         }
@@ -251,7 +254,10 @@ impl Segment {
 
     fn contains(&self, e: TourEdge) -> bool {
         let index = e.index();
-        self.pos.get(index).map(|&i| self.values.get(i) == Some(&e)).unwrap_or(false)
+        self.pos
+            .get(index)
+            .map(|&i| self.values.get(i) == Some(&e))
+            .unwrap_or(false)
     }
 
     fn position(&self, e: TourEdge) -> Option<usize> {

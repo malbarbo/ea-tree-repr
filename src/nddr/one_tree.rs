@@ -4,7 +4,7 @@ use rand::Rng;
 
 use std::rc::Rc;
 
-use {NddTree, one_tree_op1, one_tree_op2, collect_ndds};
+use {collect_ndds, NddTree, one_tree_op1, one_tree_op2};
 
 pub struct NddrOneTree<G: WithVertex>
 where
@@ -71,7 +71,7 @@ impl<G: AdjacencyGraph + Choose> NddrOneTree<G> {
         for ins in self.g.choose_edge_iter(&mut rng) {
             // TODO: how to avoid this check?
             if self.contains(ins) {
-                continue
+                continue;
             }
             let (u, v) = self.g.ends(ins);
             let u = self.tree.find_vertex(u).unwrap();

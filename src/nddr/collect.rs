@@ -1,5 +1,5 @@
 use fera::graph::prelude::*;
-use fera::graph::traverse::{continue_if, Control, Dfs, Visitor, OnDiscoverTreeEdge};
+use fera::graph::traverse::{continue_if, Control, Dfs, OnDiscoverTreeEdge, Visitor};
 
 use Ndd;
 
