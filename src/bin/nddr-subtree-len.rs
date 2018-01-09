@@ -21,6 +21,25 @@ pub fn main() {
     }
 }
 
+fn run(n: usize, op: usize, find_op: FindOpStrategy, calls: usize, times: usize) -> Vec<f32> {
+    let mut rng = rand::weak_rng();
+    let mut size = vec![0; calls];
+    for _ in progress(0..times) {
+        let mut tree = new(n, find_op, &mut rng);
+        for s in &mut size {
+            if op == 1 {
+                tree.op1(&mut rng);
+            } else {
+                tree.op2(&mut rng);
+            }
+            *s += tree.last_op_size();
+        }
+    }
+    size.into_iter()
+        .map(|s| (s as f32) / (times as f32))
+        .collect()
+}
+
 fn args() -> (usize, usize, FindOpStrategy, usize, usize) {
     let app = clap_app!(
         ("nddr-subtree-len") =>
@@ -63,25 +82,6 @@ fn args() -> (usize, usize, FindOpStrategy, usize, usize) {
     let calls = value_t_or_exit!(matches, "calls", usize);
     let times = value_t_or_exit!(matches, "times", usize);
     (n, op, strategy, calls, times)
-}
-
-fn run(n: usize, op: usize, find_op: FindOpStrategy, calls: usize, times: usize) -> Vec<f32> {
-    let mut rng = rand::weak_rng();
-    let mut size = vec![0; calls];
-    for _ in progress(0..times) {
-        let mut tree = new(n, find_op, &mut rng);
-        for s in &mut size {
-            if op == 1 {
-                tree.op1(&mut rng);
-            } else {
-                tree.op2(&mut rng);
-            }
-            *s += tree.last_op_size();
-        }
-    }
-    size.into_iter()
-        .map(|s| (s as f32) / (times as f32))
-        .collect()
 }
 
 fn new<R: Rng>(n: usize, find_op: FindOpStrategy, mut rng: R) -> NddrOneTreeForest<CompleteGraph> {

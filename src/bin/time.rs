@@ -24,11 +24,45 @@ pub fn main() {
 
     println!("size time");
     for (s, t) in sizes.into_iter().zip(time) {
-        println!("{} {}", s, micro_secs(t));
+        println!("{} {:.03}", s, micro_secs(t));
     }
 }
 
-fn args() -> (Vec<usize>, Option<f32>, Repr, usize, usize) {
+fn run<T: Tree>(
+    sizes: &[usize],
+    diameter: Option<f32>,
+    op: Op,
+    times: usize,
+) -> Vec<Duration> {
+    let mut rng = rand::weak_rng();
+    let mut time = vec![Duration::default(); sizes.len()];
+    for _ in progress(0..times) {
+        for (t, &n) in time.iter_mut().zip(sizes) {
+            let (g, tree) = graph_tree(n, diameter, &mut rng);
+            let tree = T::new(g, &*tree, &mut rng);
+            let start = Instant::now();
+            match op {
+                Op::ChangeParent => {
+                    for _ in 0..10_000 {
+                        tree.clone().change_parent(&mut rng);
+                    }
+                },
+                Op::ChangeAny => {
+                    for _ in 0..10_000 {
+                        tree.clone().change_any(&mut rng);
+                    }
+                }
+            }
+            *t += start.elapsed();
+        }
+    }
+    for t in &mut time {
+        *t /= 10_000 * times as u32;
+    }
+    time
+}
+
+fn args() -> (Vec<usize>, Option<f32>, Repr, Op, usize) {
     let app = clap_app!(
         ("time") =>
             (version: "0.1")
@@ -47,8 +81,11 @@ fn args() -> (Vec<usize>, Option<f32>, Repr, usize, usize) {
             )
             (@arg op:
                 +required
-                possible_values(&["1", "2"])
-                "operation number"
+                possible_values(&[
+                    "change-parent",
+                    "change-any"
+                ])
+                "operation"
             )
             (@arg diameter: -d --diameter +takes_value
                 "the diamenter of the random trees [0, 1] - (0.0 = diameter 2, 1.0 = diamenter n - 1). Default is to generate trees with random diameters."
@@ -73,7 +110,11 @@ fn args() -> (Vec<usize>, Option<f32>, Repr, usize, usize) {
         "parent2" => Repr::Parent2,
         _ => unreachable!(),
     };
-    let op = value_t_or_exit!(matches, "op", usize);
+    let op = match matches.value_of("op").unwrap() {
+        "change-parent" => Op::ChangeParent,
+        "change-any" => Op::ChangeAny,
+        _ => unreachable!(),
+    };
     let diameter = if matches.is_present("diameter") {
         let d = value_t_or_exit!(matches, "diameter", f32);
         if d < 0.0 || d > 1.0 {
@@ -92,36 +133,6 @@ fn args() -> (Vec<usize>, Option<f32>, Repr, usize, usize) {
     (sizes, diameter, repr, op, times)
 }
 
-pub fn run<T: Tree>(
-    sizes: &[usize],
-    diameter: Option<f32>,
-    op: usize,
-    times: usize,
-) -> Vec<Duration> {
-    let mut rng = rand::weak_rng();
-    let mut time = vec![Duration::default(); sizes.len()];
-    for _ in progress(0..times) {
-        for (t, &n) in time.iter_mut().zip(sizes) {
-            let (g, tree) = graph_tree(n, diameter, &mut rng);
-            let tree = T::new(g, &*tree, &mut rng);
-            let start = Instant::now();
-            for _ in 0..10_000 {
-                let mut changed = tree.clone();
-                if op == 1 {
-                    changed.op1(&mut rng);
-                } else {
-                    changed.op2(&mut rng);
-                }
-            }
-            *t += start.elapsed() / 10_000;
-        }
-    }
-    for t in &mut time {
-        *t /= times as u32;
-    }
-    time
-}
-
 fn graph_tree<R: Rng>(
     n: usize,
     diameter: Option<f32>,
@@ -137,10 +148,17 @@ fn graph_tree<R: Rng>(
     (g, tree)
 }
 
+#[derive(Copy, Clone)]
 enum Repr {
     EulerTour,
     NddrAdj,
     NddrBalanced,
     Parent,
     Parent2,
+}
+
+#[derive(Copy, Clone)]
+enum Op {
+    ChangeParent,
+    ChangeAny,
 }

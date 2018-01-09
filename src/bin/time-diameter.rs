@@ -24,13 +24,13 @@ fn main() {
 
     println!("diameter time");
     for (d, t) in d.into_iter().zip(time) {
-        println!("{} {}", d, micro_secs(t));
+        println!("{} {:.03}", d, micro_secs(t));
     }
 }
 
-pub fn run<T: Tree>(
+fn run<T: Tree>(
     n: usize,
-    op: usize,
+    op: Op,
     samples: usize,
     times: usize,
 ) -> (Vec<usize>, Vec<Duration>) {
@@ -43,24 +43,28 @@ pub fn run<T: Tree>(
             let (g, tree) = graph_tree(n, d);
             let tree = T::new(g, &*tree, &mut rng);
             let start = Instant::now();
-            for _ in 0..10_000 {
-                let mut changed = tree.clone();
-                if op == 1 {
-                    changed.op1(&mut rng);
-                } else {
-                    changed.op2(&mut rng);
+            match op {
+                Op::ChangeParent => {
+                    for _ in 0..10_000 {
+                        tree.clone().change_parent(&mut rng);
+                    }
+                },
+                Op::ChangeAny => {
+                    for _ in 0..10_000 {
+                        tree.clone().change_any(&mut rng);
+                    }
                 }
             }
-            *t += start.elapsed() / 10_000;
+            *t += start.elapsed();
         }
     }
     for t in &mut time {
-        *t /= times as u32;
+        *t /= 10_000 * times as u32;
     }
     (ds, time)
 }
 
-fn args() -> (usize, Repr, usize, usize, usize) {
+fn args() -> (usize, Repr, Op, usize, usize) {
     let app = clap_app!(
         ("time-diameter") =>
             (version: "0.1")
@@ -80,8 +84,11 @@ fn args() -> (usize, Repr, usize, usize, usize) {
             )
             (@arg op:
                 +required
-                possible_values(&["1", "2"])
-                "operation number"
+                possible_values(&[
+                    "change-parent",
+                    "change-any"
+                ])
+                "operation"
             )
             (@arg samples:
                 +required
@@ -103,7 +110,11 @@ fn args() -> (usize, Repr, usize, usize, usize) {
         "parent2" => Repr::Parent2,
         _ => unreachable!(),
     };
-    let op = value_t_or_exit!(matches, "op", usize);
+    let op = match matches.value_of("op").unwrap() {
+        "change-parent" => Op::ChangeParent,
+        "change-any" => Op::ChangeAny,
+        _ => unreachable!(),
+    };
     let samples = value_t_or_exit!(matches, "samples", usize);
     let times = value_t_or_exit!(matches, "times", usize);
     (n, repr, op, samples, times)
@@ -115,10 +126,17 @@ fn graph_tree(n: usize, d: usize) -> (CompleteGraph, Vec<Edge<CompleteGraph>>) {
     (g, tree)
 }
 
+#[derive(Copy, Clone)]
 enum Repr {
     EulerTour,
     NddrAdj,
     NddrBalanced,
     Parent,
     Parent2,
+}
+
+#[derive(Copy, Clone)]
+enum Op {
+    ChangeParent,
+    ChangeAny,
 }

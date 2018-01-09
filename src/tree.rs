@@ -10,9 +10,9 @@ use {EulerTourTree, FindOpStrategy, FindVertexStrategy, NddrOneTree, NddrOneTree
 pub trait Tree: Clone {
     fn new<R: Rng>(g: CompleteGraph, edges: &[Edge<CompleteGraph>], rng: R) -> Self;
 
-    fn op1<R: Rng>(&mut self, rng: R);
+    fn change_parent<R: Rng>(&mut self, rng: R);
 
-    fn op2<R: Rng>(&mut self, rng: R);
+    fn change_any<R: Rng>(&mut self, rng: R);
 }
 
 #[derive(Clone)]
@@ -30,11 +30,11 @@ impl Tree for NddrAdjTree {
         NddrAdjTree(nddr)
     }
 
-    fn op1<R: Rng>(&mut self, rng: R) {
+    fn change_parent<R: Rng>(&mut self, rng: R) {
         self.0.op1(rng);
     }
 
-    fn op2<R: Rng>(&mut self, rng: R) {
+    fn change_any<R: Rng>(&mut self, rng: R) {
         self.0.op2(rng);
     }
 }
@@ -54,11 +54,11 @@ impl Tree for NddrBalancedTree {
         NddrBalancedTree(nddr)
     }
 
-    fn op1<R: Rng>(&mut self, rng: R) {
+    fn change_parent<R: Rng>(&mut self, rng: R) {
         self.0.op1(rng);
     }
 
-    fn op2<R: Rng>(&mut self, rng: R) {
+    fn change_any<R: Rng>(&mut self, rng: R) {
         self.0.op2(rng);
     }
 }
@@ -68,11 +68,11 @@ impl Tree for NddrOneTree<CompleteGraph> {
         NddrOneTree::new(g, edges)
     }
 
-    fn op1<R: Rng>(&mut self, rng: R) {
+    fn change_parent<R: Rng>(&mut self, rng: R) {
         NddrOneTree::op1(self, rng);
     }
 
-    fn op2<R: Rng>(&mut self, rng: R) {
+    fn change_any<R: Rng>(&mut self, rng: R) {
         NddrOneTree::op2(self, rng);
     }
 }
@@ -85,15 +85,15 @@ where
         ParentTree::from_iter(g, edges.iter().cloned())
     }
 
-    fn op1<R: Rng>(&mut self, rng: R) {
-        self.change_parent(rng);
+    fn change_parent<R: Rng>(&mut self, rng: R) {
+        ParentTree::change_parent(self, rng);
     }
 
-    fn op2<R: Rng>(&mut self, rng: R) {
+    fn change_any<R: Rng>(&mut self, rng: R) {
         thread_local! { static BUFFER: RefCell<Vec<Edge<CompleteGraph>>> = RefCell::new(vec![]); }
 
         BUFFER.with(|buffer| {
-            self.change_any(&mut *buffer.borrow_mut(), rng);
+            ParentTree::change_any(self, &mut *buffer.borrow_mut(), rng);
         });
     }
 }
@@ -103,11 +103,11 @@ impl Tree for EulerTourTree<CompleteGraph> {
         EulerTourTree::new(g, edges)
     }
 
-    fn op1<R: Rng>(&mut self, rng: R) {
-        self.change_parent(rng);
+    fn change_parent<R: Rng>(&mut self, rng: R) {
+        EulerTourTree::change_parent(self, rng);
     }
 
-    fn op2<R: Rng>(&mut self, _rng: R) {
+    fn change_any<R: Rng>(&mut self, _rng: R) {
         unimplemented!()
     }
 }
