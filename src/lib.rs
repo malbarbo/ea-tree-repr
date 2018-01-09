@@ -1,4 +1,4 @@
-#![feature(slice_rotate)]
+#![cfg_attr(test, feature(slice_rotate))]
 
 extern crate fera;
 extern crate fera_array;
@@ -22,7 +22,14 @@ pub use self::tree::*;
 
 use std::time::Duration;
 
-pub fn micro_secs(t: Duration) -> u64 {
-    let micro = 1_000_000.0 * t.as_secs() as f64 + f64::from(t.subsec_nanos()) / 1_000.0;
-    micro as u64
+pub fn nano_secs(t: Duration) -> u64 {
+    1_000_000_000 * t.as_secs() + t.subsec_nanos() as u64
+}
+
+pub fn micro_secs(t: Duration) -> f64 {
+    1_000_000.0 * t.as_secs() as f64 + t.subsec_nanos() as f64 / 1_000.0
+}
+
+pub fn milli_secs(t: Duration) -> f64 {
+    1_000.0 * t.as_secs() as f64 + t.subsec_nanos() as f64 / 1_000_000.0
 }
