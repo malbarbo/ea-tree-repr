@@ -1,11 +1,11 @@
-extern crate ec_tree_repr;
+extern crate ea_tree_repr;
 extern crate fera;
 extern crate rand;
 
 #[macro_use]
 extern crate clap;
 
-use ec_tree_repr::*;
+use ea_tree_repr::*;
 use fera::fun::vec;
 use fera::graph::prelude::*;
 
