@@ -1,7 +1,10 @@
 [package]
 name = "ea-tree-repr"
 version = "0.1.0"
-authors = ["mabarbo"]
+authors = ["Marco A L Barbosa"]
+description = """Spanning tree representations for evolutionary algorithms
+https://github.com/malbarbo/ec-tree-repr
+"""
 
 [dependencies]
 clap = { version = "2.29", default-features = false, features = ["wrap_help"] }

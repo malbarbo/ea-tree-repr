@@ -43,8 +43,9 @@ fn run(n: usize, op: usize, find_op: FindOpStrategy, calls: usize, times: usize)
 fn args() -> (usize, usize, FindOpStrategy, usize, usize) {
     let app = clap_app!(
         ("nddr-subtree-len") =>
-            (version: "0.1")
-            (author: "Marco A L Barbosa <https://github.com/malbarbo/ec-tree-repr>")
+            (version: crate_version!())
+            (about: crate_description!())
+            (author: crate_authors!())
             (@arg n:
                 +required
                 "number of vertices"

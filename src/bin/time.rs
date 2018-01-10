@@ -65,8 +65,9 @@ fn run<T: Tree>(
 fn args() -> (Vec<usize>, Option<f32>, Repr, Op, usize) {
     let app = clap_app!(
         ("time") =>
-            (version: "0.1")
-            (author: "Marco A L Barbosa <https://github.com/malbarbo/ec-tree-repr>")
+            (version: crate_version!())
+            (about: crate_description!())
+            (author: crate_authors!())
             (@arg repr:
                 +required
                 possible_values(&[

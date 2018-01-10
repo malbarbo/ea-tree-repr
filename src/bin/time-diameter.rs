@@ -67,8 +67,9 @@ fn run<T: Tree>(
 fn args() -> (usize, Repr, Op, usize, usize) {
     let app = clap_app!(
         ("time-diameter") =>
-            (version: "0.1")
-            (author: "Marco A L Barbosa <https://github.com/malbarbo/ec-tree-repr>")
+            (version: crate_version!())
+            (about: crate_description!())
+            (author: crate_authors!())
             (@arg n: +required "number of vertices")
             (@arg repr:
                 +required
