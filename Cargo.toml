@@ -15,5 +15,5 @@ rand = "0.4"
 tsplib = "0.1"
 
 [profile.release]
-# debug = true
+debug = true
 # debug-assertions = true
