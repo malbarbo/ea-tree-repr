@@ -46,6 +46,10 @@ impl<G: AdjacencyGraph + Choose> NddrOneTree<G> {
         }
     }
 
+    pub fn graph(&self) -> &Rc<G> {
+        &self.g
+    }
+
     pub fn contains(&self, e: Edge<G>) -> bool {
         let (u, v) = self.g.ends(e);
         self.tree.contains_edge(u, v)

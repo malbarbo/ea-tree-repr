@@ -14,6 +14,8 @@ pub trait Tree<G: WithEdge>: Clone {
     fn change_parent<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>);
 
     fn change_any<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>);
+
+    fn graph(&self) -> &Rc<G>;
 }
 
 #[derive(Clone)]
@@ -47,6 +49,10 @@ where
 
     fn change_any<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
         self.0.op2(rng)
+    }
+
+    fn graph(&self) -> &Rc<G> {
+        self.0.graph()
     }
 }
 
@@ -82,6 +88,10 @@ where
     fn change_any<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
         self.0.op2(rng)
     }
+
+    fn graph(&self) -> &Rc<G> {
+        self.0.graph()
+    }
 }
 
 
@@ -98,6 +108,10 @@ impl<G> Tree<G> for NddrOneTree<G>
 
     fn change_any<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
         NddrOneTree::op2(self, rng)
+    }
+
+    fn graph(&self) -> &Rc<G> {
+        NddrOneTree::graph(self)
     }
 }
 
@@ -122,6 +136,10 @@ where
         // TODO: use a shared buffer
         ParentTree::change_any(self, &mut Vec::with_capacity(n), rng)
     }
+
+    fn graph(&self) -> &Rc<G> {
+        ParentTree::graph(self)
+    }
 }
 
 
@@ -137,5 +155,9 @@ impl<G> Tree<G> for EulerTourTree<G>
 
     fn change_any<R: Rng>(&mut self, _rng: R) -> (Edge<G>, Edge<G>) {
         unimplemented!()
+    }
+
+    fn graph(&self) -> &Rc<G> {
+        EulerTourTree::graph(self)
     }
 }

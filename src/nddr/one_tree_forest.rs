@@ -110,6 +110,8 @@ pub struct NddrOneTreeForest<G>
 where
     G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
 {
+    g: Rc<G>,
+
     data: Rc<RefCell<Data<G>>>,
 
     last_op_size: usize,
@@ -141,6 +143,7 @@ where
 {
     fn clone(&self) -> Self {
         Self {
+            g: Rc::clone(&self.g),
             data: Rc::clone(&self.data),
             last_op_size: self.last_op_size,
             trees: self.trees.clone(),
@@ -291,6 +294,7 @@ where
         let version = data.version;
 
         NddrOneTreeForest {
+            g: Rc::clone(&data.g),
             data: data_,
             last_op_size: 0,
             trees: trees,
@@ -734,6 +738,10 @@ where
         } else {
             0
         }
+    }
+
+    pub fn graph(&self) -> &Rc<G> {
+        &self.g
     }
 
     fn g(&self) -> Ref<G> {

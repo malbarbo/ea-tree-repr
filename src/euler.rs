@@ -45,6 +45,10 @@ impl<G: IncidenceGraph> EulerTourTree<G> {
         }
     }
 
+    pub fn graph(&self) -> &Rc<G> {
+        &self.g
+    }
+
     pub fn change_parent<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
         let rem = self.tour.change_parent(rng);
         let (start, end) = self.tour.range(rem).unwrap();
