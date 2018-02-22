@@ -40,8 +40,6 @@ struct Data<G>
 where
     G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
 {
-    // TODO: remove Rc inside Rc, move g to Forest?
-    g: Rc<G>,
     nsqrt: usize,
     find_op_strategy: FindOpStrategy,
     find_vertex_strategy: FindVertexStrategy,
@@ -72,7 +70,7 @@ where
     G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     DefaultVertexPropMut<G, bool>: Clone,
 {
-    pub fn new(g: Rc<G>, find_op: FindOpStrategy, find_vertex: FindVertexStrategy) -> Self {
+    pub fn new(g: &Rc<G>, find_op: FindOpStrategy, find_vertex: FindVertexStrategy) -> Self {
         let nsqrt = (g.num_vertices() as f64).sqrt().ceil() as usize;
         let m = match find_op {
             FindOpStrategy::Adj | FindOpStrategy::AdjSmaller => {
@@ -87,7 +85,6 @@ where
         let pi_tree = g.vertex_prop(Vec::<usize>::new());
         let pi_pos = g.vertex_prop(Vec::<usize>::new());
         Data {
-            g: g,
             nsqrt: nsqrt,
             find_op_strategy: find_op,
             find_vertex_strategy: find_vertex,
@@ -99,10 +96,6 @@ where
             pi_tree: pi_tree,
             pi_pos: pi_pos,
         }
-    }
-
-    fn g(&self) -> &G {
-        &self.g
     }
 }
 
@@ -216,14 +209,16 @@ where
         find_vertex: FindVertexStrategy,
         rng: R,
     ) -> Self {
-        Self::new_with_data(
-            Rc::new(RefCell::new(Data::new(g, find_op, find_vertex))),
-            edges,
-            rng,
-        )
+        let data = Rc::new(RefCell::new(Data::new(&g, find_op, find_vertex)));
+        Self::new_with_data(g, data, edges, rng)
     }
 
-    fn new_with_data<R: Rng>(data: Rc<RefCell<Data<G>>>, mut edges: Vec<Edge<G>>, rng: R) -> Self {
+    fn new_with_data<R: Rng>(
+        g: Rc<G>,
+        data: Rc<RefCell<Data<G>>>,
+        mut edges: Vec<Edge<G>>,
+        rng: R,
+    ) -> Self {
         let data_ = data;
         // use a clone to make the borrow checker happy
         let data = Rc::clone(&data_);
@@ -231,7 +226,7 @@ where
         let nsqrt = data.nsqrt;
 
         let star_tree = {
-            let s = data.g().spanning_subgraph(&edges);
+            let s = g.spanning_subgraph(&edges);
             let r = s.choose_vertex(rng).unwrap();
             Rc::new(NddTree::new(find_star_tree(&s, r, nsqrt)))
         };
@@ -239,14 +234,13 @@ where
         let roots = vec(star_tree.iter().map(|ndd| ndd.vertex()));
         let star_edges = {
             let mut star_edges = vec![];
-            let data = &data;
             for i in 0..roots.len() {
                 for j in i + 1..roots.len() {
                     let u = roots[i];
                     let v = roots[j];
-                    if let Some(e) = data.g().get_edge_by_ends(u, v) {
+                    if let Some(e) = g.get_edge_by_ends(u, v) {
                         star_edges.push(e);
-                        star_edges.push(data.g().reverse(e));
+                        star_edges.push(g.reverse(e));
                     }
                 }
             }
@@ -255,7 +249,7 @@ where
 
         // TODO: improve
         edges.retain(|&e| {
-            let (u, v) = data.g().ends(e);
+            let (u, v) = g.ends(e);
             !star_tree.contains_edge(u, v)
         });
 
@@ -263,11 +257,11 @@ where
 
         // TODO: try to create a balanced NddrOneTreeForest
         trees.extend({
-            let s = data.g().spanning_subgraph(edges);
+            let s = g.spanning_subgraph(edges);
             collect_ndds(&s, &roots).into_iter().map(|t| {
                 let mut t = NddTree::new(t);
                 // TODO: find an away to not pass this closure
-                t.calc_degs(|v| data.g().out_degree(v));
+                t.calc_degs(|v| g.out_degree(v));
                 Rc::new(t)
             })
         });
@@ -294,7 +288,7 @@ where
         let version = data.version;
 
         NddrOneTreeForest {
-            g: Rc::clone(&data.g),
+            g: g,
             data: data_,
             last_op_size: 0,
             trees: trees,
@@ -324,7 +318,7 @@ where
 
     pub fn contains(&self, e: Edge<G>) -> bool {
         // TODO: what is the execution time?
-        let (u, v) = self.g().ends(e);
+        let (u, v) = self.graph().ends(e);
         self.trees.iter().any(|t| t.contains_edge(u, v))
     }
 
@@ -334,7 +328,7 @@ where
             assert!(self.contains(e));
         }
 
-        let g = self.g();
+        let g = self.graph();
         let sub = g.spanning_subgraph(&edges);
         assert!(sub.is_tree());
     }
@@ -451,7 +445,7 @@ where
         // Step 2
         let p = self.select_tree_vertex_if(from, &mut rng, |i| {
             // i is not root and have an edge tha is not in this forest
-            i != 0 && self[from][i].deg() < self.g().out_degree(self[from][i].vertex())
+            i != 0 && self[from][i].deg() < self.graph().out_degree(self[from][i].vertex())
         });
 
         // Step 3
@@ -470,7 +464,7 @@ where
             //                             v_p,
             //                             &mut |v_a| !self[from].contains_edge(v_p, v_a))
             //
-            self.g()
+            self.graph()
                 .choose_out_neighbor_iter(v_p, rng)
                 .find(|&v_a| !m[v_p][v_a] && !m[v_a][v_p])
                 .unwrap()
@@ -495,7 +489,7 @@ where
     }
 
     fn find_op_edge<R: Rng>(&self, mut rng: R) -> (usize, usize, usize, usize) {
-        let g = self.g();
+        let g = self.graph();
         // TODO: use tournament without replacement
         let mut e = g.choose_edge(&mut rng).unwrap();
         // The order of the vertices is important, so trying (u, v) is different from (v, u),
@@ -503,7 +497,7 @@ where
         // of change.
         // This is not necessary in the other methods because (u, v) and (v, u) can be choosed.
         if rng.gen() {
-            e = self.g().reverse(e);
+            e = self.graph().reverse(e);
         }
         let (u, v) = g.ends(e);
         let (from, p) = self.find_index(u);
@@ -522,7 +516,7 @@ where
     // Star edges
 
     fn can_insert_star_edge(&self, ins: Edge<G>) -> bool {
-        let (u, v) = self.g().ends(ins);
+        let (u, v) = self.graph().ends(ins);
         // FIXME: contains_edge is linear!, this can compromisse O(sqrt(n)) time
         // for non complete graph
         // FIXME: whe this function is called from find_op_star_edge find_vertex in called twice
@@ -539,7 +533,7 @@ where
                 self.can_insert_star_edge(*e)
             }).unwrap()
         };
-        let (u, v) = self.g().ends(e);
+        let (u, v) = self.graph().ends(e);
         let p = self[0].find_vertex(u).unwrap();
         let a = self[0].find_vertex(v).unwrap();
         (0, p, 0, a)
@@ -559,7 +553,7 @@ where
         }
 
         // TODO: call only when its needed
-        ti.calc_degs(|v| self.g().out_degree(v));
+        ti.calc_degs(|v| self.graph().out_degree(v));
 
         self.trees[i] = Rc::new(ti);
     }
@@ -587,8 +581,8 @@ where
         }
 
         // TODO: call only when its needed
-        ti.calc_degs(|v| self.g().out_degree(v));
-        tj.calc_degs(|v| self.g().out_degree(v));
+        ti.calc_degs(|v| self.graph().out_degree(v));
+        tj.calc_degs(|v| self.graph().out_degree(v));
 
         self.trees[i] = Rc::new(ti);
         self.trees[j] = Rc::new(tj);
@@ -625,8 +619,7 @@ where
         // For now, we are only interested in moving subtrees. When we implement a real GA, we should
         // enable this
         let f = || false;
-        f() && self.trees[0].len() > 2
-            && 2 * self.star_edges.borrow().len() >= self.trees[0].len()
+        f() && self.trees[0].len() > 2 && 2 * self.star_edges.borrow().len() >= self.trees[0].len()
             && rng.gen_range(0, self.data().nsqrt + 1) == self.data().nsqrt
     }
 
@@ -719,7 +712,7 @@ where
     }
 
     fn edge_by_ends(&self, u: Vertex<G>, v: Vertex<G>) -> Edge<G> {
-        self.g().edge_by_ends(u, v)
+        self.graph().edge_by_ends(u, v)
     }
 
     fn find_op_strategy(&self) -> FindOpStrategy {
@@ -742,10 +735,6 @@ where
 
     pub fn graph(&self) -> &Rc<G> {
         &self.g
-    }
-
-    fn g(&self) -> Ref<G> {
-        Ref::map(self.data(), |d| d.g())
     }
 
     fn data(&self) -> Ref<Data<G>> {
@@ -785,11 +774,11 @@ mod tests {
     fn test_eq() {
         let n = 30;
         let mut rng = rand::weak_rng();
-        let (data, mut tree) = data(n, FindOpStrategy::Adj, FindVertexStrategy::FatNode);
+        let (g, data, mut tree) = data(n, FindOpStrategy::Adj, FindVertexStrategy::FatNode);
         let data = Rc::new(RefCell::new(data));
         let forests = vec((0..n).map(|_| {
             rng.shuffle(&mut tree);
-            NddrOneTreeForest::new_with_data(data.clone(), tree.clone(), &mut rng)
+            NddrOneTreeForest::new_with_data(g.clone(), data.clone(), tree.clone(), &mut rng)
         }));
 
         for i in 0..(n as usize) {
@@ -803,11 +792,16 @@ mod tests {
         n: u32,
         find_op: FindOpStrategy,
         find_vertex: FindVertexStrategy,
-    ) -> (Data<CompleteGraph>, Vec<Edge<CompleteGraph>>) {
+    ) -> (
+        Rc<CompleteGraph>,
+        Data<CompleteGraph>,
+        Vec<Edge<CompleteGraph>>,
+    ) {
         let mut rng = rand::weak_rng();
         let g = Rc::new(CompleteGraph::new(n));
         let tree = random_sp(&g, &mut rng);
-        (Data::new(g, find_op, find_vertex), tree)
+        let data = Data::new(&g, find_op, find_vertex);
+        (g, data, tree)
     }
 
     macro_rules! def_test {
@@ -815,9 +809,9 @@ mod tests {
             #[test]
             fn $name() {
                 let mut rng = rand::weak_rng();
-                let (data, tree) = data(100, FindOpStrategy::$op, FindVertexStrategy::$vertex);
+                let (g, data, tree) = data(100, FindOpStrategy::$op, FindVertexStrategy::$vertex);
                 let data = Rc::new(RefCell::new(data));
-                let mut forest = NddrOneTreeForest::new_with_data(data, tree, &mut rng);
+                let mut forest = NddrOneTreeForest::new_with_data(g, data, tree, &mut rng);
                 for _ in 0..100 {
                     let mut rng = rand::weak_rng();
                     for &op in &[1, 2] {
