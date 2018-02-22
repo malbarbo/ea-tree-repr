@@ -77,7 +77,6 @@ fn args() -> (Vec<usize>, Option<f32>, Repr, Op, usize) {
                     "nddr-balanced",
                     "parent",
                     "parent2",
-                    "parent3",
                 ])
                 "tree representation"
             )

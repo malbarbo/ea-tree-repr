@@ -80,7 +80,6 @@ fn args() -> (usize, Repr, Op, usize, usize) {
                     "nddr-balanced",
                     "parent",
                     "parent2",
-                    "parent3"
                 ])
                 "tree representation"
             )
