@@ -12,7 +12,8 @@ fera = { version = "0.1", features = ["ext", "fun", "graph"] }
 fera-array = { path = "../fera/array" }
 pbr = "1.0"
 rand = "0.4"
+tsplib = "0.1"
 
 [profile.release]
-debug = true
-debug-assertions = true
+# debug = true
+# debug-assertions = true
