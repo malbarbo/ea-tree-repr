@@ -9,6 +9,7 @@ use ea_tree_repr::*;
 use fera::graph::prelude::*;
 use rand::Rng;
 
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 pub fn main() {
@@ -16,8 +17,8 @@ pub fn main() {
 
     let time = match repr {
         Repr::EulerTour => run::<EulerTourTree<_>>(&*sizes, diameter, op, times),
-        Repr::NddrAdj => run::<NddrAdjTree>(&*sizes, diameter, op, times),
-        Repr::NddrBalanced => run::<NddrBalancedTree>(&*sizes, diameter, op, times),
+        Repr::NddrAdj => run::<NddrAdjTree<_>>(&*sizes, diameter, op, times),
+        Repr::NddrBalanced => run::<NddrBalancedTree<_>>(&*sizes, diameter, op, times),
         Repr::Parent => run::<ParentTree<_>>(&*sizes, diameter, op, times),
         Repr::Parent2 => run::<Parent2Tree<_>>(&*sizes, diameter, op, times),
     };
@@ -28,7 +29,7 @@ pub fn main() {
     }
 }
 
-fn run<T: Tree>(
+fn run<T: Tree<CompleteGraph>>(
     sizes: &[usize],
     diameter: Option<f32>,
     op: Op,
@@ -39,7 +40,7 @@ fn run<T: Tree>(
     for _ in progress(0..times) {
         for (t, &n) in time.iter_mut().zip(sizes) {
             let (g, tree) = graph_tree(n, diameter, &mut rng);
-            let tree = T::new(g, &*tree, &mut rng);
+            let tree = T::new(Rc::new(g), &*tree, &mut rng);
             let start = Instant::now();
             match op {
                 Op::ChangeParent => {

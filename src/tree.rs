@@ -1,14 +1,15 @@
 use fera::graph::prelude::*;
+use fera::graph::choose::Choose;
 use fera_array::Array;
 use rand::Rng;
 
-use std::cell::RefCell;
+use std::rc::Rc;
 
 use {EulerTourTree, FindOpStrategy, FindVertexStrategy, NddrOneTree, NddrOneTreeForest, ParentTree};
 
 // This trait creates a uniform interface to make it easy to run the experiments
-pub trait Tree: Clone {
-    fn new<R: Rng>(g: CompleteGraph, edges: &[Edge<CompleteGraph>], rng: R) -> Self;
+pub trait Tree<G: WithEdge>: Clone {
+    fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], rng: R) -> Self;
 
     fn change_parent<R: Rng>(&mut self, rng: R);
 
@@ -16,10 +17,20 @@ pub trait Tree: Clone {
 }
 
 #[derive(Clone)]
-pub struct NddrAdjTree(NddrOneTreeForest<CompleteGraph>);
+pub struct NddrAdjTree<
+    G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>> + Clone,
+>(NddrOneTreeForest<G>);
 
-impl Tree for NddrAdjTree {
-    fn new<R: Rng>(g: CompleteGraph, edges: &[Edge<CompleteGraph>], rng: R) -> Self {
+impl<G> Tree<G> for NddrAdjTree<G>
+where
+    G: AdjacencyGraph
+        + WithVertexIndexProp
+        + WithVertexProp<DefaultVertexPropMut<G, bool>>
+        + Clone
+        + Choose,
+    DefaultVertexPropMut<G, bool>: Clone,
+{
+    fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], rng: R) -> Self {
         let nddr = NddrOneTreeForest::new_with_strategies(
             g,
             edges.to_vec(),
@@ -40,10 +51,20 @@ impl Tree for NddrAdjTree {
 }
 
 #[derive(Clone)]
-pub struct NddrBalancedTree(NddrOneTreeForest<CompleteGraph>);
+pub struct NddrBalancedTree<
+    G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>> + Clone,
+>(NddrOneTreeForest<G>);
 
-impl Tree for NddrBalancedTree {
-    fn new<R: Rng>(g: CompleteGraph, edges: &[Edge<CompleteGraph>], rng: R) -> Self {
+impl<G> Tree<G> for NddrBalancedTree<G>
+where
+    G: AdjacencyGraph
+        + WithVertexIndexProp
+        + WithVertexProp<DefaultVertexPropMut<G, bool>>
+        + Clone
+        + Choose,
+    DefaultVertexPropMut<G, bool>: Clone,
+{
+    fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], rng: R) -> Self {
         let nddr = NddrOneTreeForest::new_with_strategies(
             g,
             edges.to_vec(),
@@ -63,8 +84,11 @@ impl Tree for NddrBalancedTree {
     }
 }
 
-impl Tree for NddrOneTree<CompleteGraph> {
-    fn new<R: Rng>(g: CompleteGraph, edges: &[Edge<CompleteGraph>], _rng: R) -> Self {
+
+impl<G> Tree<G> for NddrOneTree<G>
+    where G: AdjacencyGraph + Choose
+{
+    fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], _rng: R) -> Self {
         NddrOneTree::new(g, edges)
     }
 
@@ -77,11 +101,13 @@ impl Tree for NddrOneTree<CompleteGraph> {
     }
 }
 
-impl<A> Tree for ParentTree<CompleteGraph, A>
+
+impl<G, A> Tree<G> for ParentTree<G, A>
 where
-    A: Clone + Array<OptionEdge<CompleteGraph>>,
+    G: Graph + WithVertexIndexProp + Choose,
+    A: Clone + Array<OptionEdge<G>>,
 {
-    fn new<R: Rng>(g: CompleteGraph, edges: &[Edge<CompleteGraph>], _rng: R) -> Self {
+    fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], _rng: R) -> Self {
         ParentTree::from_iter(g, edges.iter().cloned())
     }
 
@@ -90,16 +116,16 @@ where
     }
 
     fn change_any<R: Rng>(&mut self, rng: R) {
-        thread_local! { static BUFFER: RefCell<Vec<Edge<CompleteGraph>>> = RefCell::new(vec![]); }
-
-        BUFFER.with(|buffer| {
-            ParentTree::change_any(self, &mut *buffer.borrow_mut(), rng);
-        });
+        let n = self.graph().num_vertices();
+        // TODO: use a shared buffer
+        ParentTree::change_any(self, &mut Vec::with_capacity(n), rng);
     }
 }
 
-impl Tree for EulerTourTree<CompleteGraph> {
-    fn new<R: Rng>(g: CompleteGraph, edges: &[Edge<CompleteGraph>], _rng: R) -> Self {
+
+impl<G> Tree<G> for EulerTourTree<G>
+    where G: IncidenceGraph + Clone {
+    fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], _rng: R) -> Self {
         EulerTourTree::new(g, edges)
     }
 

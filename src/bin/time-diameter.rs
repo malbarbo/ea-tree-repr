@@ -9,6 +9,7 @@ use ea_tree_repr::*;
 use fera::fun::vec;
 use fera::graph::prelude::*;
 
+use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 fn main() {
@@ -16,8 +17,8 @@ fn main() {
 
     let (d, time) = match repr {
         Repr::EulerTour => run::<EulerTourTree<_>>(n, op, samples, times),
-        Repr::NddrAdj => run::<NddrAdjTree>(n, op, samples, times),
-        Repr::NddrBalanced => run::<NddrBalancedTree>(n, op, samples, times),
+        Repr::NddrAdj => run::<NddrAdjTree<_>>(n, op, samples, times),
+        Repr::NddrBalanced => run::<NddrBalancedTree<_>>(n, op, samples, times),
         Repr::Parent => run::<ParentTree<_>>(n, op, samples, times),
         Repr::Parent2 => run::<Parent2Tree<_>>(n, op, samples, times),
     };
@@ -28,7 +29,7 @@ fn main() {
     }
 }
 
-fn run<T: Tree>(
+fn run<T: Tree<CompleteGraph>>(
     n: usize,
     op: Op,
     samples: usize,
@@ -41,7 +42,7 @@ fn run<T: Tree>(
     for _ in progress(0..times) {
         for (&d, t) in ds.iter().zip(&mut time) {
             let (g, tree) = graph_tree(n, d);
-            let tree = T::new(g, &*tree, &mut rng);
+            let tree = T::new(Rc::new(g), &*tree, &mut rng);
             let start = Instant::now();
             match op {
                 Op::ChangeParent => {

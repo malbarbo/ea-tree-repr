@@ -9,6 +9,8 @@ use ea_tree_repr::*;
 use fera::graph::prelude::*;
 use rand::Rng;
 
+use std::rc::Rc;
+
 pub fn main() {
     let (n, op, strategy, calls, times) = args();
     let size = run(n, op, strategy, calls, times);
@@ -88,5 +90,5 @@ fn args() -> (usize, usize, FindOpStrategy, usize, usize) {
 fn new<R: Rng>(n: usize, find_op: FindOpStrategy, mut rng: R) -> NddrOneTreeForest<CompleteGraph> {
     let g = CompleteGraph::new(n as u32);
     let tree = random_sp(&g, &mut rng);
-    NddrOneTreeForest::new_with_strategies(g, tree, find_op, FindVertexStrategy::Map, rng)
+    NddrOneTreeForest::new_with_strategies(Rc::new(g), tree, find_op, FindVertexStrategy::Map, rng)
 }

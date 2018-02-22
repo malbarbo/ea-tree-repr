@@ -29,7 +29,7 @@ impl<G: WithVertex> Clone for NddrOneTree<G> {
 }
 
 impl<G: AdjacencyGraph + Choose> NddrOneTree<G> {
-    pub fn new(g: G, edges: &[Edge<G>]) -> Self {
+    pub fn new(g: Rc<G>, edges: &[Edge<G>]) -> Self {
         let tree = {
             let sub = g.spanning_subgraph(edges);
             let r = g.source(edges[0]);
@@ -41,7 +41,7 @@ impl<G: AdjacencyGraph + Choose> NddrOneTree<G> {
             t
         };
         Self {
-            g: Rc::new(g),
+            g: g,
             tree: tree,
         }
     }
@@ -118,7 +118,7 @@ mod tests {
 
     fn new(n: u32) -> NddrOneTree<CompleteGraph> {
         let mut rng = rand::weak_rng();
-        let g = CompleteGraph::new(n);
+        let g = Rc::new(CompleteGraph::new(n));
         let edges = random_sp(&g, &mut rng);
         NddrOneTree::new(g, &*edges)
     }

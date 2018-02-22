@@ -16,7 +16,7 @@ pub struct EulerTourTree<G: Graph> {
 
 impl<G: IncidenceGraph> EulerTourTree<G> {
     #[inline(never)]
-    pub fn new(g: G, edges: &[Edge<G>]) -> Self {
+    pub fn new(g: Rc<G>, edges: &[Edge<G>]) -> Self {
         // TODO: avoid using this intermediary vector
         let mut tour = Vec::with_capacity(2 * (g.num_vertices() - 1));
         let mut eds = CowNestedArray::with_capacity(g.num_vertices() - 1);
@@ -39,7 +39,7 @@ impl<G: IncidenceGraph> EulerTourTree<G> {
             }))
             .run();
         Self {
-            g: Rc::new(g),
+            g: g,
             tour: Tour::new(&tour),
             edges: eds,
         }
@@ -127,7 +127,7 @@ mod tests {
 
     #[test]
     fn new() {
-        let g = CompleteGraph::new(5);
+        let g = Rc::new(CompleteGraph::new(5));
         let e = |u: u32, v: u32| g.edge_by_ends(u, v);
         let edges = [e(0, 1), e(1, 2), e(1, 3), e(3, 4)];
         let tree = EulerTourTree::new(g.clone(), &edges);
@@ -147,10 +147,10 @@ mod tests {
         );
     }
 
-    fn graph_tree(n: u32) -> (CompleteGraph, Vec<Edge<CompleteGraph>>) {
+    fn graph_tree(n: u32) -> (Rc<CompleteGraph>, Vec<Edge<CompleteGraph>>) {
         let g = CompleteGraph::new(n);
         let tree = random_sp(&g, rand::XorShiftRng::new_unseeded());
-        (g, tree)
+        (Rc::new(g), tree)
     }
 
     #[test]

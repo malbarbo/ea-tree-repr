@@ -40,7 +40,8 @@ struct Data<G>
 where
     G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
 {
-    g: G,
+    // TODO: remove Rc inside Rc, move g to Forest?
+    g: Rc<G>,
     nsqrt: usize,
     find_op_strategy: FindOpStrategy,
     find_vertex_strategy: FindVertexStrategy,
@@ -71,7 +72,7 @@ where
     G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     DefaultVertexPropMut<G, bool>: Clone,
 {
-    pub fn new(g: G, find_op: FindOpStrategy, find_vertex: FindVertexStrategy) -> Self {
+    pub fn new(g: Rc<G>, find_op: FindOpStrategy, find_vertex: FindVertexStrategy) -> Self {
         let nsqrt = (g.num_vertices() as f64).sqrt().ceil() as usize;
         let m = match find_op {
             FindOpStrategy::Adj | FindOpStrategy::AdjSmaller => {
@@ -195,7 +196,7 @@ where
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
     DefaultVertexPropMut<G, bool>: Clone,
 {
-    pub fn new<R: Rng>(g: G, edges: Vec<Edge<G>>, rng: R) -> Self {
+    pub fn new<R: Rng>(g: Rc<G>, edges: Vec<Edge<G>>, rng: R) -> Self {
         Self::new_with_strategies(
             g,
             edges,
@@ -206,7 +207,7 @@ where
     }
 
     pub fn new_with_strategies<R: Rng>(
-        g: G,
+        g: Rc<G>,
         edges: Vec<Edge<G>>,
         find_op: FindOpStrategy,
         find_vertex: FindVertexStrategy,
@@ -796,9 +797,9 @@ mod tests {
         find_vertex: FindVertexStrategy,
     ) -> (Data<CompleteGraph>, Vec<Edge<CompleteGraph>>) {
         let mut rng = rand::weak_rng();
-        let g = CompleteGraph::new(n);
+        let g = Rc::new(CompleteGraph::new(n));
         let tree = random_sp(&g, &mut rng);
-        (Data::new(g.clone(), find_op, find_vertex), tree)
+        (Data::new(g, find_op, find_vertex), tree)
     }
 
     macro_rules! def_test {
