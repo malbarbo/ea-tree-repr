@@ -430,11 +430,11 @@ mod tests {
             loop {
                 let to = self.choose_pos(&mut rng);
                 if to < start {
-                    self.values[to..end + 1].rotate(start - to);
+                    self.values[to..end + 1].rotate_left(start - to);
                     return 0;
                 }
                 if to > end + 1 {
-                    self.values[start..to].rotate(end + 1 - start);
+                    self.values[start..to].rotate_left(end + 1 - start);
                     return 0;
                 }
             }
