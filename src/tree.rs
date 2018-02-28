@@ -94,9 +94,9 @@ where
     }
 }
 
-
 impl<G> Tree<G> for NddrOneTree<G>
-    where G: AdjacencyGraph + Choose
+where
+    G: AdjacencyGraph + Choose,
 {
     fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], _rng: R) -> Self {
         NddrOneTree::new(g, edges)
@@ -114,7 +114,6 @@ impl<G> Tree<G> for NddrOneTree<G>
         NddrOneTree::graph(self)
     }
 }
-
 
 impl<G, A> Tree<G> for ParentTree<G, A>
 where
@@ -142,9 +141,10 @@ where
     }
 }
 
-
 impl<G> Tree<G> for EulerTourTree<G>
-    where G: IncidenceGraph + Clone {
+where
+    G: IncidenceGraph + Choose + WithVertexIndexProp + Clone,
+{
     fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], _rng: R) -> Self {
         EulerTourTree::new(g, edges)
     }
