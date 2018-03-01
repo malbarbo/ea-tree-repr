@@ -1,20 +1,18 @@
 use fera::graph::prelude::*;
 use fera::graph::choose::Choose;
 use fera::graph::traverse::{Dfs, OnTraverseEvent, TraverseEvent};
-use fera_array::{CowNestedArray, DynamicArray};
 use rand::Rng;
-use rpds::HashTrieMap;
+use rpds::HashTrieSet;
 
-use std::fmt::{self, Debug};
 use std::rc::Rc;
+
+pub type TourEdge = (u32, u32);
 
 #[derive(Clone)]
 pub struct Tour<G: WithEdge> {
     pub(crate) g: Rc<G>,
-    // Map from TourEdge.index() to Edge<G>
-    pub(crate) edges: CowNestedArray<Edge<G>>,
-    // Map from Edge<G> to TourEdge
-    pub(crate) tour_edges: HashTrieMap<Edge<G>, TourEdge>,
+    pub(crate) tour_edges: HashTrieSet<Edge<G>>,
+    pub(crate) vertices: Rc<Vec<Vertex<G>>>,
     segs: Rc<Vec<Rc<Segment>>>,
     len: usize,
 }
@@ -27,52 +25,54 @@ where
     pub fn new(g: Rc<G>, edges: &[Edge<G>]) -> Self {
         // TODO: avoid using this intermediary vector
         let mut tour = Vec::with_capacity(2 * (g.num_vertices() - 1));
-        let mut eds = CowNestedArray::with_capacity(g.num_vertices() - 1);
         let mut stack = vec![];
-        let mut tour_edges = HashTrieMap::new();
-        let mut id = 0;
+        let mut tour_edges = HashTrieSet::new();
+        let ends = |e| {
+            let prop = g.vertex_index();
+            let (a, b) = g.ends(e);
+            (prop.get(a) as u32, prop.get(b) as u32)
+        };
         g.spanning_subgraph(edges)
-            .dfs(OnTraverseEvent(|e| match e {
+            .dfs(OnTraverseEvent(|evt| match evt {
                 TraverseEvent::DiscoverEdge(e) => {
-                    eds.push(e);
-                    let te = TourEdge::new(id);
-                    tour_edges = tour_edges.insert(e, te);
-                    tour.push(te);
-                    stack.push(id);
-                    id += 1;
+                    tour_edges = tour_edges.insert(e);
+                    tour.push(ends(e));
+                    stack.push(e);
                 }
                 TraverseEvent::FinishEdge(e) => {
-                    let id = stack.pop().unwrap();
-                    assert_eq!(eds[id], e);
-                    tour.push(TourEdge::new_reversed(id));
+                    let f = stack.pop().unwrap();
+                    assert_eq!(e, f);
+                    assert!(tour_edges.contains(&e));
+                    tour.push(ends(g.reverse(e)));
                 }
                 _ => (),
             }))
             .run();
-        Self::new_(g, &tour, eds, tour_edges)
+        Self::new_(g.clone(), &tour, tour_edges)
     }
 
     #[inline(never)]
-    fn new_(
-        g: Rc<G>,
-        values: &[TourEdge],
-        edges: CowNestedArray<Edge<G>>,
-        tour_edges: HashTrieMap<Edge<G>, TourEdge>,
-    ) -> Self {
-        let nsqrt = (values.len() as f64).sqrt().ceil() as usize;
-        let mut tour = Self {
+    fn new_(g: Rc<G>, tour: &[TourEdge], tour_edges: HashTrieSet<Edge<G>>) -> Self {
+        // TODO: remove vertices
+        let mut vertices = vec![g.vertices().next().unwrap(); g.num_vertices()];
+        let index = g.vertex_index();
+        for v in g.vertices() {
+            vertices[index.get(v)] = v;
+        }
+
+        let nsqrt = (tour.len() as f64).sqrt().ceil() as usize;
+        let mut tt = Self {
             g,
-            edges,
             tour_edges,
             segs: Rc::new(vec![]),
-            len: values.len(),
+            vertices: Rc::new(vertices),
+            len: tour.len(),
         };
-        let segs = values
-            .chunks(nsqrt)
-            .map(|t| Rc::new(tour.new_segment(t.into())))
+        let segs = tour.chunks(nsqrt)
+            .map(|t| Rc::new(tt.new_segment(t.into())))
             .collect();
-        tour.segs = Rc::new(segs);
-        tour
+        tt.segs = Rc::new(segs);
+        tt
     }
 
     pub fn change_parent<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Edge<G>) {
@@ -101,10 +101,12 @@ where
     fn move_(&mut self, new: Edge<G>, to: (usize, usize), sub: Subtree) -> Edge<G> {
         let x = self.prev_pos(sub.start);
         let y = self.next_pos(sub.end);
-        let te = self.get(x);
-        let rem = self.set_tour_edge(te, new);
-        self.segment_update_ends(x.0);
-        self.segment_update_ends(y.0);
+        let rem = self.get_edge(x);
+        self.set_edge(x, new);
+        let new = self.g.reverse(new);
+        self.set_edge(y, new);
+        self.tour_edges = self.tour_edges.remove(&rem);
+        self.tour_edges = self.tour_edges.insert(new);
         if y <= to {
             self.move_after(to, x, y);
         } else {
@@ -114,36 +116,37 @@ where
         rem
     }
 
-    fn set_tour_edge(&mut self, tour_edge: TourEdge, edge: Edge<G>) -> Edge<G> {
-        let i = tour_edge.index();
-        self.tour_edges = self.tour_edges.remove(&self.edges[i]);
-        self.tour_edges = self.tour_edges.insert(edge, tour_edge);
-        let old = self.edges[i];
-        self.edges[i] = edge;
-        old
+    fn get_edge(&mut self, (i, j): (usize, usize)) -> Edge<G> {
+        let (a, b) = self.segs[i].edges[j];
+        self.g
+            .edge_by_ends(self.vertices[a as usize], self.vertices[b as usize])
+    }
+
+    fn set_edge(&mut self, (i, j): (usize, usize), e: Edge<G>) {
+        let g = self.g.clone();
+        let ends = |e| {
+            let prop = g.vertex_index();
+            let (a, b) = g.ends(e);
+            (prop.get(a) as u32, prop.get(b) as u32)
+        };
+        let mut edges = self.segs[i].edges.clone();
+        edges[j] = ends(e);
+        let new = self.new_segment(edges);
+        let segs = Rc::make_mut(&mut self.segs);
+        let seg = Rc::make_mut(&mut segs[i]);
+        *seg = new;
     }
 
     fn choose_non_tree_edge<R: Rng>(&self, rng: R) -> Edge<G> {
         self.g
             .choose_edge_iter(rng)
-            .filter(|e| !self.tour_edges.contains_key(e))
+            .filter(|e| !self.tour_edges.contains(e))
             .next()
             .unwrap()
     }
 
-    fn ends(&self, e: TourEdge) -> (usize, usize) {
-        let i = e.index();
-        let (a, b) = self.g.ends(self.edges[i]);
-        let index = self.g.vertex_index();
-        if e.is_reverse() {
-            (index.get(b), index.get(a))
-        } else {
-            (index.get(a), index.get(b))
-        }
-    }
-
     fn subtree(&self, v: Vertex<G>) -> Subtree {
-        let vi = self.g.vertex_index().get(v);
+        let vi = self.g.vertex_index().get(v) as u32;
         let mut start = None;
         for (a, seg) in self.segs.iter().enumerate() {
             if let Some(b) = self.segment_position_source(seg, vi) {
@@ -161,10 +164,10 @@ where
         unreachable!()
     }
 
-    fn segment_position_source(&self, seg: &Segment, v: usize) -> Option<usize> {
+    fn segment_position_source(&self, seg: &Segment, v: u32) -> Option<usize> {
         if self.segment_contains_vertex(seg, v) {
             for (i, edge) in seg.edges.iter().enumerate() {
-                if self.ends(*edge).0 == v {
+                if edge.0 == v {
                     return Some(i);
                 }
             }
@@ -172,10 +175,10 @@ where
         None
     }
 
-    fn segment_rposition_target(&self, seg: &Segment, v: usize) -> Option<usize> {
+    fn segment_rposition_target(&self, seg: &Segment, v: u32) -> Option<usize> {
         if self.segment_contains_vertex(seg, v) {
             for (i, edge) in seg.edges.iter().enumerate().rev() {
-                if self.ends(*edge).1 == v {
+                if edge.1 == v {
                     return Some(i);
                 }
             }
@@ -183,28 +186,18 @@ where
         None
     }
 
-    fn segment_update_ends(&mut self, i: usize) {
-        let new = self.new_segment(self.segs[i].edges.clone());
-        let segs = Rc::make_mut(&mut self.segs);
-        let seg = Rc::make_mut(&mut segs[i]);
-        *seg = new;
-    }
-
-    fn segment_contains_vertex(&self, seg: &Segment, v: usize) -> bool {
-        seg.vertex_pos
-            .get(v)
+    fn segment_contains_vertex(&self, seg: &Segment, v: u32) -> bool {
+        seg.pos
+            .get(v as usize)
+            .cloned()
             .map(|i| {
-                if let Some((a, b)) = seg.edges.get(*i).map(|edge| self.ends(*edge)) {
+                if let Some(&(a, b)) = seg.edges.get(i) {
                     a == v || b == v
                 } else {
                     false
                 }
             })
             .unwrap_or(false)
-    }
-
-    pub fn get(&self, (i, j): (usize, usize)) -> TourEdge {
-        self.segs[i].edges[j]
     }
 
     fn move_before(&mut self, to: (usize, usize), start: (usize, usize), end: (usize, usize)) {
@@ -282,32 +275,14 @@ where
     }
 
     fn new_segment(&self, edges: Vec<TourEdge>) -> Segment {
-        let m = edges.iter().map(|e| e.index()).max().unwrap();
-        let mut edge_pos = unsafe { vec_new_uninitialized(m + 1) };
-        for (i, edge) in edges.iter().enumerate() {
-            edge_pos[edge.index()] = i;
+        let m = edges.iter().map(|&(a, b)| a.max(b)).max().unwrap();
+        let mut pos = unsafe { vec_new_uninitialized(m as usize + 1) };
+        for (i, &(a, b)) in edges.iter().enumerate() {
+            pos[a as usize] = i;
+            pos[b as usize] = i;
         }
 
-        let m = edges
-            .iter()
-            .map(|e| {
-                let (a, b) = self.ends(*e);
-                a.max(b)
-            })
-            .max()
-            .unwrap();
-        let mut vertex_pos = unsafe { vec_new_uninitialized(m + 1) };
-        for (i, edge) in edges.iter().enumerate() {
-            let (a, b) = self.ends(*edge);
-            vertex_pos[a] = i;
-            vertex_pos[b] = i;
-        }
-
-        Segment {
-            edges,
-            edge_pos,
-            vertex_pos,
-        }
+        Segment { edges, pos }
     }
 
     fn first_pos(&self) -> (usize, usize) {
@@ -338,75 +313,6 @@ where
     }
 }
 
-#[cfg(test)]
-impl<G> Tour<G>
-where
-    G: AdjacencyGraph + WithVertexIndexProp + Choose,
-{
-    fn len(&self) -> usize {
-        self.len
-    }
-
-    fn range(&self, e: TourEdge) -> Option<((usize, usize), (usize, usize))> {
-        self.position(e)
-            .and_then(|start| self.rposition(e).map(|end| (start, end)))
-    }
-
-    fn position(&self, e: TourEdge) -> Option<(usize, usize)> {
-        for (i, seg) in self.segs.iter().enumerate() {
-            if let Some(j) = seg.position(e) {
-                return Some((i, j));
-            }
-        }
-        None
-    }
-
-    fn rposition(&self, e: TourEdge) -> Option<(usize, usize)> {
-        for (i, seg) in self.segs.iter().enumerate().rev() {
-            if let Some(j) = seg.rposition(e) {
-                return Some((i, j));
-            }
-        }
-        None
-    }
-
-    pub fn to_vec(&self) -> Vec<TourEdge> {
-        self.segs
-            .iter()
-            .flat_map(|seg| seg.edges.iter().cloned())
-            .collect()
-    }
-
-    pub fn check(&self) {
-        let mut last = self.ends(self.get((0, 0))).0;
-        for edge in self.to_vec() {
-            let v = self.ends(edge);
-            assert_eq!(last, v.0);
-            last = v.1;
-        }
-        let mut seen = vec![0u8; self.len()];
-        let mut stack = vec![];
-        for value in self.to_vec() {
-            seen[value.0] += 1;
-            if stack.last().cloned() == Some(value) {
-                stack.pop();
-            } else {
-                stack.push(value);
-            }
-
-            let (start, end) = self.range(value).unwrap();
-            assert!(start < end);
-            assert_eq!(value, self.get(start));
-            assert_eq!(value, self.get(end));
-        }
-        assert!(stack.is_empty(), "{:?}", self.segs);
-        for (i, count) in seen.into_iter().enumerate() {
-            assert_eq!(1, count, "id: {}, {:?}", i, self.segs);
-        }
-        assert_eq!(self.segs.iter().map(|s| s.len()).sum::<usize>(), self.len());
-    }
-}
-
 #[derive(Copy, Clone, PartialEq, Debug)]
 struct Subtree {
     start: (usize, usize),
@@ -427,9 +333,9 @@ impl Subtree {
 struct Segment {
     edges: Vec<TourEdge>,
     // TODO: use a bit vec
-    edge_pos: Vec<usize>, // TODO: u32?
-    vertex_pos: Vec<usize>,
+    pos: Vec<usize>,
 }
+
 impl Segment {
     fn len(&self) -> usize {
         self.edges.len()
@@ -493,82 +399,62 @@ impl<'a> Iterator for SegIter<'a> {
     }
 }
 
-// TODO: use u32
-#[derive(Copy, Clone)]
-pub struct TourEdge(usize);
-
-impl TourEdge {
-    pub fn new(val: usize) -> Self {
-        TourEdge(val << 1)
-    }
-
-    pub fn new_reversed(val: usize) -> Self {
-        TourEdge((val << 1) + 1)
-    }
-
-    pub fn index(self) -> usize {
-        self.0 >> 1
-    }
-
-    pub fn is_reverse(self) -> bool {
-        self.0 & 1 == 1
-    }
-}
-
-impl PartialEq for TourEdge {
-    fn eq(&self, other: &Self) -> bool {
-        self.index() == other.index()
-    }
-}
-
-impl Debug for TourEdge {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let id = if self.is_reverse() {
-            -(self.index() as isize)
-        } else {
-            self.index() as isize
-        };
-        write!(f, "{}", id)
-    }
-}
-
 
 // tests
 
 #[cfg(test)]
-impl Segment {
-    fn contains_edge(&self, e: TourEdge) -> bool {
-        let index = e.index();
-        self.edge_pos
-            .get(index)
-            .map(|&i| self.edges.get(i) == Some(&e))
-            .unwrap_or(false)
+impl<G> Tour<G>
+where
+    G: AdjacencyGraph + WithVertexIndexProp + Choose,
+{
+    pub fn len(&self) -> usize {
+        self.len
     }
 
-    fn position(&self, e: TourEdge) -> Option<usize> {
-        if self.contains_edge(e) {
-            let p = self.edges.iter().position(|v| *v == e);
-            debug_assert!(p.is_some());
-            p
-        } else {
-            None
-        }
+    pub fn get(&self, (i, j): (usize, usize)) -> TourEdge {
+        self.segs[i].edges[j]
     }
 
-    fn rposition(&self, e: TourEdge) -> Option<usize> {
-        if self.contains_edge(e) {
-            let p = self.edges.iter().rposition(|v| *v == e);
-            debug_assert!(p.is_some());
-            p
-        } else {
-            None
+    pub fn to_vec(&self) -> Vec<TourEdge> {
+        self.segs
+            .iter()
+            .flat_map(|seg| seg.edges.iter().cloned())
+            .collect()
+    }
+
+    pub fn check(&self) {
+        use std::collections::HashSet;
+
+        // check if tour is a path
+        let mut last = self.get((0, 0)).0;
+        for edge in self.to_vec() {
+            assert_eq!(last, edge.0);
+            last = edge.1;
         }
+
+        // check if the tour is an euler tour
+        let mut stack = vec![];
+        for (a, b) in self.to_vec() {
+            //seen[value.0] += 1;
+            let last = stack.last().cloned();
+            if Some((a, b)) == last || Some((b, a)) == last {
+                stack.pop();
+            } else {
+                stack.push((a, b));
+            }
+        }
+        assert!(stack.is_empty(), "{:?}", self.segs);
+
+        // check that there is no repeated edge
+        let set: HashSet<_> = self.to_vec().into_iter().collect();
+        assert_eq!((self.g.num_vertices() - 1) * 2, set.len());
+
+        assert_eq!(self.segs.iter().map(|s| s.len()).sum::<usize>(), self.len());
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use fera_array::{Array, DynamicArray};
     use super::*;
     use rand;
     use random::random_sp;
@@ -576,8 +462,8 @@ mod tests {
     fn segment_contains_source(
         tour: &Tour<CompleteGraph>,
         seg: &Segment,
-        in_: &[usize],
-        not_in: &[usize],
+        in_: &[u32],
+        not_in: &[u32],
     ) {
         for v in in_ {
             assert!(tour.segment_contains_vertex(seg, *v), "v = {}", v);
@@ -591,7 +477,7 @@ mod tests {
     fn subtree() {
         let g = Rc::new(CompleteGraph::new(9));
         let e = |u: u32, v: u32| g.edge_by_ends(u, v);
-        let mut edges = CowNestedArray::with_capacity(g.num_vertices() - 1);
+        let mut edges = vec![];
         edges.push(e(0, 1));
         edges.push(e(1, 2));
         edges.push(e(2, 3));
@@ -601,31 +487,31 @@ mod tests {
         edges.push(e(5, 7));
         edges.push(e(5, 8));
 
-        let mut tour_edges = HashTrieMap::new();
+        let mut tour_edges = HashTrieSet::new();
         for i in 0..edges.len() {
-            tour_edges = tour_edges.insert(edges[i], TourEdge::new(i));
+            tour_edges = tour_edges.insert(edges[i]);
         }
 
         let tour = vec![
-            TourEdge::new(0),
-            TourEdge::new(1),
-            TourEdge::new(2),
-            TourEdge::new_reversed(2),
-            TourEdge::new_reversed(1),
-            TourEdge::new(3),
-            TourEdge::new_reversed(3),
-            TourEdge::new_reversed(0),
-            TourEdge::new(4),
-            TourEdge::new(5),
-            TourEdge::new_reversed(5),
-            TourEdge::new(6),
-            TourEdge::new_reversed(6),
-            TourEdge::new(7),
-            TourEdge::new_reversed(7),
-            TourEdge::new_reversed(4),
+            (0, 1),
+            (1, 2),
+            (2, 3),
+            (3, 2),
+            (2, 1),
+            (1, 4),
+            (4, 1),
+            (1, 0),
+            (0, 5),
+            (5, 6),
+            (6, 5),
+            (5, 7),
+            (7, 5),
+            (5, 8),
+            (8, 5),
+            (5, 0),
         ];
 
-        let tour = Tour::new_(g.clone(), &*tour, edges, tour_edges);
+        let tour = Tour::new_(g.clone(), &*tour, tour_edges);
 
         segment_contains_source(&tour, &tour.segs[0], &[0, 1, 2, 3], &[4, 5, 6, 7, 8]);
 
@@ -653,93 +539,6 @@ mod tests {
                 tour.check();
                 assert_ne!(old.to_vec(), tour.to_vec());
             }
-        }
-    }
-
-    #[test]
-    fn check_simple() {
-        let mut rng = rand::weak_rng();
-        for n in 5..30 {
-            let mut tour = SimpleTour::new((0..n).chain((0..n).rev()).collect());
-            tour.check();
-            for _ in 0..100 {
-                tour.change_parent(&mut rng);
-                tour.check();
-            }
-        }
-    }
-
-    // An simple implementation of EulerTour tree to help test EulerTourTree
-    struct SimpleTour<T: PartialEq> {
-        values: Vec<T>,
-    }
-
-    impl<T: PartialEq + Debug> SimpleTour<T> {
-        pub fn new(values: Vec<T>) -> Self {
-            Self { values }
-        }
-
-        pub fn change_parent<R: Rng>(&mut self, mut rng: R) -> usize {
-            let (start, end) = self.choose_subtree(&mut rng);
-            assert!(start < end);
-            assert_eq!(self.values[start], self.values[end]);
-            loop {
-                let to = self.choose_pos(&mut rng);
-                if to < start {
-                    self.values[to..end + 1].rotate_left(start - to);
-                    return 0;
-                }
-                if to > end + 1 {
-                    self.values[start..to].rotate_left(end + 1 - start);
-                    return 0;
-                }
-            }
-        }
-
-        fn choose_subtree<R: Rng>(&mut self, mut rng: R) -> (usize, usize) {
-            loop {
-                let (start, end) = self.range(self.choose(&mut rng)).unwrap();
-                if start != 0 || end != self.len() - 1 {
-                    return (start, end);
-                }
-            }
-        }
-
-        fn range(&self, value: &T) -> Option<(usize, usize)> {
-            self.position(value)
-                .and_then(|start| self.rposition(value).map(|end| (start, end)))
-        }
-
-        fn position(&self, value: &T) -> Option<usize> {
-            self.values.iter().position(|v| v == value)
-        }
-
-        fn rposition(&self, value: &T) -> Option<usize> {
-            self.values.iter().rposition(|v| v == value)
-        }
-
-        fn choose<R: Rng>(&self, rng: R) -> &T {
-            &self.values[self.choose_pos(rng)]
-        }
-
-        fn choose_pos<R: Rng>(&self, mut rng: R) -> usize {
-            rng.gen_range(0, self.len())
-        }
-
-        fn len(&self) -> usize {
-            self.values.len()
-        }
-
-        fn check(&self) {
-            let mut stack = vec![];
-            for value in &self.values {
-                if stack.last().cloned() == Some(value) {
-                    stack.pop();
-                } else {
-                    stack.push(value);
-                }
-            }
-            assert!(stack.is_empty(), "{:?}", self.values);
         }
     }
 }

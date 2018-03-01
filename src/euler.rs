@@ -35,31 +35,37 @@ where
 
     #[cfg(test)]
     fn contains(&self, e: Edge<G>) -> bool {
-        use fera_array::Array;
-        self.tour.edges.contains(&e)
+        let index = self.tour.g.vertex_index();
+        let (a, b) = self.tour.g.ends(e);
+        self.tour
+            .to_vec()
+            .contains(&(index.get(a) as u32, index.get(b) as u32))
     }
 
     #[cfg(test)]
     fn to_vec(&self) -> Vec<Edge<G>> {
+        let edge_by_ends = |a, b| {
+            self.tour.g.edge_by_ends(
+                self.tour.vertices[a as usize],
+                self.tour.vertices[b as usize],
+            )
+        };
         self.tour
             .to_vec()
             .into_iter()
-            .map(|e| {
-                let index = e.index();
-                let ed = self.tour.edges[index];
-                if e.is_reverse() {
-                    self.graph().reverse(ed)
-                } else {
-                    ed
-                }
-            })
+            .map(|(a, b)| edge_by_ends(a, b))
             .collect()
     }
 
     #[cfg(test)]
     fn check(&self) {
         use fera::graph::algs::{Paths, Trees};
-        let edges = || (0..self.graph().num_vertices() - 1).map(|i| self.tour.edges[i]);
+        let edges = || {
+            self.tour
+                .g
+                .edges()
+                .filter(|e| self.tour.tour_edges.contains(e))
+        };
         self.tour.check();
         assert!(self.graph().spanning_subgraph(edges()).is_tree());
         assert!(edges().all(|e| self.contains(e)));
