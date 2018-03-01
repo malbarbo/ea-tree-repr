@@ -7,6 +7,7 @@ extern crate pbr;
 extern crate rand;
 extern crate rpds;
 
+mod cowprop;
 mod euler;
 mod nddr;
 mod parent;
@@ -14,6 +15,7 @@ mod progress;
 mod random;
 mod tree;
 
+pub use self::cowprop::*;
 pub use self::euler::*;
 pub use self::nddr::*;
 pub use self::parent::*;

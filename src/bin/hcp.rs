@@ -37,13 +37,16 @@ pub fn main() {
 
     let g = Rc::new(builder.finalize());
 
-    // FIXME: use Cow vertex prop when appropriated
     match repr {
-        Repr::EulerTour => run::<EulerTourTree<_>, DefaultVertexPropMut<StaticGraph, u32>>(g, op),
-        Repr::NddrAdj => run::<NddrAdjTree<_>, DefaultVertexPropMut<StaticGraph, u32>>(g, op),
-        Repr::NddrBalanced => run::<NddrBalancedTree<_>, DefaultVertexPropMut<StaticGraph, u32>>(g, op),
+        Repr::EulerTour => {
+            run::<EulerTourTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, op)
+        }
+        Repr::NddrAdj => run::<NddrAdjTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, op),
+        Repr::NddrBalanced => {
+            run::<NddrBalancedTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, op)
+        }
         Repr::Parent => run::<ParentTree<_>, DefaultVertexPropMut<StaticGraph, u32>>(g, op),
-        Repr::Parent2 => run::<Parent2Tree<_>, DefaultVertexPropMut<StaticGraph, u32>>(g, op),
+        Repr::Parent2 => run::<Parent2Tree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, op),
     }
 }
 
