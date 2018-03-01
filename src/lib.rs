@@ -7,7 +7,6 @@ extern crate pbr;
 extern crate rand;
 extern crate rpds;
 
-mod euler;
 mod nddr;
 mod parent;
 mod progress;
@@ -15,11 +14,11 @@ mod random;
 mod tour;
 mod tree;
 
-pub use self::euler::*;
 pub use self::nddr::*;
 pub use self::parent::*;
 pub use self::progress::*;
 pub use self::random::*;
+pub use self::tour::*;
 pub use self::tree::*;
 
 use std::time::Duration;
