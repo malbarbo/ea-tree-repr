@@ -139,10 +139,7 @@ where
         };
         let mut edges = self.segs[i].edges.clone();
         edges[j] = ends(e);
-        let new = self.new_segment(edges);
-        let segs = Rc::make_mut(&mut self.segs);
-        let seg = Rc::make_mut(&mut segs[i]);
-        *seg = new;
+        Rc::make_mut(&mut self.segs)[i] = Rc::new(self.new_segment(edges));
     }
 
     #[inline(never)]
