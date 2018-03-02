@@ -1,8 +1,8 @@
 use fera::graph::prelude::*;
 use fera::graph::choose::Choose;
 use fera::graph::traverse::{Dfs, OnTraverseEvent, TraverseEvent};
+
 use rand::Rng;
-use rpds::HashTrieSet;
 
 use std::rc::Rc;
 
@@ -11,7 +11,6 @@ pub type TourEdge = (u32, u32);
 #[derive(Clone)]
 pub struct EulerTourTree<G: WithEdge> {
     pub(crate) g: Rc<G>,
-    pub(crate) tour_edges: HashTrieSet<Edge<G>>,
     pub(crate) vertices: Rc<Vec<Vertex<G>>>,
     segs: Rc<Vec<Rc<Segment>>>,
     len: usize,
@@ -26,7 +25,6 @@ where
         // TODO: avoid using this intermediary vector
         let mut tour = Vec::with_capacity(2 * (g.num_vertices() - 1));
         let mut stack = vec![];
-        let mut tour_edges = HashTrieSet::new();
         let ends = |e| {
             let prop = g.vertex_index();
             let (a, b) = g.ends(e);
@@ -35,24 +33,22 @@ where
         g.spanning_subgraph(edges)
             .dfs(OnTraverseEvent(|evt| match evt {
                 TraverseEvent::DiscoverEdge(e) => {
-                    tour_edges = tour_edges.insert(e);
                     tour.push(ends(e));
                     stack.push(e);
                 }
                 TraverseEvent::FinishEdge(e) => {
                     let f = stack.pop().unwrap();
                     assert_eq!(e, f);
-                    assert!(tour_edges.contains(&e));
                     tour.push(ends(g.reverse(e)));
                 }
                 _ => (),
             }))
             .run();
-        Self::new_(g.clone(), &tour, tour_edges)
+        Self::new_(g.clone(), &tour)
     }
 
     #[inline(never)]
-    fn new_(g: Rc<G>, tour: &[TourEdge], tour_edges: HashTrieSet<Edge<G>>) -> Self {
+    fn new_(g: Rc<G>, tour: &[TourEdge]) -> Self {
         // TODO: remove vertices field
         let mut vertices = vec![g.vertices().next().unwrap(); g.num_vertices()];
         let index = g.vertex_index();
@@ -63,13 +59,12 @@ where
         let nsqrt = (tour.len() as f64).sqrt().ceil() as usize;
         let mut tt = Self {
             g,
-            tour_edges,
             segs: Rc::new(vec![]),
             vertices: Rc::new(vertices),
             len: tour.len(),
         };
         let segs = tour.chunks(nsqrt)
-            .map(|t| Rc::new(tt.new_segment(t.into())))
+            .map(|t| tt.new_segment(t.into()))
             .collect();
         tt.segs = Rc::new(segs);
         tt
@@ -77,10 +72,7 @@ where
 
     #[inline(never)]
     pub fn change_parent<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Edge<G>) {
-        let ins = self.choose_non_tree_edge(&mut rng);
-        let (a, b) = self.g.ends(ins);
-        let a_sub = self.subtree(a);
-        let b_sub = self.subtree(b);
+        let (ins, a_sub, b_sub) = self.choose_non_tree_edge(&mut rng);
         let rem = if a_sub.contains(&b_sub) {
             // change b parent
             self.move_(ins, a_sub.end, b_sub)
@@ -111,8 +103,6 @@ where
         self.set_edge(x, new);
         let new = self.g.reverse(new);
         self.set_edge(y, new);
-        self.tour_edges = self.tour_edges.remove(&rem);
-        self.tour_edges = self.tour_edges.insert(new);
         if y <= to {
             self.move_after(to, x, y);
         } else {
@@ -123,7 +113,7 @@ where
     }
 
     #[inline(never)]
-    fn get_edge(&mut self, (i, j): (usize, usize)) -> Edge<G> {
+    fn get_edge(&self, (i, j): (usize, usize)) -> Edge<G> {
         let (a, b) = self.segs[i].edges[j];
         self.g
             .edge_by_ends(self.vertices[a as usize], self.vertices[b as usize])
@@ -139,80 +129,98 @@ where
         };
         let mut edges = self.segs[i].edges.clone();
         edges[j] = ends(e);
-        Rc::make_mut(&mut self.segs)[i] = Rc::new(self.new_segment(edges));
+        Rc::make_mut(&mut self.segs)[i] = self.new_segment(edges);
     }
 
     #[inline(never)]
-    fn choose_non_tree_edge<R: Rng>(&self, rng: R) -> Edge<G> {
+    fn choose_non_tree_edge<R: Rng>(&self, rng: R) -> (Edge<G>, Subtree, Subtree) {
         self.g
             .choose_edge_iter(rng)
-            .filter(|e| !self.contains(*e))
+            .filter_map(|e| {
+                let (a, b) = self.g.ends(e);
+                let a = self.g.vertex_index().get(a) as u32;
+                let a_start = self.subtree_start(a);
+                if a_start != (0, 0) && self.get_edge(self.prev_pos(a_start)) == e {
+                    None
+                } else {
+                    let b = self.g.vertex_index().get(b) as u32;
+                    let b_start = self.subtree_start(b);
+                    if b_start != (0, 0) && self.get_edge(self.prev_pos(b_start)) == e {
+                        None
+                    } else {
+                        let a_sub = Subtree::new(a_start, self.subtree_end(a));
+                        let b_sub = Subtree::new(b_start, self.subtree_end(b));
+                        Some((e, a_sub, b_sub))
+                    }
+                }
+            })
             .next()
             .unwrap()
     }
 
     #[inline(never)]
     pub fn contains(&self, e: Edge<G>) -> bool {
-        self.tour_edges.contains(&e)
+        let (a, b) = self.g.ends(e);
+        let a_sub = self.subtree(a);
+        if a_sub.start != (0, 0) && self.get_edge(self.prev_pos(a_sub.start)) == e {
+            return true;
+        } else {
+            let b_sub = self.subtree(b);
+            if b_sub.start != (0, 0) && self.get_edge(self.prev_pos(b_sub.start)) == e {
+                return true;
+            }
+        }
+        false
     }
 
     #[inline(never)]
     fn subtree(&self, v: Vertex<G>) -> Subtree {
         let v = self.g.vertex_index().get(v) as u32;
-        let mut start = None;
+        Subtree::new(self.subtree_start(v), self.subtree_end(v))
+    }
+
+    #[inline(never)]
+    fn subtree_start(&self, v: u32) -> (usize, usize) {
         for (a, seg) in self.segs.iter().enumerate() {
             if let Some(b) = self.segment_position_source(seg, v) {
-                start = Some((a, b));
-                break;
+                return (a, b);
             }
         }
+        unreachable!()
+    }
 
+    #[inline(never)]
+    fn subtree_end(&self, v: u32) -> (usize, usize) {
         for (a, seg) in self.segs.iter().enumerate().rev() {
             if let Some(b) = self.segment_rposition_target(seg, v) {
-                return Subtree::new(start.unwrap(), (a, b));
+                return (a, b);
             }
         }
-
         unreachable!()
     }
 
     #[inline(never)]
     fn segment_position_source(&self, seg: &Segment, v: u32) -> Option<usize> {
-        if self.segment_contains_vertex(seg, v) {
-            for (i, edge) in seg.edges.iter().enumerate() {
-                if edge.0 == v {
+        seg.source_pos.get(v as usize).and_then(|&i| {
+            if let Some(&(a, _)) = seg.edges.get(i) {
+                if a == v {
                     return Some(i);
                 }
             }
-        }
-        None
+            return None;
+        })
     }
 
     #[inline(never)]
     fn segment_rposition_target(&self, seg: &Segment, v: u32) -> Option<usize> {
-        if self.segment_contains_vertex(seg, v) {
-            for (i, edge) in seg.edges.iter().enumerate().rev() {
-                if edge.1 == v {
+        seg.target_pos.get(v as usize).and_then(|&i| {
+            if let Some(&(_, b)) = seg.edges.get(i) {
+                if b == v {
                     return Some(i);
                 }
             }
-        }
-        None
-    }
-
-    #[inline(never)]
-    fn segment_contains_vertex(&self, seg: &Segment, v: u32) -> bool {
-        seg.pos
-            .get(v as usize)
-            .cloned()
-            .map(|i| {
-                if let Some(&(a, b)) = seg.edges.get(i) {
-                    a == v || b == v
-                } else {
-                    false
-                }
-            })
-            .unwrap_or(false)
+            None
+        })
     }
 
     #[inline(never)]
@@ -274,7 +282,7 @@ where
     fn push<'a>(&self, segs: &mut Vec<Rc<Segment>>, last: Seg<'a>) {
         match last {
             Seg::Complete(seg) => segs.push(Rc::clone(seg)),
-            Seg::Partial(values) => segs.push(Rc::new(self.new_segment(values.into()))),
+            Seg::Partial(values) => segs.push(self.new_segment(values.into())),
         }
     }
 
@@ -283,14 +291,22 @@ where
     }
 
     #[inline(never)]
-    fn new_segment(&self, edges: Vec<TourEdge>) -> Segment {
-        let m = edges.iter().map(|&(a, b)| a.max(b)).max().unwrap();
-        let mut pos = unsafe { vec_new_uninitialized(m as usize + 1) };
-        for (i, &(a, b)) in edges.iter().enumerate() {
-            pos[a as usize] = i;
-            pos[b as usize] = i;
+    fn new_segment(&self, edges: Vec<TourEdge>) -> Rc<Segment> {
+        let m_source = edges.iter().map(|&(a, _)| a).max().unwrap();
+        let m_target = edges.iter().map(|&(_, b)| b).max().unwrap();
+        let mut source_pos = unsafe { vec_new_uninitialized(m_source as usize + 1) };
+        let mut target_pos = unsafe { vec_new_uninitialized(m_target as usize + 1) };
+        for (i, &(a, _)) in edges.iter().enumerate().rev() {
+            source_pos[a as usize] = i;
         }
-        Segment { edges, pos }
+        for (i, &(_, b)) in edges.iter().enumerate() {
+            target_pos[b as usize] = i;
+        }
+        Rc::new(Segment {
+            edges,
+            source_pos,
+            target_pos,
+        })
     }
 
     fn first_pos(&self) -> (usize, usize) {
@@ -341,7 +357,8 @@ impl Subtree {
 struct Segment {
     edges: Vec<TourEdge>,
     // TODO: use a bit vec?
-    pos: Vec<usize>,
+    source_pos: Vec<usize>,
+    target_pos: Vec<usize>,
 }
 
 impl Segment {
@@ -480,20 +497,6 @@ mod tests {
     use rand;
     use random::random_sp;
 
-    fn segment_contains_source(
-        tour: &EulerTourTree<CompleteGraph>,
-        seg: &Segment,
-        in_: &[u32],
-        not_in: &[u32],
-    ) {
-        for v in in_ {
-            assert!(tour.segment_contains_vertex(seg, *v), "v = {}", v);
-        }
-        for v in not_in {
-            assert!(!tour.segment_contains_vertex(seg, *v), "v = {}", v);
-        }
-    }
-
     #[test]
     fn subtree() {
         let g = Rc::new(CompleteGraph::new(9));
@@ -507,11 +510,6 @@ mod tests {
         edges.push(e(5, 6));
         edges.push(e(5, 7));
         edges.push(e(5, 8));
-
-        let mut tour_edges = HashTrieSet::new();
-        for i in 0..edges.len() {
-            tour_edges = tour_edges.insert(edges[i]);
-        }
 
         let tour = vec![
             (0, 1),
@@ -532,9 +530,7 @@ mod tests {
             (5, 0),
         ];
 
-        let tour = EulerTourTree::new_(g.clone(), &*tour, tour_edges);
-
-        segment_contains_source(&tour, &tour.segs[0], &[0, 1, 2, 3], &[4, 5, 6, 7, 8]);
+        let tour = EulerTourTree::new_(g.clone(), &*tour);
 
         assert_eq!(Subtree::new((0, 0), (3, 3)), tour.subtree(0));
         assert_eq!(Subtree::new((0, 1), (1, 2)), tour.subtree(1));
