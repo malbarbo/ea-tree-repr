@@ -196,7 +196,7 @@ where
         Self::new_with_strategies(
             g,
             edges,
-            FindOpStrategy::Adj,
+            FindOpStrategy::Adj, // init with the default strategies described in the paper
             FindVertexStrategy::FatNode,
             rng,
         )
@@ -269,11 +269,10 @@ where
         assert_eq!(nsqrt + 1, trees.len());
 
         if data.find_vertex_strategy == FindVertexStrategy::FatNode {
-            let data = &mut data;
             data.version += 1;
             let version = data.version;
             for (i, t) in trees[1..].iter().enumerate() {
-                NddrOneTreeForest::<G>::add_fat_node(data, version, i + 1, t);
+                NddrOneTreeForest::<G>::add_fat_node(&mut data, version, i + 1, t);
             }
         }
 
@@ -517,9 +516,9 @@ where
 
     fn can_insert_star_edge(&self, ins: Edge<G>) -> bool {
         let (u, v) = self.graph().ends(ins);
-        // FIXME: contains_edge is linear!, this can compromisse O(sqrt(n)) time
+        // FIXME: contains_edge is linear!, this can compromise O(sqrt(n)) time
         // for non complete graph
-        // FIXME: whe this function is called from find_op_star_edge find_vertex in called twice
+        // FIXME: when this function is called from find_op_star_edge find_vertex in called twice
         self[0][0].vertex() != u && !self[0].contains_edge(u, v) && {
             let p = self[0].find_vertex(u).unwrap();
             let a = self[0].find_vertex(v).unwrap();
