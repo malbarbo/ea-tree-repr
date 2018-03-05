@@ -64,7 +64,11 @@ where
             len: tour.len(),
         };
         let segs = tour.chunks(nsqrt)
-            .map(|t| tt.new_segment(t.into()))
+            .map(|t| {
+                let source = t.iter().map(|st| st.0);
+                let target = t.iter().map(|st| st.1);
+                tt.new_segment(source.collect(), target.collect())
+            })
             .collect();
         tt.segs = Rc::new(segs);
         tt
@@ -114,7 +118,7 @@ where
 
     #[inline(never)]
     fn get_edge(&self, (i, j): (usize, usize)) -> Edge<G> {
-        let (a, b) = self.segs[i].edges[j];
+        let (a, b) = self.segs[i].get(j);
         self.g
             .edge_by_ends(self.vertices[a as usize], self.vertices[b as usize])
     }
@@ -127,9 +131,12 @@ where
             let (a, b) = g.ends(e);
             (prop.get(a) as u32, prop.get(b) as u32)
         };
-        let mut edges = self.segs[i].edges.clone();
-        edges[j] = ends(e);
-        Rc::make_mut(&mut self.segs)[i] = self.new_segment(edges);
+        let mut source = self.segs[i].source.clone();
+        let mut target = self.segs[i].target.clone();
+        let (a, b) = ends(e);
+        source[j] = a;
+        target[j] = b;
+        Rc::make_mut(&mut self.segs)[i] = self.new_segment(source, target);
     }
 
     #[inline(never)]
@@ -201,26 +208,18 @@ where
 
     #[inline(never)]
     fn segment_position_source(&self, seg: &Segment, v: u32) -> Option<usize> {
-        seg.source_pos.get(v as usize).and_then(|&i| {
-            if let Some(&(a, _)) = seg.edges.get(i) {
-                if a == v {
-                    return Some(i);
-                }
-            }
-            return None;
-        })
+        seg.source_pos
+            .get(v as usize)
+            .filter(|&i| Some(&v) == seg.source.get(*i as usize))
+            .map(|i| *i as usize)
     }
 
     #[inline(never)]
     fn segment_rposition_target(&self, seg: &Segment, v: u32) -> Option<usize> {
-        seg.target_pos.get(v as usize).and_then(|&i| {
-            if let Some(&(_, b)) = seg.edges.get(i) {
-                if b == v {
-                    return Some(i);
-                }
-            }
-            None
-        })
+        seg.target_pos
+            .get(v as usize)
+            .filter(|&i| Some(&v) == seg.target.get(*i as usize))
+            .map(|i| *i as usize)
     }
 
     #[inline(never)]
@@ -264,7 +263,6 @@ where
         self.segs = Rc::new(segs);
     }
 
-    #[inline(never)]
     fn extend<'a>(
         &self,
         segs: &mut Vec<Rc<Segment>>,
@@ -278,11 +276,10 @@ where
         last
     }
 
-    #[inline(never)]
     fn push<'a>(&self, segs: &mut Vec<Rc<Segment>>, last: Seg<'a>) {
         match last {
             Seg::Complete(seg) => segs.push(Rc::clone(seg)),
-            Seg::Partial(values) => segs.push(self.new_segment(values.into())),
+            Seg::Partial(source, target) => segs.push(self.new_segment(source, target)),
         }
     }
 
@@ -291,20 +288,25 @@ where
     }
 
     #[inline(never)]
-    fn new_segment(&self, edges: Vec<TourEdge>) -> Rc<Segment> {
-        let m_source = edges.iter().map(|&(a, _)| a).max().unwrap();
-        let m_target = edges.iter().map(|&(_, b)| b).max().unwrap();
+    fn new_segment(&self, source: Vec<u32>, target: Vec<u32>) -> Rc<Segment> {
+        let m_source = *source.iter().max().unwrap();
+        let m_target = *target.iter().max().unwrap();
         let mut source_pos = unsafe { vec_new_uninitialized(m_source as usize + 1) };
         let mut target_pos = unsafe { vec_new_uninitialized(m_target as usize + 1) };
-        for (i, &(a, _)) in edges.iter().enumerate().rev() {
-            source_pos[a as usize] = i;
+        for (i, &v) in source.iter().enumerate().rev() {
+            unsafe {
+                *source_pos.get_unchecked_mut(v as usize) = i as u32;
+            }
         }
-        for (i, &(_, b)) in edges.iter().enumerate() {
-            target_pos[b as usize] = i;
+        for (i, &v) in target.iter().enumerate() {
+            unsafe {
+                *target_pos.get_unchecked_mut(v as usize) = i as u32;
+            }
         }
         Rc::new(Segment {
-            edges,
+            source,
             source_pos,
+            target,
             target_pos,
         })
     }
@@ -355,15 +357,20 @@ impl Subtree {
 
 #[derive(Clone, Debug)]
 struct Segment {
-    edges: Vec<TourEdge>,
     // TODO: use a bit vec?
-    source_pos: Vec<usize>,
-    target_pos: Vec<usize>,
+    source: Vec<u32>,
+    source_pos: Vec<u32>,
+    target: Vec<u32>,
+    target_pos: Vec<u32>,
 }
 
 impl Segment {
     fn len(&self) -> usize {
-        self.edges.len()
+        self.source.len()
+    }
+
+    fn get(&self, i: usize) -> (u32, u32) {
+        (self.source[i], self.target[i])
     }
 }
 
@@ -375,9 +382,9 @@ unsafe fn vec_new_uninitialized<T>(n: usize) -> Vec<T> {
     vec
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Clone, Debug)]
 enum Seg<'a> {
-    Partial(&'a [TourEdge]),
+    Partial(Vec<u32>, Vec<u32>),
     Complete(&'a Rc<Segment>),
 }
 
@@ -396,7 +403,7 @@ impl<'a> SegIter<'a> {
 impl<'a> Iterator for SegIter<'a> {
     type Item = Seg<'a>;
 
-    #[inline]
+    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         if self.cur.0 < self.end.0 {
             let (i, j) = self.cur;
@@ -404,7 +411,10 @@ impl<'a> Iterator for SegIter<'a> {
             if j == 0 {
                 Some(Seg::Complete(&self.segs[i]))
             } else {
-                Some(Seg::Partial(&self.segs[i].edges[j..]))
+                Some(Seg::Partial(
+                    self.segs[i].source[j..].into(),
+                    self.segs[i].target[j..].into(),
+                ))
             }
         } else if self.cur.0 == self.end.0 {
             // same segment
@@ -416,7 +426,10 @@ impl<'a> Iterator for SegIter<'a> {
             } else if a == 0 && b == self.segs[i].len() {
                 Some(Seg::Complete(&self.segs[i]))
             } else {
-                Some(Seg::Partial(&self.segs[i].edges[a..b]))
+                Some(Seg::Partial(
+                    self.segs[i].source[a..b].into(),
+                    self.segs[i].target[a..b].into(),
+                ))
             }
         } else {
             None
@@ -436,13 +449,13 @@ where
     }
 
     pub fn get(&self, (i, j): (usize, usize)) -> TourEdge {
-        self.segs[i].edges[j]
+        self.segs[i].get(j)
     }
 
     pub fn tour_edges(&self) -> Vec<TourEdge> {
-        self.segs
-            .iter()
-            .flat_map(|seg| seg.edges.iter().cloned())
+        let segs = &self.segs;
+        (0..segs.len())
+            .flat_map(|i| (0..segs[i].len()).map(move |j| segs[i].get(j)))
             .collect()
     }
 
