@@ -1,17 +1,17 @@
-use fera::graph::prelude::*;
+use fera::ext::VecExt;
 use fera::graph::choose::Choose;
+use fera::graph::prelude::*;
 use fera::graph::traverse::{Dfs, OnTraverseEvent, TraverseEvent};
 
 use rand::Rng;
 
 use std::rc::Rc;
 
-pub type TourEdge = (u32, u32);
-
 #[derive(Clone)]
 pub struct EulerTourTree<G: WithEdge> {
-    pub(crate) g: Rc<G>,
-    pub(crate) vertices: Rc<Vec<Vertex<G>>>,
+    g: Rc<G>,
+    // TODO: remove vertices field
+    vertices: Rc<[Vertex<G>]>,
     segs: Rc<Vec<Rc<Segment>>>,
     len: usize,
 }
@@ -22,14 +22,14 @@ where
 {
     #[inline(never)]
     pub fn new(g: Rc<G>, edges: &[Edge<G>]) -> Self {
-        // TODO: avoid using this intermediary vector
-        let mut tour = Vec::with_capacity(2 * (g.num_vertices() - 1));
-        let mut stack = vec![];
+        let prop = g.vertex_index();
         let ends = |e| {
-            let prop = g.vertex_index();
             let (a, b) = g.ends(e);
             (prop.get(a) as u32, prop.get(b) as u32)
         };
+        // TODO: avoid using this intermediary vector
+        let mut tour = Vec::with_capacity(2 * (g.num_vertices() - 1));
+        let mut stack = vec![];
         g.spanning_subgraph(edges)
             .dfs(OnTraverseEvent(|evt| match evt {
                 TraverseEvent::DiscoverEdge(e) => {
@@ -37,8 +37,7 @@ where
                     stack.push(e);
                 }
                 TraverseEvent::FinishEdge(e) => {
-                    let f = stack.pop().unwrap();
-                    assert_eq!(e, f);
+                    assert_eq!(e, stack.pop().unwrap());
                     tour.push(ends(g.reverse(e)));
                 }
                 _ => (),
@@ -48,8 +47,7 @@ where
     }
 
     #[inline(never)]
-    fn new_(g: Rc<G>, tour: &[TourEdge]) -> Self {
-        // TODO: remove vertices field
+    fn new_(g: Rc<G>, tour: &[(u32, u32)]) -> Self {
         let mut vertices = vec![g.vertices().next().unwrap(); g.num_vertices()];
         let index = g.vertex_index();
         for v in g.vertices() {
@@ -60,7 +58,7 @@ where
         let mut tt = Self {
             g,
             segs: Rc::new(vec![]),
-            vertices: Rc::new(vertices),
+            vertices: vertices.into(),
             len: tour.len(),
         };
         let segs = tour.chunks(nsqrt)
@@ -119,15 +117,14 @@ where
     #[inline(never)]
     fn get_edge(&self, (i, j): (usize, usize)) -> Edge<G> {
         let (a, b) = self.segs[i].get(j);
-        self.g
-            .edge_by_ends(self.vertices[a as usize], self.vertices[b as usize])
+        self.g.edge_by_ends(self.vertices[a], self.vertices[b])
     }
 
     #[inline(never)]
     fn set_edge(&mut self, (i, j): (usize, usize), e: Edge<G>) {
         let g = self.g.clone();
+        let prop = g.vertex_index();
         let ends = |e| {
-            let prop = g.vertex_index();
             let (a, b) = g.ends(e);
             (prop.get(a) as u32, prop.get(b) as u32)
         };
@@ -208,18 +205,24 @@ where
 
     #[inline(never)]
     fn segment_position_source(&self, seg: &Segment, v: u32) -> Option<usize> {
-        seg.source_pos
-            .get(v as usize)
-            .filter(|&i| Some(&v) == seg.source.get(*i as usize))
-            .map(|i| *i as usize)
+        if let Some(i) = seg.source_pos.get(v as usize) {
+            let i = *i as usize;
+            if Some(&v) == seg.source.get(i) {
+                return Some(i);
+            }
+        }
+        None
     }
 
     #[inline(never)]
     fn segment_rposition_target(&self, seg: &Segment, v: u32) -> Option<usize> {
-        seg.target_pos
-            .get(v as usize)
-            .filter(|&i| Some(&v) == seg.target.get(*i as usize))
-            .map(|i| *i as usize)
+        if let Some(i) = seg.target_pos.get(v as usize) {
+            let i = *i as usize;
+            if Some(&v) == seg.target.get(i) {
+                return Some(i);
+            }
+        }
+        None
     }
 
     #[inline(never)]
@@ -291,8 +294,8 @@ where
     fn new_segment(&self, source: Vec<u32>, target: Vec<u32>) -> Rc<Segment> {
         let m_source = *source.iter().max().unwrap();
         let m_target = *target.iter().max().unwrap();
-        let mut source_pos = unsafe { vec_new_uninitialized(m_source as usize + 1) };
-        let mut target_pos = unsafe { vec_new_uninitialized(m_target as usize + 1) };
+        let mut source_pos = unsafe { Vec::new_uninitialized(m_source as usize + 1) };
+        let mut target_pos = unsafe { Vec::new_uninitialized(m_target as usize + 1) };
         for (i, &v) in source.iter().enumerate().rev() {
             unsafe {
                 *source_pos.get_unchecked_mut(v as usize) = i as u32;
@@ -369,17 +372,9 @@ impl Segment {
         self.source.len()
     }
 
-    fn get(&self, i: usize) -> (u32, u32) {
-        (self.source[i], self.target[i])
+    fn get(&self, i: usize) -> (usize, usize) {
+        (self.source[i] as usize, self.target[i] as usize)
     }
-}
-
-unsafe fn vec_new_uninitialized<T>(n: usize) -> Vec<T> {
-    use fera::ext::VecExt;
-
-    let mut vec = Vec::new_uninitialized(n);
-    vec.set_len(n);
-    vec
 }
 
 #[derive(Clone, Debug)]
@@ -448,11 +443,11 @@ where
         self.len
     }
 
-    pub fn get(&self, (i, j): (usize, usize)) -> TourEdge {
+    pub fn get(&self, (i, j): (usize, usize)) -> (usize, usize) {
         self.segs[i].get(j)
     }
 
-    pub fn tour_edges(&self) -> Vec<TourEdge> {
+    pub fn tour_edges(&self) -> Vec<(usize, usize)> {
         let segs = &self.segs;
         (0..segs.len())
             .flat_map(|i| (0..segs[i].len()).map(move |j| segs[i].get(j)))
@@ -462,10 +457,7 @@ where
     pub fn edges(&self) -> Vec<Edge<G>> {
         self.tour_edges()
             .into_iter()
-            .map(|(a, b)| {
-                self.g
-                    .edge_by_ends(self.vertices[a as usize], self.vertices[b as usize])
-            })
+            .map(|(a, b)| self.g.edge_by_ends(self.vertices[a], self.vertices[b]))
             .collect()
     }
 
@@ -566,6 +558,7 @@ mod tests {
             for _ in 0..100 {
                 let old = tour.clone();
                 let (ins, rem) = tour.change_parent(&mut rng);
+                assert_ne!(ins, rem);
                 tour.check();
                 assert_ne!(old.tour_edges(), tour.tour_edges());
                 let edges = tour.edges();
