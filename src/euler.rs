@@ -195,9 +195,13 @@ where
 
     #[inline(never)]
     fn subtree_end(&self, v: u32) -> (usize, usize) {
+        if self.segs[0].source[0] == v {
+            return self.prev_pos(self.end_pos());
+        }
+
         for (a, seg) in self.segs.iter().enumerate().rev() {
-            if let Some(b) = self.segment_rposition_target(seg, v) {
-                return (a, b);
+            if let Some(b) = self.segment_rposition_source(seg, v) {
+                return self.prev_pos((a, b));
             }
         }
         unreachable!()
@@ -205,7 +209,7 @@ where
 
     #[inline(never)]
     fn segment_position_source(&self, seg: &Segment, v: u32) -> Option<usize> {
-        if let Some(i) = seg.source_pos.get(v as usize) {
+        if let Some(i) = seg.pos.get(v as usize) {
             let i = *i as usize;
             if Some(&v) == seg.source.get(i) {
                 return Some(i);
@@ -215,11 +219,11 @@ where
     }
 
     #[inline(never)]
-    fn segment_rposition_target(&self, seg: &Segment, v: u32) -> Option<usize> {
-        if let Some(i) = seg.target_pos.get(v as usize) {
+    fn segment_rposition_source(&self, seg: &Segment, v: u32) -> Option<usize> {
+        if let Some(i) = seg.pos.get(v as usize) {
             let i = *i as usize;
-            if Some(&v) == seg.target.get(i) {
-                return Some(i);
+            if Some(&v) == seg.source.get(i) {
+                return seg.source.iter().rposition(|&x| x == v);
             }
         }
         None
@@ -293,24 +297,16 @@ where
     #[inline(never)]
     fn new_segment(&self, source: Vec<u32>, target: Vec<u32>) -> Rc<Segment> {
         let m_source = *source.iter().max().unwrap();
-        let m_target = *target.iter().max().unwrap();
-        let mut source_pos = unsafe { Vec::new_uninitialized(m_source as usize + 1) };
-        let mut target_pos = unsafe { Vec::new_uninitialized(m_target as usize + 1) };
+        let mut pos = unsafe { Vec::new_uninitialized(m_source as usize + 1) };
         for (i, &v) in source.iter().enumerate().rev() {
             unsafe {
-                *source_pos.get_unchecked_mut(v as usize) = i as u32;
-            }
-        }
-        for (i, &v) in target.iter().enumerate() {
-            unsafe {
-                *target_pos.get_unchecked_mut(v as usize) = i as u32;
+                *pos.get_unchecked_mut(v as usize) = i as u32;
             }
         }
         Rc::new(Segment {
             source,
-            source_pos,
             target,
-            target_pos,
+            pos,
         })
     }
 
@@ -362,9 +358,8 @@ impl Subtree {
 struct Segment {
     // TODO: use a bit vec?
     source: Vec<u32>,
-    source_pos: Vec<u32>,
     target: Vec<u32>,
-    target_pos: Vec<u32>,
+    pos: Vec<u32>,
 }
 
 impl Segment {
