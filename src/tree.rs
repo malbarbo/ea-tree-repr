@@ -19,9 +19,14 @@ pub trait Tree<G: WithEdge>: Clone {
 }
 
 #[derive(Clone)]
-pub struct NddrAdjTree<
-    G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>> + Clone,
->(NddrOneTreeForest<G>);
+pub struct NddrAdjTree<G>(NddrOneTreeForest<G>)
+where
+    G: AdjacencyGraph
+        + WithVertexIndexProp
+        + WithVertexProp<DefaultVertexPropMut<G, bool>>
+        + Clone
+        + Choose,
+    DefaultVertexPropMut<G, bool>: Clone;
 
 impl<G> Tree<G> for NddrAdjTree<G>
 where
@@ -57,9 +62,14 @@ where
 }
 
 #[derive(Clone)]
-pub struct NddrBalancedTree<
-    G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>> + Clone,
->(NddrOneTreeForest<G>);
+pub struct NddrBalancedTree<G>(NddrOneTreeForest<G>)
+where
+    G: AdjacencyGraph
+        + WithVertexIndexProp
+        + WithVertexProp<DefaultVertexPropMut<G, bool>>
+        + Clone
+        + Choose,
+    DefaultVertexPropMut<G, bool>: Clone;
 
 impl<G> Tree<G> for NddrBalancedTree<G>
 where

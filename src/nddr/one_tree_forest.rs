@@ -1,18 +1,20 @@
 // external
 use fera::ext::VecExt;
 use fera::fun::vec;
-use fera::graph::algs::Trees;
 use fera::graph::choose::Choose;
 use fera::graph::prelude::*;
 use rand::Rng;
 
 // system
-use std::cell::{Ref, RefCell, RefMut};
+use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::rc::Rc;
 use std::ops::Deref;
 
 // internal
 use {collect_ndds, find_star_tree, NddTree, one_tree_op1, one_tree_op2, op1, op2};
+
+// pg 836 5) Step 5 - the value of the k constant is not specified, we use the default value of 1
+const DEFAULT_K: usize = 1;
 
 #[derive(PartialEq, Clone, Copy)]
 pub enum FindOpStrategy {
@@ -58,11 +60,13 @@ where
     // The next fields are use if find_vertex_strategy = FatNode. In forest version h, the vertex
     // x was in position pi_pos[x][h] of the tree with index pi_tree[x][h]
     version: usize,
-    // FIXME: implements reinitialization (In section VI-B - 5 - is not said which value was
-    // used for k)
-    pi_version: DefaultVertexPropMut<G, Vec<usize>>,
-    pi_tree: DefaultVertexPropMut<G, Vec<usize>>,
-    pi_pos: DefaultVertexPropMut<G, Vec<usize>>,
+    // pg 836, reinitialization constant
+    k: usize,
+    // number of reinits
+    num_reinits: usize,
+    pi_version: DefaultVertexPropMut<G, Vec<u32>>,
+    pi_tree: DefaultVertexPropMut<G, Vec<u32>>,
+    pi_pos: DefaultVertexPropMut<G, Vec<u32>>,
 }
 
 impl<G> Data<G>
@@ -72,18 +76,24 @@ where
 {
     pub fn new(g: &Rc<G>, find_op: FindOpStrategy, find_vertex: FindVertexStrategy) -> Self {
         let nsqrt = (g.num_vertices() as f64).sqrt().ceil() as usize;
+        // Only allocate m and tree_indices if they will be used
         let m = match find_op {
             FindOpStrategy::Adj | FindOpStrategy::AdjSmaller => {
                 Some(g.vertex_prop(g.vertex_prop(false)))
             }
             _ => None,
         };
+        let tree_indices = match find_op {
+            // 0 is the index of the star tree, so it's kept out
+            FindOpStrategy::Adj | FindOpStrategy::AdjSmaller => vec(1..nsqrt + 1),
+            _ => vec![],
+        };
+        // Initializing pi_* does not allocate, the allocation will happen when a value is
+        // pushed in the vectors
+        let pi_version = g.vertex_prop(Vec::<u32>::new());
+        let pi_tree = g.vertex_prop(Vec::<u32>::new());
+        let pi_pos = g.vertex_prop(Vec::<u32>::new());
         let vertex_index = g.vertex_index();
-        // 0 is the index of the star tree, so its keeped out
-        let tree_indices = vec(1..nsqrt + 1);
-        let pi_version = g.vertex_prop(Vec::<usize>::new());
-        let pi_tree = g.vertex_prop(Vec::<usize>::new());
-        let pi_pos = g.vertex_prop(Vec::<usize>::new());
         Data {
             nsqrt: nsqrt,
             find_op_strategy: find_op,
@@ -92,6 +102,8 @@ where
             tree_indices: tree_indices,
             m: m,
             version: 0,
+            k: DEFAULT_K,
+            num_reinits: 0,
             pi_version: pi_version,
             pi_tree: pi_tree,
             pi_pos: pi_pos,
@@ -112,29 +124,34 @@ where
     // The star tree is kept in trees[0]. The star tree connects the roots of the trees.
     // TODO: Use RcArray
     trees: Vec<Rc<NddTree<Vertex<G>>>>,
-    // Edges (u, v) such that u and v are star tree vertices.
+    // Edges (u, v) such that u and v are star tree vertices (that is, tree roots)
     star_edges: Rc<RefCell<Vec<Edge<G>>>>,
 
-    // Used if find_vertex_strategy == Map. This does not allocate if find_vertex_strategy != Map.
+    // Used if find_vertex_strategy == Map. Does not allocate if find_vertex_strategy != Map.
     //
     // if trees[i][maps[i][vertex_index[v]]].vertex == v,
-    // so v is in tree[i] in position maps[i][vertex_index[v]]
+    // then v is in tree[i] in position maps[i][vertex_index[v]]
+    // len(trees) == len(maps) == O(sqrt(n))
     // TODO: move this to NddTree
     maps: Vec<Rc<Vec<usize>>>,
 
     // Used if find_vertex_strategy = FatNode
-    //
-    // FIXME: implements a scheme to reset the history
-    // In page 836, B-5) L = history, what is the value of k?
-    version: usize,
-    history: Vec<usize>,
+    // In page 836, B-5) L = history
+    version: Cell<usize>,
+    reinit: Cell<usize>,
+    history: RefCell<Vec<usize>>,
 }
 
 impl<G> Clone for NddrOneTreeForest<G>
 where
-    G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
+    G: AdjacencyGraph
+        + Choose
+        + WithVertexIndexProp
+        + WithVertexProp<DefaultVertexPropMut<G, bool>>,
+    DefaultVertexPropMut<G, bool>: Clone,
 {
     fn clone(&self) -> Self {
+        self.reinit_if_needed();
         Self {
             g: Rc::clone(&self.g),
             data: Rc::clone(&self.data),
@@ -142,8 +159,9 @@ where
             trees: self.trees.clone(),
             star_edges: Rc::clone(&self.star_edges),
             maps: self.maps.clone(),
-            version: self.version,
-            // TODO: Should history be shared? How this affects running time?
+            version: self.version.clone(),
+            reinit: self.reinit.clone(),
+            // then max len of history is (k * nsqrt), so it does not affect the running time
             history: self.history.clone(),
         }
     }
@@ -196,7 +214,8 @@ where
         Self::new_with_strategies(
             g,
             edges,
-            FindOpStrategy::Adj, // init with the default strategies described in the paper
+            // init with the default strategies described in the paper
+            FindOpStrategy::Adj,
             FindVertexStrategy::FatNode,
             rng,
         )
@@ -217,7 +236,7 @@ where
         g: Rc<G>,
         data: Rc<RefCell<Data<G>>>,
         mut edges: Vec<Edge<G>>,
-        rng: R,
+        mut rng: R,
     ) -> Self {
         let data_ = data;
         // use a clone to make the borrow checker happy
@@ -227,8 +246,9 @@ where
 
         let star_tree = {
             let s = g.spanning_subgraph(&edges);
-            let r = s.choose_vertex(rng).unwrap();
-            Rc::new(NddTree::new(find_star_tree(&s, r, nsqrt)))
+            let r = s.choose_vertex(&mut rng).unwrap();
+            // let r = tree_center(&s);
+            Rc::new(NddTree::new(find_star_tree(&s, r, nsqrt, rng)))
         };
 
         let roots = vec(star_tree.iter().map(|ndd| ndd.vertex()));
@@ -285,6 +305,7 @@ where
         }
 
         let version = data.version;
+        let reinit = data.num_reinits;
 
         NddrOneTreeForest {
             g: g,
@@ -292,10 +313,15 @@ where
             last_op_size: 0,
             trees: trees,
             maps: maps,
-            version: version,
-            history: vec![version],
+            version: Cell::new(version),
+            reinit: Cell::new(reinit),
+            history: RefCell::new(vec![version]),
             star_edges: Rc::new(RefCell::new(star_edges)),
         }
+    }
+
+    pub fn graph(&self) -> &Rc<G> {
+        &self.g
     }
 
     pub fn last_op_size(&self) -> usize {
@@ -304,24 +330,30 @@ where
 
     // TODO: create a version of op1 and op2 that takes degree constraint parameter
     pub fn op1<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
+        self.reinit_if_needed();
         let (from, p, to, a) = self.find_vertices_op1(rng);
         self.last_op_size = self[from].len() + self[to].len();
+        // println!("size = {}", self.last_op_size);
         self.do_op1((from, p, to, a))
     }
 
     pub fn op2<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
+        self.reinit_if_needed();
         let (from, p, r, to, a) = self.find_vertices_op2(rng);
         self.last_op_size = self[from].len() + self[to].len();
         self.do_op2((from, p, r, to, a))
     }
 
-    pub fn contains(&self, e: Edge<G>) -> bool {
+    fn contains(&self, e: Edge<G>) -> bool {
+        self.reinit_if_needed();
         // TODO: what is the execution time?
         let (u, v) = self.graph().ends(e);
         self.trees.iter().any(|t| t.contains_edge(u, v))
     }
 
-    pub fn check(&self) {
+    #[cfg(test)]
+    fn check(&self) {
+        use fera::graph::algs::Trees;
         let edges = self.edges_vec();
         for &e in &edges {
             assert!(self.contains(e));
@@ -330,6 +362,48 @@ where
         let g = self.graph();
         let sub = g.spanning_subgraph(&edges);
         assert!(sub.is_tree());
+    }
+
+    #[inline(never)]
+    fn reinit_if_needed(&self) {
+        // reset the history if needed
+        let mut data = self.data.borrow_mut();
+        if data.find_vertex_strategy != FindVertexStrategy::FatNode {
+            return;
+        }
+        // If the history is too long, reinit
+        if data.version >= data.k * data.nsqrt {
+            data.version = 1;
+            data.num_reinits += 1;
+            for v in self.graph().vertices() {
+                data.pi_version[v].clear();
+                data.pi_tree[v].clear();
+                data.pi_pos[v].clear();
+            }
+            let version = data.version;
+            let reinit = data.num_reinits;
+            for (i, t) in self.trees[1..].iter().enumerate() {
+                NddrOneTreeForest::<G>::add_fat_node(&mut data, version, i + 1, t);
+            }
+            self.version.set(version);
+            self.reinit.set(reinit);
+            self.history.borrow_mut().clear();
+            self.history.borrow_mut().push(version);
+            return;
+        }
+        // If this tree was not update after the last reinit, update it
+        if data.num_reinits != self.reinit.get() {
+            data.version += 1;
+            let version = data.version;
+            let reinit = data.num_reinits;
+            for (i, t) in self.trees[1..].iter().enumerate() {
+                NddrOneTreeForest::<G>::add_fat_node(&mut data, version, i + 1, t);
+            }
+            self.version.set(version);
+            self.reinit.set(reinit);
+            self.history.borrow_mut().clear();
+            self.history.borrow_mut().push(version);
+        }
     }
 
     // Subtree ops
@@ -383,6 +457,7 @@ where
                     || self[from].is_ancestor(p, a)))
     }
 
+    #[inline(never)]
     fn find_vertices_op1<R: Rng>(&self, mut rng: R) -> (usize, usize, usize, usize) {
         if self.should_mutate_star_tree(&mut rng) {
             return self.find_op_star_edge(&mut rng);
@@ -406,6 +481,7 @@ where
         }
     }
 
+    #[inline(never)]
     fn find_vertices_op2<R: Rng>(&self, mut rng: R) -> (usize, usize, usize, usize, usize) {
         loop {
             let (from, r, to, a) = self.find_vertices_op1(&mut rng);
@@ -423,7 +499,7 @@ where
             // If from == to, then one_tree_op2 will be called, for now, we restrict the value of p
             // of not an ancestor of a, see the comments on one_tree_op2 function. In the unit
             // tests, the loop is execute 1.361 times to find valid operands.
-            // This is enough to run the experiments in complete graphs.
+            // This is enough to run the experiments in complete graphs (and for general graphs?).
             if from != to || !self[from].is_ancestor(p, a) {
                 return (from, p, r, to, a);
             }
@@ -492,7 +568,7 @@ where
         // TODO: use tournament without replacement
         let mut e = g.choose_edge(&mut rng).unwrap();
         // The order of the vertices is important, so trying (u, v) is different from (v, u),
-        // as only (u, v) or (v, u) can be returned from choose_edge, we trye th reverse with 50%
+        // as only (u, v) or (v, u) can be returned from choose_edge, we try the reverse with 50%
         // of change.
         // This is not necessary in the other methods because (u, v) and (v, u) can be choosed.
         if rng.gen() {
@@ -538,12 +614,14 @@ where
         (0, p, 0, a)
     }
 
+    // Misc
+
     fn replace1(&mut self, i: usize, mut ti: NddTree<Vertex<G>>) {
         // TODO: unify replace1 and replace
         if self.find_vertex_strategy() == FindVertexStrategy::FatNode {
             self.new_version();
             let data = &mut *self.data_mut();
-            Self::add_fat_node(data, self.version, i, &ti);
+            Self::add_fat_node(data, self.version.get(), i, &ti);
         }
 
         if self.find_vertex_strategy() == FindVertexStrategy::Map {
@@ -557,8 +635,6 @@ where
         self.trees[i] = Rc::new(ti);
     }
 
-    // Misc
-
     fn replace(
         &mut self,
         i: usize,
@@ -569,8 +645,8 @@ where
         if self.find_vertex_strategy() == FindVertexStrategy::FatNode {
             self.new_version();
             let data = &mut *self.data_mut();
-            Self::add_fat_node(data, self.version, i, &ti);
-            Self::add_fat_node(data, self.version, j, &tj);
+            Self::add_fat_node(data, self.version.get(), i, &ti);
+            Self::add_fat_node(data, self.version.get(), j, &tj);
         }
 
         if self.find_vertex_strategy() == FindVertexStrategy::Map {
@@ -589,7 +665,6 @@ where
 
     fn new_map(indices: &VertexIndexProp<G>, i: usize, ti: &NddTree<Vertex<G>>) -> Rc<Vec<usize>> {
         if i == 0 {
-            // TODO: do not create
             return Rc::new(vec![]);
         }
         let inds = vec(ti.iter().map(|ndd| indices.get(ndd.vertex())));
@@ -607,9 +682,9 @@ where
         }
         for (pos, n) in ti.iter().enumerate() {
             let v = n.vertex();
-            data.pi_version[v].push(version);
-            data.pi_tree[v].push(i);
-            data.pi_pos[v].push(pos);
+            data.pi_version[v].push(version as u32);
+            data.pi_tree[v].push(i as u32);
+            data.pi_pos[v].push(pos as u32);
         }
     }
 
@@ -654,15 +729,15 @@ where
     fn find_index(&self, v: Vertex<G>) -> (usize, usize) {
         match self.find_vertex_strategy() {
             FindVertexStrategy::FatNode => {
-                for ver in self.history.iter().rev() {
-                    if let Ok(i) = self.data().pi_version[v].binary_search(ver) {
-                        let t = self.data().pi_tree[v][i];
-                        let p = self.data().pi_pos[v][i];
+                for ver in self.history.borrow().iter().rev() {
+                    if let Ok(i) = self.data().pi_version[v].binary_search(&(*ver as u32)) {
+                        let t = self.data().pi_tree[v][i] as usize;
+                        let p = self.data().pi_pos[v][i] as usize;
                         assert_eq!(v, self[t][p].vertex());
                         return (t, p);
                     }
                 }
-                panic!()
+                panic!("find_index with FatNode did not find the vertex");
             }
             FindVertexStrategy::Map => {
                 let iv = self.data().vertex_index.get(v);
@@ -677,7 +752,7 @@ where
                         }
                     }
                 }
-                panic!("find_index with Map do not find vertex");
+                panic!("find_index with Map did not find the vertex");
             }
         }
     }
@@ -690,6 +765,7 @@ where
         self.set_edges_on_m(t, false);
     }
 
+    #[inline(never)]
     fn set_edges_on_m(&self, t: usize, value: bool) {
         let mut data = self.data_mut();
         let m = data.m.as_mut().unwrap();
@@ -699,8 +775,8 @@ where
     fn new_version(&mut self) {
         self.data_mut().version += 1;
         let version = self.data().version;
-        self.version = version;
-        self.history.push(self.version);
+        self.version = Cell::new(version);
+        self.history.borrow_mut().push(version);
     }
 
     fn edges_vec(&self) -> Vec<Edge<G>> {
@@ -730,10 +806,6 @@ where
         } else {
             0
         }
-    }
-
-    pub fn graph(&self) -> &Rc<G> {
-        &self.g
     }
 
     fn data(&self) -> Ref<Data<G>> {
