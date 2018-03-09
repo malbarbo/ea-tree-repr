@@ -18,7 +18,7 @@ pub struct EulerTourTree<G: WithEdge> {
 
 impl<G> EulerTourTree<G>
 where
-    G: AdjacencyGraph + WithVertexIndexProp + Choose,
+    G: IncidenceGraph + WithVertexIndexProp + Choose,
 {
     #[inline(never)]
     pub fn new(g: Rc<G>, edges: &[Edge<G>]) -> Self {
@@ -93,23 +93,105 @@ where
         (ins, rem)
     }
 
+    #[inline(never)]
+    pub fn change_any<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Edge<G>) {
+        let root1 = self.source((0, 0));
+        let root2 = self.target((0, 0));
+        let sub;
+        loop {
+            let v = self.g
+            .choose_vertex_iter(&mut rng)
+            .filter(|&v| v != root1 && v != root2)
+            .next()
+            .unwrap();
+            let sub_ = self.subtree(v);
+            if self.subtree_len(sub_) < self.len / 2 {
+                sub = sub_;
+                break
+            }
+        }
+        assert_ne!((0, 0), sub.start);
+        let rem = self.get_edge(self.prev_pos(sub.start));
+        let ins;
+        let y_start;
+        let x_start;
+        'out: loop {
+            let (x, x_sub) = self.choose_subtree_vertex(sub, &mut rng);
+            for e in self.g.choose_out_edge_iter(x, &mut rng).take(3) {
+                if e == rem {
+                    continue;
+                }
+                let y = self.g.target(e);
+                let y_ = self.subtree_start(self.g.vertex_index().get(y) as u32);
+                if sub.contains_pos(y_) || y_ == (0, 0) {
+                    continue;
+                }
+                ins = self.g.reverse(e);
+                y_start = self.prev_pos(y_);
+                x_start = x_sub.start;
+                break 'out;
+            }
+        }
+        if y_start < sub.start {
+            // +-----------------------------------+
+            // |   |        |      |      |        |
+            // +-----------------------------------+
+            //     ^        ^      ^      ^
+            // y_start  sub.start  x   sub.end
+            self.move_before(ins, y_start, sub.start, x_start, sub.end);
+        } else {
+            assert!(sub.end < y_start);
+            // +-----------------------------------+
+            // |   |      |      |        |        |
+            // +-----------------------------------+
+            //     ^      ^      ^        ^
+            // sub.start  x   sub.end  y_start
+            self.move_after(ins, y_start, sub.start, x_start, sub.end);
+        }
+        (ins, rem)
+    }
+
+    #[inline(never)]
+    fn choose_subtree_vertex<R: Rng>(&self, tree: Subtree, mut rng: R) -> (Vertex<G>, Subtree) {
+        if tree.start > tree.end {
+            (self.source(tree.start), tree)
+        } else {
+            let start = self.pos_to_index(tree.start);
+            let end = self.pos_to_index(tree.end) + 1;
+            let i = rng.gen_range(start, end);
+            let v = self.target(self.index_to_pos(i));
+            (v, self.subtree(v))
+        }
+    }
+
+    fn subtree_len(&self, tree: Subtree) -> usize {
+        if self.next_pos(tree.end) == tree.start {
+            return 0;
+        }
+        if tree.start.0 == tree.end.0 {
+            return tree.end.1 + 1 - tree.start.1;
+        }
+        let mut len = (self.segs[tree.start.0].len() - tree.start.1) + tree.end.1 + 1;
+        for i in (tree.start.0 + 1)..tree.end.0 {
+            len += self.segs[i].len();
+        }
+        len
+    }
+
     pub fn graph(&self) -> &Rc<G> {
         &self.g
     }
 
     #[inline(never)]
     fn move_(&mut self, new: Edge<G>, to: (usize, usize), sub: Subtree) -> Edge<G> {
-        let x = self.prev_pos(sub.start);
-        let y = self.next_pos(sub.end);
-        let rem = self.get_edge(x);
-        self.set_edge(x, new);
-        let new = self.g.reverse(new);
-        self.set_edge(y, new);
+        let x = sub.start;
+        let y = sub.end;
+        let rem = self.get_edge(self.prev_pos(sub.start));
         if y <= to {
-            self.move_after(to, x, y);
+            self.move_after(new, to, sub.start, sub.start, sub.end);
         } else {
             assert!(to <= x);
-            self.move_before(to, x, y);
+            self.move_before(new, to, sub.start, sub.start, sub.end);
         }
         rem
     }
@@ -120,20 +202,10 @@ where
         self.g.edge_by_ends(self.vertices[a], self.vertices[b])
     }
 
-    #[inline(never)]
-    fn set_edge(&mut self, (i, j): (usize, usize), e: Edge<G>) {
-        let g = self.g.clone();
-        let prop = g.vertex_index();
-        let ends = |e| {
-            let (a, b) = g.ends(e);
-            (prop.get(a) as u32, prop.get(b) as u32)
-        };
-        let mut source = self.segs[i].source.clone();
-        let mut target = self.segs[i].target.clone();
-        let (a, b) = ends(e);
-        source[j] = a;
-        target[j] = b;
-        Rc::make_mut(&mut self.segs)[i] = self.new_segment(source, target);
+    fn ends(&self, e: Edge<G>) -> (u32, u32) {
+        let prop = self.g.vertex_index();
+        let (a, b) = self.g.ends(e);
+        (prop.get(a) as u32, prop.get(b) as u32)
     }
 
     #[inline(never)]
@@ -230,40 +302,100 @@ where
     }
 
     #[inline(never)]
-    fn move_before(&mut self, to: (usize, usize), start: (usize, usize), end: (usize, usize)) {
+    fn move_before(
+        &mut self,
+        new: Edge<G>,
+        to: (usize, usize),
+        start: (usize, usize),
+        root: (usize, usize),
+        end: (usize, usize),
+    ) {
+        //   1     2      3     4        5
+        // +-----------------------------------+
+        // |   |       ||     |     ||         |
+        // +-----------------------------------+
+        //     ^        ^     ^     ^
+        //    to      start  root  end
+        //
+        //  1 (new) 4 3 (new) 2 5
+        let (u, v) = self.ends(new);
         let mut segs = Vec::with_capacity(self.segs.len());
         {
             let segs = &mut segs;
             let to_next = self.next_pos(to);
             let end_next = self.next_pos(end);
+            let end_next_next = self.next_pos(end_next);
+            let start_prev = self.prev_pos(start);
+            // 1
             let mut iter = self.seg_iter(self.first_pos(), to_next);
             let mut last = iter.next().unwrap();
             last = self.extend(segs, last, iter);
-            last = self.extend(segs, last, self.seg_iter(start, end_next));
-            last = self.extend(segs, last, self.seg_iter(to_next, start));
-            last = self.extend(segs, last, self.seg_iter(end_next, self.end_pos()));
+            // new
+            last = self.push_edge(segs, last, (u, v));
+            // 4
+            last = self.extend(segs, last, self.seg_iter(root, end_next));
+            if start != root {
+                // 3
+                last = self.extend(segs, last, self.seg_iter(start, root));
+            }
+            // new reversed
+            last = self.push_edge(segs, last, (v, u));
+            // 2
+            last = self.extend(segs, last, self.seg_iter(to_next, start_prev));
+            // 5
+            last = self.extend(segs, last, self.seg_iter(end_next_next, self.end_pos()));
             self.push(segs, last);
         }
         self.segs = Rc::new(segs);
     }
 
     #[inline(never)]
-    fn move_after(&mut self, to: (usize, usize), start: (usize, usize), end: (usize, usize)) {
+    fn move_after(
+        &mut self,
+        new: Edge<G>,
+        to: (usize, usize),
+        start: (usize, usize),
+        root: (usize, usize),
+        end: (usize, usize),
+    ) {
+        //   1     2      3     4        5
+        // +-----------------------------------+
+        // |   ||     |     ||      |          |
+        // +-----------------------------------+
+        //      ^     ^     ^       ^
+        //    start  root  end     to
+        //
+        //  1 4 (new) 3 2 (new) 5
+        let (u, v) = self.ends(new);
         let mut segs = Vec::with_capacity(self.segs.len());
         {
             let segs = &mut segs;
             let to_next = self.next_pos(to);
             let end_next = self.next_pos(end);
-            let mut iter = self.seg_iter(self.first_pos(), start);
+            let end_next_next = self.next_pos(end_next);
+            let start_prev = self.prev_pos(start);
+            // 1
+            let mut iter = self.seg_iter(self.first_pos(), start_prev);
+            // 4
             let mut last = if let Some(mut last) = iter.next() {
                 last = self.extend(segs, last, iter);
-                self.extend(segs, last, self.seg_iter(end_next, to_next))
+                self.extend(segs, last, self.seg_iter(end_next_next, to_next))
             } else {
-                let mut iter = self.seg_iter(end_next, to_next);
+                let mut iter = self.seg_iter(end_next_next, to_next);
                 let mut last = iter.next().unwrap();
                 self.extend(segs, last, iter)
             };
-            last = self.extend(segs, last, self.seg_iter(start, end_next));
+            // new
+            last = self.push_edge(segs, last, (u, v));
+            // 3
+            last = self.extend(segs, last, self.seg_iter(root, end_next));
+            if start != root {
+                // 2
+                last = self.extend(segs, last, self.seg_iter(start, root));
+            }
+            // new reversed
+            last = self.push_edge(segs, last, (v, u));
+            // 5
             last = self.extend(segs, last, self.seg_iter(to_next, self.end_pos()));
             self.push(segs, last);
         }
@@ -290,6 +422,25 @@ where
         }
     }
 
+    fn push_edge<'a>(
+        &self,
+        segs: &mut Vec<Rc<Segment>>,
+        last: Seg<'a>,
+        (s, t): (u32, u32),
+    ) -> Seg<'a> {
+        match last {
+            Seg::Complete(seg) => {
+                segs.push(Rc::clone(seg));
+                Seg::Partial(vec![s], vec![t])
+            }
+            Seg::Partial(mut source, mut target) => {
+                source.push(s);
+                target.push(t);
+                Seg::Partial(source, target)
+            }
+        }
+    }
+
     fn seg_iter(&self, start: (usize, usize), end: (usize, usize)) -> SegIter {
         SegIter::new(&self.segs, start, end)
     }
@@ -300,7 +451,7 @@ where
         let mut pos = unsafe { Vec::new_uninitialized(m_source as usize + 1) };
         for (i, &v) in source.iter().enumerate().rev() {
             unsafe {
-                *pos.get_unchecked_mut(v as usize) = i as u32;
+                *pos.get_unchecked_mut(v as usize) = i as _;
             }
         }
         Rc::new(Segment {
@@ -308,6 +459,31 @@ where
             target,
             pos,
         })
+    }
+
+    #[inline(never)]
+    fn pos_to_index(&self, (i, j): (usize, usize)) -> usize {
+        assert!(j < self.segs[i].len());
+        self.segs[..i].iter().map(|s| s.len()).sum::<usize>() + j
+    }
+
+    #[inline(never)]
+    fn index_to_pos(&self, mut index: usize) -> (usize, usize) {
+        assert!(index < self.len);
+        let mut i = 0;
+        while index >= self.segs[i].len() {
+            index -= self.segs[i].len();
+            i += 1;
+        }
+        (i, index)
+    }
+
+    fn source(&self, (i, j): (usize, usize)) -> Vertex<G> {
+        self.vertices[self.segs[i].source[j] as usize]
+    }
+
+    fn target(&self, (i, j): (usize, usize)) -> Vertex<G> {
+        self.vertices[self.segs[i].target[j] as usize]
     }
 
     fn first_pos(&self) -> (usize, usize) {
@@ -351,6 +527,10 @@ impl Subtree {
 
     fn contains(&self, other: &Subtree) -> bool {
         self.start <= other.start && other.end <= self.end
+    }
+
+    fn contains_pos(&self, pos: (usize, usize)) -> bool {
+        self.start <= pos && pos <= self.end
     }
 }
 
@@ -415,11 +595,13 @@ impl<'a> Iterator for SegIter<'a> {
                 None
             } else if a == 0 && b == self.segs[i].len() {
                 Some(Seg::Complete(&self.segs[i]))
-            } else {
+            } else if a <= b {
                 Some(Seg::Partial(
                     self.segs[i].source[a..b].into(),
                     self.segs[i].target[a..b].into(),
                 ))
+            } else {
+                None
             }
         } else {
             None
@@ -429,7 +611,6 @@ impl<'a> Iterator for SegIter<'a> {
 
 // tests
 
-#[cfg(test)]
 impl<G> EulerTourTree<G>
 where
     G: IncidenceGraph + WithVertexIndexProp + Choose,
@@ -502,6 +683,13 @@ mod tests {
         let g = Rc::new(CompleteGraph::new(9));
         let e = |u: u32, v: u32| g.edge_by_ends(u, v);
         let mut edges = vec![];
+        //       0
+        //     /   \
+        //    1     5
+        //  / |   / | \
+        // 2  4  6  7  8
+        // |
+        // 3
         edges.push(e(0, 1));
         edges.push(e(1, 2));
         edges.push(e(2, 3));
@@ -532,6 +720,16 @@ mod tests {
 
         let tour = EulerTourTree::new_(g.clone(), &*tour);
 
+        assert_eq!(16, tour.subtree_len(tour.subtree(0)));
+        assert_eq!(6, tour.subtree_len(tour.subtree(1)));
+        assert_eq!(2, tour.subtree_len(tour.subtree(2)));
+        assert_eq!(0, tour.subtree_len(tour.subtree(3)));
+        assert_eq!(0, tour.subtree_len(tour.subtree(4)));
+        assert_eq!(6, tour.subtree_len(tour.subtree(5)));
+        assert_eq!(0, tour.subtree_len(tour.subtree(6)));
+        assert_eq!(0, tour.subtree_len(tour.subtree(7)));
+        assert_eq!(0, tour.subtree_len(tour.subtree(8)));
+
         assert_eq!(Subtree::new((0, 0), (3, 3)), tour.subtree(0));
         assert_eq!(Subtree::new((0, 1), (1, 2)), tour.subtree(1));
         assert_eq!(Subtree::new((0, 2), (0, 3)), tour.subtree(2));
@@ -541,10 +739,32 @@ mod tests {
         assert_eq!(Subtree::new((2, 2), (2, 1)), tour.subtree(6));
         assert_eq!(Subtree::new((3, 0), (2, 3)), tour.subtree(7));
         assert_eq!(Subtree::new((3, 2), (3, 1)), tour.subtree(8));
+
+        for &(index, pos) in &[
+            (0, (0, 0)),
+            (1, (0, 1)),
+            (2, (0, 2)),
+            (3, (0, 3)),
+            (4, (1, 0)),
+            (5, (1, 1)),
+            (6, (1, 2)),
+            (7, (1, 3)),
+            (8, (2, 0)),
+            (9, (2, 1)),
+            (10, (2, 2)),
+            (11, (2, 3)),
+            (12, (3, 0)),
+            (13, (3, 1)),
+            (14, (3, 2)),
+            (15, (3, 3)),
+        ] {
+            assert_eq!(index, tour.pos_to_index(pos));
+            assert_eq!(pos, tour.index_to_pos(index));
+        }
     }
 
     #[test]
-    fn check() {
+    fn change_parent() {
         let mut rng = rand::XorShiftRng::new_unseeded();
         for n in 5..30 {
             let g = Rc::new(CompleteGraph::new(n));
@@ -553,6 +773,27 @@ mod tests {
             for _ in 0..100 {
                 let old = tour.clone();
                 let (ins, rem) = tour.change_parent(&mut rng);
+                assert_ne!(ins, rem);
+                tour.check();
+                assert_ne!(old.tour_edges(), tour.tour_edges());
+                let edges = tour.edges();
+                assert!(edges.contains(&ins));
+                assert!(!edges.contains(&rem));
+                assert_ne!(old.edges(), tour.edges());
+            }
+        }
+    }
+
+    #[test]
+    fn change_any() {
+        let mut rng = rand::XorShiftRng::new_unseeded();
+        for n in 5..30 {
+            let g = Rc::new(CompleteGraph::new(n));
+            let mut tour = EulerTourTree::new(g.clone(), &*random_sp(&*g, &mut rng));
+            tour.check();
+            for _ in 0..100 {
+                let old = tour.clone();
+                let (ins, rem) = tour.change_any(&mut rng);
                 assert_ne!(ins, rem);
                 tour.check();
                 assert_ne!(old.tour_edges(), tour.tour_edges());

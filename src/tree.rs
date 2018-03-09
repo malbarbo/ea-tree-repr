@@ -163,8 +163,8 @@ where
         EulerTourTree::change_parent(self, rng)
     }
 
-    fn change_any<R: Rng>(&mut self, _rng: R) -> (Edge<G>, Edge<G>) {
-        unimplemented!()
+    fn change_any<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
+        EulerTourTree::change_any(self, rng)
     }
 
     fn graph(&self) -> &Rc<G> {
