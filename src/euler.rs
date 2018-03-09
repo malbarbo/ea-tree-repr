@@ -72,6 +72,20 @@ where
         tt
     }
 
+    pub fn graph(&self) -> &Rc<G> {
+        &self.g
+    }
+
+    #[inline(never)]
+    pub fn contains(&self, e: Edge<G>) -> bool {
+        let (a, b) = self.ends(e);
+        let start = self.subtree_start(a);
+        start != (0, 0) && self.get_edge(self.prev_pos(start)) == e || {
+            let start = self.subtree_start(b);
+            start != (0, 0) && self.get_edge(self.prev_pos(start)) == e
+        }
+    }
+
     #[inline(never)]
     pub fn change_parent<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Edge<G>) {
         let (ins, a_sub, b_sub) = self.choose_non_tree_edge(&mut rng);
@@ -107,14 +121,14 @@ where
         let sub;
         loop {
             let v = self.g
-            .choose_vertex_iter(&mut rng)
-            .filter(|&v| v != root1 && v != root2)
-            .next()
-            .unwrap();
+                .choose_vertex_iter(&mut rng)
+                .filter(|&v| v != root1 && v != root2)
+                .next()
+                .unwrap();
             let sub_ = self.subtree(v);
             if self.subtree_len(sub_) < self.len / 2 {
                 sub = sub_;
-                break
+                break;
             }
         }
         assert_ne!((0, 0), sub.start);
@@ -123,18 +137,18 @@ where
         let y_start;
         let x_start;
         'out: loop {
-            let (x, x_sub) = self.choose_subtree_vertex(sub, &mut rng);
+            let (x, x_sub) = self.choose_subtree(sub, &mut rng);
             for e in self.g.choose_out_edge_iter(x, &mut rng).take(3) {
                 if e == rem {
                     continue;
                 }
                 let y = self.g.target(e);
-                let y_ = self.subtree_start(self.g.vertex_index().get(y) as u32);
-                if sub.contains_pos(y_) || y_ == (0, 0) {
+                let yi = self.subtree_start(self.vertex_index(y));
+                if sub.contains_pos(yi) || yi == (0, 0) {
                     continue;
                 }
                 ins = self.g.reverse(e);
-                y_start = self.prev_pos(y_);
+                y_start = self.prev_pos(yi);
                 x_start = x_sub.start;
                 break 'out;
             }
@@ -156,142 +170,6 @@ where
             self.move_after(ins, y_start, sub.start, x_start, sub.end);
         }
         (ins, rem)
-    }
-
-    #[inline(never)]
-    fn choose_subtree_vertex<R: Rng>(&self, tree: Subtree, mut rng: R) -> (Vertex<G>, Subtree) {
-        if tree.start > tree.end {
-            (self.source(tree.start), tree)
-        } else {
-            let start = self.pos_to_index(tree.start);
-            let end = self.pos_to_index(tree.end) + 1;
-            let i = rng.gen_range(start, end);
-            let v = self.target(self.index_to_pos(i));
-            (v, self.subtree(v))
-        }
-    }
-
-    fn subtree_len(&self, tree: Subtree) -> usize {
-        if self.next_pos(tree.end) == tree.start {
-            return 0;
-        }
-        if tree.start.0 == tree.end.0 {
-            return tree.end.1 + 1 - tree.start.1;
-        }
-        let mut len = (self.segs[tree.start.0].len() - tree.start.1) + tree.end.1 + 1;
-        for i in (tree.start.0 + 1)..tree.end.0 {
-            len += self.segs[i].len();
-        }
-        len
-    }
-
-    pub fn graph(&self) -> &Rc<G> {
-        &self.g
-    }
-
-    #[inline(never)]
-    fn get_edge(&self, (i, j): (usize, usize)) -> Edge<G> {
-        let (a, b) = self.segs[i].get(j);
-        self.g.edge_by_ends(self.vertices[a], self.vertices[b])
-    }
-
-    fn ends(&self, e: Edge<G>) -> (u32, u32) {
-        let prop = self.g.vertex_index();
-        let (a, b) = self.g.ends(e);
-        (prop.get(a) as u32, prop.get(b) as u32)
-    }
-
-    #[inline(never)]
-    fn choose_non_tree_edge<R: Rng>(&self, rng: R) -> (Edge<G>, Subtree, Subtree) {
-        self.g
-            .choose_edge_iter(rng)
-            .filter_map(|e| {
-                let (a, b) = self.g.ends(e);
-                let a = self.g.vertex_index().get(a) as u32;
-                let a_start = self.subtree_start(a);
-                if a_start != (0, 0) && self.get_edge(self.prev_pos(a_start)) == e {
-                    None
-                } else {
-                    let b = self.g.vertex_index().get(b) as u32;
-                    let b_start = self.subtree_start(b);
-                    if b_start != (0, 0) && self.get_edge(self.prev_pos(b_start)) == e {
-                        None
-                    } else {
-                        let a_sub = Subtree::new(a_start, self.subtree_end(a));
-                        let b_sub = Subtree::new(b_start, self.subtree_end(b));
-                        Some((e, a_sub, b_sub))
-                    }
-                }
-            })
-            .next()
-            .unwrap()
-    }
-
-    #[inline(never)]
-    pub fn contains(&self, e: Edge<G>) -> bool {
-        let (a, b) = self.g.ends(e);
-        let a_sub = self.subtree(a);
-        if a_sub.start != (0, 0) && self.get_edge(self.prev_pos(a_sub.start)) == e {
-            return true;
-        } else {
-            let b_sub = self.subtree(b);
-            if b_sub.start != (0, 0) && self.get_edge(self.prev_pos(b_sub.start)) == e {
-                return true;
-            }
-        }
-        false
-    }
-
-    #[inline(never)]
-    fn subtree(&self, v: Vertex<G>) -> Subtree {
-        let v = self.g.vertex_index().get(v) as u32;
-        Subtree::new(self.subtree_start(v), self.subtree_end(v))
-    }
-
-    #[inline(never)]
-    fn subtree_start(&self, v: u32) -> (usize, usize) {
-        for (a, seg) in self.segs.iter().enumerate() {
-            if let Some(b) = self.segment_position_source(seg, v) {
-                return (a, b);
-            }
-        }
-        unreachable!()
-    }
-
-    #[inline(never)]
-    fn subtree_end(&self, v: u32) -> (usize, usize) {
-        if self.segs[0].source[0] == v {
-            return self.prev_pos(self.end_pos());
-        }
-
-        for (a, seg) in self.segs.iter().enumerate().rev() {
-            if let Some(b) = self.segment_rposition_source(seg, v) {
-                return self.prev_pos((a, b));
-            }
-        }
-        unreachable!()
-    }
-
-    #[inline(never)]
-    fn segment_position_source(&self, seg: &Segment, v: u32) -> Option<usize> {
-        if let Some(i) = seg.pos.get(v as usize) {
-            let i = *i as usize;
-            if Some(&v) == seg.source.get(i) {
-                return Some(i);
-            }
-        }
-        None
-    }
-
-    #[inline(never)]
-    fn segment_rposition_source(&self, seg: &Segment, v: u32) -> Option<usize> {
-        if let Some(i) = seg.pos.get(v as usize) {
-            let i = *i as usize;
-            if Some(&v) == seg.source.get(i) {
-                return seg.source.iter().rposition(|&x| x == v);
-            }
-        }
-        None
     }
 
     #[inline(never)]
@@ -401,6 +279,109 @@ where
         self.segs = Rc::new(segs);
     }
 
+    #[inline(never)]
+    fn choose_non_tree_edge<R: Rng>(&self, rng: R) -> (Edge<G>, Subtree, Subtree) {
+        for e in self.g.choose_edge_iter(rng) {
+            let (a, b) = self.ends(e);
+            let a_start = self.subtree_start(a);
+            if a_start != (0, 0) && self.get_edge(self.prev_pos(a_start)) == e {
+                continue;
+            } else {
+                let b_start = self.subtree_start(b);
+                if b_start != (0, 0) && self.get_edge(self.prev_pos(b_start)) == e {
+                    continue;
+                } else {
+                    let a_sub = Subtree::new(a_start, self.subtree_end(a));
+                    let b_sub = Subtree::new(b_start, self.subtree_end(b));
+                    return (e, a_sub, b_sub);
+                }
+            }
+        }
+        unreachable!()
+    }
+
+    #[inline(never)]
+    fn choose_subtree<R: Rng>(&self, tree: Subtree, mut rng: R) -> (Vertex<G>, Subtree) {
+        // TODO: check if this method has some tendency. Every subtree should have the same
+        // probability of being chosen
+        if tree.start > tree.end {
+            (self.source(tree.start), tree)
+        } else {
+            let start = self.pos_to_index(tree.start);
+            let end = self.pos_to_index(tree.end) + 1;
+            let i = rng.gen_range(start, end);
+            let v = self.target(self.index_to_pos(i));
+            (v, self.subtree(v))
+        }
+    }
+
+    fn subtree_len(&self, tree: Subtree) -> usize {
+        if self.next_pos(tree.end) == tree.start {
+            0
+        } else if tree.start.0 == tree.end.0 {
+            tree.end.1 + 1 - tree.start.1
+        } else {
+            let mut len = (self.segs[tree.start.0].len() - tree.start.1) + tree.end.1 + 1;
+            for i in (tree.start.0 + 1)..tree.end.0 {
+                len += self.segs[i].len();
+            }
+            len
+        }
+    }
+
+    #[inline(never)]
+    fn subtree(&self, v: Vertex<G>) -> Subtree {
+        let v = self.vertex_index(v);
+        Subtree::new(self.subtree_start(v), self.subtree_end(v))
+    }
+
+    #[inline(never)]
+    fn subtree_start(&self, v: u32) -> (usize, usize) {
+        for (a, seg) in self.segs.iter().enumerate() {
+            if let Some(b) = self.segment_position_source(seg, v) {
+                return (a, b);
+            }
+        }
+        unreachable!()
+    }
+
+    #[inline(never)]
+    fn subtree_end(&self, v: u32) -> (usize, usize) {
+        // special case for the root
+        if self.segs[0].source[0] == v {
+            return self.prev_pos(self.end_pos());
+        }
+
+        for (a, seg) in self.segs.iter().enumerate().rev() {
+            if let Some(b) = self.segment_rposition_source(seg, v) {
+                return self.prev_pos((a, b));
+            }
+        }
+        unreachable!()
+    }
+
+    #[inline(never)]
+    fn segment_position_source(&self, seg: &Segment, v: u32) -> Option<usize> {
+        if let Some(i) = seg.pos.get(v as usize) {
+            let i = *i as usize;
+            if Some(&v) == seg.source.get(i) {
+                return Some(i);
+            }
+        }
+        None
+    }
+
+    #[inline(never)]
+    fn segment_rposition_source(&self, seg: &Segment, v: u32) -> Option<usize> {
+        if let Some(i) = seg.pos.get(v as usize) {
+            let i = *i as usize;
+            if Some(&v) == seg.source.get(i) {
+                return seg.source.iter().rposition(|&x| x == v);
+            }
+        }
+        None
+    }
+
     fn extend<'a>(
         &self,
         segs: &mut Vec<Rc<Segment>>,
@@ -446,8 +427,10 @@ where
 
     #[inline(never)]
     fn new_segment(&self, source: Vec<u32>, target: Vec<u32>) -> Rc<Segment> {
-        let m_source = *source.iter().max().unwrap();
-        let mut pos = unsafe { Vec::new_uninitialized(m_source as usize + 1) };
+        assert_ne!(0, source.len());
+        assert_eq!(source.len(), target.len());
+        let m = *source.iter().max().unwrap() as usize;
+        let mut pos = unsafe { Vec::new_uninitialized(m + 1) };
         for (i, &v) in source.iter().enumerate().rev() {
             unsafe {
                 *pos.get_unchecked_mut(v as usize) = i as _;
@@ -458,6 +441,22 @@ where
             target,
             pos,
         })
+    }
+
+    #[inline(never)]
+    fn get_edge(&self, (i, j): (usize, usize)) -> Edge<G> {
+        let (a, b) = self.segs[i].get(j);
+        self.g.edge_by_ends(self.vertices[a], self.vertices[b])
+    }
+
+    fn vertex_index(&self, v: Vertex<G>) -> u32 {
+        self.g.vertex_index().get(v) as u32
+    }
+
+    fn ends(&self, e: Edge<G>) -> (u32, u32) {
+        let prop = self.g.vertex_index();
+        let (a, b) = self.g.ends(e);
+        (prop.get(a) as u32, prop.get(b) as u32)
     }
 
     #[inline(never)]
@@ -590,17 +589,15 @@ impl<'a> Iterator for SegIter<'a> {
             let (i, a) = self.cur;
             let b = self.end.1;
             self.cur = (i + 1, 0);
-            if a == b {
+            if a >= b {
                 None
             } else if a == 0 && b == self.segs[i].len() {
                 Some(Seg::Complete(&self.segs[i]))
-            } else if a <= b {
+            } else {
                 Some(Seg::Partial(
                     self.segs[i].source[a..b].into(),
                     self.segs[i].target[a..b].into(),
                 ))
-            } else {
-                None
             }
         } else {
             None
@@ -610,6 +607,7 @@ impl<'a> Iterator for SegIter<'a> {
 
 // tests
 
+#[cfg(test)]
 impl<G> EulerTourTree<G>
 where
     G: IncidenceGraph + WithVertexIndexProp + Choose,
