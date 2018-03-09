@@ -63,9 +63,9 @@ where
         };
         let segs = tour.chunks(nsqrt)
             .map(|t| {
-                let source = t.iter().map(|st| st.0);
-                let target = t.iter().map(|st| st.1);
-                tt.new_segment(source.collect(), target.collect())
+                let source = t.iter().map(|st| st.0).collect();
+                let target = t.iter().map(|st| st.1).collect();
+                tt.new_segment(source, target)
             })
             .collect();
         tt.segs = Rc::new(segs);
@@ -75,21 +75,28 @@ where
     #[inline(never)]
     pub fn change_parent<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Edge<G>) {
         let (ins, a_sub, b_sub) = self.choose_non_tree_edge(&mut rng);
-        let rem = if a_sub.contains(&b_sub) {
+        let (ins, to, sub) = if a_sub.contains(&b_sub) {
             // change b parent
-            self.move_(ins, a_sub.end, b_sub)
+            (ins, a_sub.end, b_sub)
         } else if b_sub.contains(&a_sub) {
             // change a parent
-            let ins = self.g.reverse(ins);
-            self.move_(ins, b_sub.end, a_sub)
+            (self.g.reverse(ins), b_sub.end, a_sub)
         } else if rng.gen() {
             // change b parent
-            self.move_(ins, a_sub.end, b_sub)
+            (ins, a_sub.end, b_sub)
         } else {
             // change a parent
-            let ins = self.g.reverse(ins);
-            self.move_(ins, b_sub.end, a_sub)
+            (self.g.reverse(ins), b_sub.end, a_sub)
         };
+
+        let rem = self.get_edge(self.prev_pos(sub.start));
+
+        if sub.start <= to {
+            self.move_after(ins, to, sub.start, sub.start, sub.end);
+        } else {
+            self.move_before(ins, to, sub.start, sub.start, sub.end);
+        }
+
         (ins, rem)
     }
 
@@ -180,20 +187,6 @@ where
 
     pub fn graph(&self) -> &Rc<G> {
         &self.g
-    }
-
-    #[inline(never)]
-    fn move_(&mut self, new: Edge<G>, to: (usize, usize), sub: Subtree) -> Edge<G> {
-        let x = sub.start;
-        let y = sub.end;
-        let rem = self.get_edge(self.prev_pos(sub.start));
-        if y <= to {
-            self.move_after(new, to, sub.start, sub.start, sub.end);
-        } else {
-            assert!(to <= x);
-            self.move_before(new, to, sub.start, sub.start, sub.end);
-        }
-        rem
     }
 
     #[inline(never)]
@@ -318,6 +311,9 @@ where
         //    to      start  root  end
         //
         //  1 (new) 4 3 (new) 2 5
+        assert!(to <= start);
+        assert!(start <= root);
+        assert!(root <= self.next_pos(end));
         let (u, v) = self.ends(new);
         let mut segs = Vec::with_capacity(self.segs.len());
         {
@@ -366,6 +362,9 @@ where
         //    start  root  end     to
         //
         //  1 4 (new) 3 2 (new) 5
+        assert!(end <= to);
+        assert!(start <= root);
+        assert!(root <= self.next_pos(end));
         let (u, v) = self.ends(new);
         let mut segs = Vec::with_capacity(self.segs.len());
         {
