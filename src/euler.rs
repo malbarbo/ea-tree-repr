@@ -13,6 +13,7 @@ pub struct EulerTourTree<G: WithEdge> {
     // TODO: remove vertices field
     vertices: Rc<[Vertex<G>]>,
     segs: Rc<Vec<Rc<Segment>>>,
+    nsqrt: usize,
     len: usize,
 }
 
@@ -59,6 +60,7 @@ where
             g,
             segs: Rc::new(vec![]),
             vertices: vertices.into(),
+            nsqrt: nsqrt,
             len: tour.len(),
         };
         let segs = tour.chunks(nsqrt)
@@ -69,6 +71,7 @@ where
             })
             .collect();
         tt.segs = Rc::new(segs);
+        tt.fix_last();
         tt
     }
 
@@ -222,7 +225,7 @@ where
             last = self.extend(segs, last, self.seg_iter(to_next, start_prev));
             // 5
             last = self.extend(segs, last, self.seg_iter(end_next_next, self.end_pos()));
-            self.push(segs, last);
+            self.push_last(segs, last);
         }
         self.segs = Rc::new(segs);
     }
@@ -280,7 +283,7 @@ where
             last = self.push_edge(segs, last, (v, u));
             // 5
             last = self.extend(segs, last, self.seg_iter(to_next, self.end_pos()));
-            self.push(segs, last);
+            self.push_last(segs, last);
         }
         self.segs = Rc::new(segs);
     }
@@ -412,6 +415,7 @@ where
         None
     }
 
+    #[inline(never)]
     fn extend<'a>(
         &self,
         segs: &mut Vec<Rc<Segment>>,
@@ -419,23 +423,92 @@ where
         iter: SegIter<'a>,
     ) -> Seg<'a> {
         for seg in iter {
-            self.push(segs, last);
-            last = seg;
+            match last {
+                Seg::Complete(x) => {
+                    segs.push(Rc::clone(x));
+                    last = seg;
+                }
+                Seg::Partial(mut source, mut target) => match seg {
+                    Seg::Partial(n_source, n_target) => {
+                        source.extend(n_source);
+                        target.extend(n_target);
+                        last = Seg::Partial(source, target);
+                    }
+                    Seg::Complete(x) => {
+                        if source.len() < self.min_seg_len() {
+                            source.extend(&*x.source);
+                            target.extend(&*x.target);
+                            last = Seg::Partial(source, target);
+                        } else {
+                            self.push_source_target(segs, source, target);
+                            last = Seg::Complete(x);
+                        }
+                    }
+                },
+            }
         }
         last
     }
 
-    fn push<'a>(&self, segs: &mut Vec<Rc<Segment>>, last: Seg<'a>) {
+    #[inline(never)]
+    fn push_last<'a>(&self, segs: &mut Vec<Rc<Segment>>, last: Seg<'a>) {
         match last {
             Seg::Complete(seg) => segs.push(Rc::clone(seg)),
             Seg::Partial(source, target) => {
-                if source.len() != 0 {
-                    segs.push(self.new_segment(source, target));
+                if source.len() == 0 {
+                    return
+                }
+                if source.len() < self.min_seg_len() {
+                    let (mut ss, mut tt) = match Rc::try_unwrap(segs.pop().unwrap()) {
+                        Ok(seg) => (seg.source, seg.target),
+                        Err(seg) => (seg.source.clone(), seg.target.clone()),
+                    };
+                    ss.extend(source);
+                    tt.extend(target);
+                    self.push_source_target(segs, ss, tt);
+                } else {
+                    self.push_source_target(segs, source, target);
                 }
             }
         }
     }
 
+    #[inline(never)]
+    fn push_source_target(&self, segs: &mut Vec<Rc<Segment>>, source: Vec<u32>, target: Vec<u32>) {
+        if source.len() <= self.max_seg_len() {
+            segs.push(self.new_segment(source, target));
+        } else {
+            let count = source.len() / self.nsqrt;
+            let mut s = 0;
+            for _ in 0..(count - 1) {
+                let t = s + self.nsqrt;
+                segs.push(self.new_segment(source[s..t].into(), target[s..t].into()));
+                s = t;
+            }
+            segs.push(self.new_segment(source[s..].into(), target[s..].into()));
+        }
+    }
+
+    #[inline(never)]
+    fn fix_last(&mut self) {
+        if self.segs.last().unwrap().len() < self.nsqrt {
+            let mut segs = ::std::mem::replace(&mut self.segs, Rc::new(vec![]));
+            {
+                let segs = Rc::make_mut(&mut segs);
+                let seg = segs.pop().unwrap();
+                let (mut source, mut target) = match Rc::try_unwrap(segs.pop().unwrap()) {
+                    Ok(seg) => (seg.source, seg.target),
+                    Err(seg) => (seg.source.clone(), seg.target.clone()),
+                };
+                source.extend(&*seg.source);
+                target.extend(&*seg.target);
+                self.push_source_target(segs, source, target);
+            }
+            self.segs = segs;
+        }
+    }
+
+    #[inline(never)]
     fn push_edge<'a>(
         &self,
         segs: &mut Vec<Rc<Segment>>,
@@ -516,6 +589,14 @@ where
 
     fn target(&self, (i, j): (usize, usize)) -> Vertex<G> {
         self.vertices[self.segs[i].target[j] as usize]
+    }
+
+    fn max_seg_len(&self) -> usize {
+        2 * self.nsqrt
+    }
+
+    fn min_seg_len(&self) -> usize {
+        self.nsqrt / 2
     }
 
     fn first_pos(&self) -> (usize, usize) {
@@ -649,6 +730,7 @@ impl<'a> Iterator for SegIter<'a> {
 
 // tests
 
+#[cfg(test)]
 impl<G> EulerTourTree<G>
 where
     G: IncidenceGraph + WithVertexIndexProp + Choose,
@@ -678,6 +760,12 @@ where
     pub fn check(&self) {
         use std::collections::HashSet;
         use fera::graph::algs::{Paths, Trees};
+
+        // check seg lens
+        for seg in self.segs.iter() {
+            assert!(seg.len() >= self.min_seg_len());
+            assert!(seg.len() <= self.max_seg_len());
+        }
 
         // check if tour is a path
         let mut last = self.get((0, 0)).0;
