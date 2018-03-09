@@ -37,7 +37,7 @@ where
                     stack.push(e);
                 }
                 TraverseEvent::FinishEdge(e) => {
-                    assert_eq!(e, stack.pop().unwrap());
+                    assert_eq!(Some(e), stack.pop());
                     tour.push(ends(g.reverse(e)));
                 }
                 _ => (),
@@ -178,14 +178,24 @@ where
         root: (usize, usize),
         end: (usize, usize),
     ) {
-        //   1     2      3     4        5
-        // +-----------------------------------+
-        // |   |       ||     |     ||         |
-        // +-----------------------------------+
-        //     ^        ^     ^     ^
-        //    to      start  root  end
+        // Input:
+        //    1     2       3     4       5
+        // +---------------------------------+
+        // |     |     |a|     |     |b|     |
+        // +---------------------------------+
+        //       ^       ^     ^     ^
+        //      to      start root  end
         //
-        //  1 (new) 4 3 (new) 2 5
+        // Output:
+        //   1        4     3       2     5
+        // +---------------------------------+
+        // |     |a|     |     |b|     |     |
+        // +---------------------------------+
+        //
+        // where x = removed edge
+        //       y = reverse(removed edge)
+        //       a = inserted edge
+        //       b = reverse(inserted edge)
         assert!(to <= start);
         assert!(start <= root);
         assert!(root <= self.next_pos(end));
@@ -226,14 +236,24 @@ where
         root: (usize, usize),
         end: (usize, usize),
     ) {
-        //   1     2      3     4        5
-        // +-----------------------------------+
-        // |   ||     |     ||      |          |
-        // +-----------------------------------+
-        //      ^     ^     ^       ^
-        //    start  root  end     to
+        // Input:
+        //    1       2     3       4     5
+        // +---------------------------------+
+        // |     |x|     |     |y|     |     |
+        // +---------------------------------+
+        //         ^     ^     ^       ^
+        //       start  root  end      to
         //
-        //  1 4 (new) 3 2 (new) 5
+        // Output:
+        //    1     4       3     2       5
+        // +---------------------------------+
+        // |     |     |a|     |     |b|     |
+        // +---------------------------------+
+        //
+        // where x = removed edge
+        //       y = reverse(removed edge)
+        //       a = inserted edge
+        //       b = reverse(inserted edge)
         assert!(end <= to);
         assert!(start <= root);
         assert!(root <= self.next_pos(end));
