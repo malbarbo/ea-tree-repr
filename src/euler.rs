@@ -116,58 +116,55 @@ where
 
     #[inline(never)]
     pub fn change_any<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Edge<G>) {
-        let root1 = self.source((0, 0));
-        let root2 = self.target((0, 0));
-        let sub;
-        loop {
-            let v = self.g
-                .choose_vertex_iter(&mut rng)
-                .filter(|&v| v != root1 && v != root2)
-                .next()
-                .unwrap();
-            let sub_ = self.subtree(v);
-            if self.subtree_len(sub_) < self.len / 2 {
-                sub = sub_;
-                break;
-            }
-        }
+        let sub = self.choose_subtree(&mut rng);
         assert_ne!((0, 0), sub.start);
         let rem = self.get_edge(self.prev_pos(sub.start));
         let ins;
-        let y_start;
-        let x_start;
-        'out: loop {
-            let (x, x_sub) = self.choose_subtree(sub, &mut rng);
-            for e in self.g.choose_out_edge_iter(x, &mut rng).take(3) {
-                if e == rem {
-                    continue;
+        let to;
+        let sub_new_root;
+        if self.subtree_len(sub) <= self.len / 2 {
+            'out1: loop {
+                let x = self.choose_subtree_vertex(sub, &mut rng);
+                for e in self.g.choose_out_edge_iter(x, &mut rng).take(5) {
+                    if e == rem {
+                        continue;
+                    }
+                    let y = self.g.target(e);
+                    let yi = self.subtree_end(self.vertex_index(y));
+                    if sub.contains_pos(yi) {
+                        continue;
+                    }
+                    ins = self.g.reverse(e);
+                    to = yi;
+                    sub_new_root = self.subtree_start(self.vertex_index(x));
+                    break 'out1;
                 }
-                let y = self.g.target(e);
-                let yi = self.subtree_start(self.vertex_index(y));
-                if sub.contains_pos(yi) || yi == (0, 0) {
-                    continue;
+                return self.change_parent(rng);
+            }
+        } else {
+            'out2: loop {
+                let x = self.choose_non_subtree_vertex(sub, &mut rng);
+                for e in self.g.choose_out_edge_iter(x, &mut rng).take(5) {
+                    if e == rem || x == self.source(sub.start) {
+                        continue;
+                    }
+                    let y = self.g.target(e);
+                    let yi = self.subtree_start(self.vertex_index(y));
+                    if !sub.contains_pos(yi) {
+                        continue;
+                    }
+                    ins = e;
+                    to = self.subtree_end(self.vertex_index(x));
+                    sub_new_root = yi;
+                    break 'out2;
                 }
-                ins = self.g.reverse(e);
-                y_start = self.prev_pos(yi);
-                x_start = x_sub.start;
-                break 'out;
+                return self.change_parent(rng);
             }
         }
-        if y_start < sub.start {
-            // +-----------------------------------+
-            // |   |        |      |      |        |
-            // +-----------------------------------+
-            //     ^        ^      ^      ^
-            // y_start  sub.start  x   sub.end
-            self.move_before(ins, y_start, sub.start, x_start, sub.end);
+        if to <= sub.start {
+            self.move_before(ins, to, sub.start, sub_new_root, sub.end);
         } else {
-            assert!(sub.end < y_start);
-            // +-----------------------------------+
-            // |   |      |      |        |        |
-            // +-----------------------------------+
-            //     ^      ^      ^        ^
-            // sub.start  x   sub.end  y_start
-            self.move_after(ins, y_start, sub.start, x_start, sub.end);
+            self.move_after(ins, to, sub.start, sub_new_root, sub.end);
         }
         (ins, rem)
     }
@@ -200,18 +197,15 @@ where
             let end_next = self.next_pos(end);
             let end_next_next = self.next_pos(end_next);
             let start_prev = self.prev_pos(start);
+            let mut last = Seg::default();
             // 1
-            let mut iter = self.seg_iter(self.first_pos(), to_next);
-            let mut last = iter.next().unwrap();
-            last = self.extend(segs, last, iter);
+            last = self.extend(segs, last, self.seg_iter(self.first_pos(), to_next));
             // new
             last = self.push_edge(segs, last, (u, v));
             // 4
             last = self.extend(segs, last, self.seg_iter(root, end_next));
-            if start != root {
-                // 3
-                last = self.extend(segs, last, self.seg_iter(start, root));
-            }
+            // 3
+            last = self.extend(segs, last, self.seg_iter(start, root));
             // new reversed
             last = self.push_edge(segs, last, (v, u));
             // 2
@@ -251,25 +245,17 @@ where
             let end_next = self.next_pos(end);
             let end_next_next = self.next_pos(end_next);
             let start_prev = self.prev_pos(start);
+            let mut last = Seg::default();
             // 1
-            let mut iter = self.seg_iter(self.first_pos(), start_prev);
+            last = self.extend(segs, last, self.seg_iter(self.first_pos(), start_prev));
             // 4
-            let mut last = if let Some(mut last) = iter.next() {
-                last = self.extend(segs, last, iter);
-                self.extend(segs, last, self.seg_iter(end_next_next, to_next))
-            } else {
-                let mut iter = self.seg_iter(end_next_next, to_next);
-                let mut last = iter.next().unwrap();
-                self.extend(segs, last, iter)
-            };
+            last = self.extend(segs, last, self.seg_iter(end_next_next, to_next));
             // new
             last = self.push_edge(segs, last, (u, v));
             // 3
             last = self.extend(segs, last, self.seg_iter(root, end_next));
-            if start != root {
-                // 2
-                last = self.extend(segs, last, self.seg_iter(start, root));
-            }
+            // 2
+            last = self.extend(segs, last, self.seg_iter(start, root));
             // new reversed
             last = self.push_edge(segs, last, (v, u));
             // 5
@@ -301,18 +287,42 @@ where
     }
 
     #[inline(never)]
-    fn choose_subtree<R: Rng>(&self, tree: Subtree, mut rng: R) -> (Vertex<G>, Subtree) {
+    fn choose_subtree<R: Rng>(&self, mut rng: R) -> Subtree {
+        let root = self.source((0, 0));
+        let v = self.g
+            .choose_vertex_iter(&mut rng)
+            .filter(|v| *v != root)
+            .next()
+            .unwrap();
+        self.subtree(v)
+    }
+
+    #[inline(never)]
+    fn choose_subtree_vertex<R: Rng>(&self, tree: Subtree, mut rng: R) -> Vertex<G> {
         // TODO: check if this method has some tendency. Every subtree should have the same
         // probability of being chosen
         if tree.start > tree.end {
-            (self.source(tree.start), tree)
+            self.source(tree.start)
         } else {
             let start = self.pos_to_index(tree.start);
             let end = self.pos_to_index(tree.end) + 1;
             let i = rng.gen_range(start, end);
-            let v = self.target(self.index_to_pos(i));
-            (v, self.subtree(v))
+            self.target(self.index_to_pos(i))
         }
+    }
+
+    #[inline(never)]
+    fn choose_non_subtree_vertex<R: Rng>(&self, tree: Subtree, mut rng: R) -> Vertex<G> {
+        // TODO: check if this method has some tendency. Every subtree should have the same
+        // probability of being chosen
+        let start = self.pos_to_index(tree.start);
+        let end = self.pos_to_index(tree.end) + 1;
+        let mut i = rng.gen_range(0, self.len - (end - start));
+        if i >= start {
+            i = i + (end - start);
+        }
+        assert!(!tree.contains_pos(self.index_to_pos(i)));
+        self.source(self.index_to_pos(i))
     }
 
     fn subtree_len(&self, tree: Subtree) -> usize {
@@ -398,7 +408,11 @@ where
     fn push<'a>(&self, segs: &mut Vec<Rc<Segment>>, last: Seg<'a>) {
         match last {
             Seg::Complete(seg) => segs.push(Rc::clone(seg)),
-            Seg::Partial(source, target) => segs.push(self.new_segment(source, target)),
+            Seg::Partial(source, target) => {
+                if source.len() != 0 {
+                    segs.push(self.new_segment(source, target));
+                }
+            }
         }
     }
 
@@ -541,10 +555,12 @@ struct Segment {
 }
 
 impl Segment {
+    #[inline]
     fn len(&self) -> usize {
         self.source.len()
     }
 
+    #[inline]
     fn get(&self, i: usize) -> (usize, usize) {
         (self.source[i] as usize, self.target[i] as usize)
     }
@@ -554,6 +570,12 @@ impl Segment {
 enum Seg<'a> {
     Partial(Vec<u32>, Vec<u32>),
     Complete(&'a Rc<Segment>),
+}
+
+impl<'a> Default for Seg<'a> {
+    fn default() -> Self {
+        Seg::Partial(vec![], vec![])
+    }
 }
 
 struct SegIter<'a> {
@@ -607,7 +629,6 @@ impl<'a> Iterator for SegIter<'a> {
 
 // tests
 
-#[cfg(test)]
 impl<G> EulerTourTree<G>
 where
     G: IncidenceGraph + WithVertexIndexProp + Choose,
