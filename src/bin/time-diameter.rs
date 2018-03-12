@@ -1,6 +1,7 @@
 extern crate ea_tree_repr;
 extern crate fera;
 extern crate rand;
+extern crate rayon;
 
 #[macro_use]
 extern crate clap;
@@ -8,11 +9,13 @@ extern crate clap;
 use ea_tree_repr::*;
 use fera::fun::vec;
 use fera::graph::prelude::*;
+use rayon::prelude::*;
 
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 fn main() {
+    setup_rayon();
     let (n, repr, op, samples, times) = args();
 
     let (d, time) = match repr {
@@ -38,9 +41,9 @@ fn run<T: Tree<CompleteGraph>>(
     let space = (n - 3) as f64 / (samples - 1) as f64;
     let ds = vec((0..samples).map(|i| 2 + (i as f64 * space).round() as usize));
     let mut time = vec![Duration::default(); samples];
-    let mut rng = rand::weak_rng();
     for _ in progress(0..times) {
-        for (&d, t) in ds.iter().zip(&mut time) {
+        ds.par_iter().zip(&mut time).for_each(|(&d, t)| {
+            let mut rng = rand::weak_rng();
             let (g, tree) = graph_tree(n, d);
             let tree = T::new(Rc::new(g), &*tree, &mut rng);
             let start = Instant::now();
@@ -57,7 +60,7 @@ fn run<T: Tree<CompleteGraph>>(
                 }
             }
             *t += start.elapsed();
-        }
+        })
     }
     for t in &mut time {
         *t /= 10_000 * times as u32;
@@ -71,7 +74,6 @@ fn args() -> (usize, Repr, Op, usize, usize) {
             (version: crate_version!())
             (about: crate_description!())
             (author: crate_authors!())
-            (@arg n: +required "number of vertices")
             (@arg repr:
                 +required
                 possible_values(&[
@@ -91,6 +93,7 @@ fn args() -> (usize, Repr, Op, usize, usize) {
                 ])
                 "operation"
             )
+            (@arg n: +required "number of vertices")
             (@arg samples:
                 +required
                 "number of tree diameter samples"

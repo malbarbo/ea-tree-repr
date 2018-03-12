@@ -1,5 +1,4 @@
 #![cfg_attr(test, feature(slice_rotate))]
-#![feature(option_filter)]
 
 extern crate fera;
 extern crate fera_array;
@@ -35,4 +34,10 @@ pub fn micro_secs(t: Duration) -> f64 {
 
 pub fn milli_secs(t: Duration) -> f64 {
     1_000.0 * t.as_secs() as f64 + t.subsec_nanos() as f64 / 1_000_000.0
+}
+
+pub fn setup_rayon() {
+    if ::std::env::var("RAYON_NUM_THREADS").is_err() {
+        ::std::env::set_var("RAYON_NUM_THREADS", "1");
+    }
 }

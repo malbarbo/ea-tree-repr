@@ -23,17 +23,16 @@ pub fn main() {
     }
 }
 
-fn run(n: usize, op: usize, find_op: FindOpStrategy, calls: usize, times: usize) -> Vec<f32> {
+fn run(n: usize, op: Op, find_op: FindOpStrategy, calls: usize, times: usize) -> Vec<f32> {
     let mut rng = rand::weak_rng();
     let mut size = vec![0; calls];
     for _ in progress(0..times) {
         let mut tree = new(n, find_op, &mut rng);
         for s in &mut size {
-            if op == 1 {
-                tree.op1(&mut rng);
-            } else {
-                tree.op2(&mut rng);
-            }
+            match op {
+                Op::ChangeAny => tree.op1(&mut rng),
+                Op::ChangeParent => tree.op2(&mut rng),
+            };
             *s += tree.last_op_size();
         }
     }
@@ -42,25 +41,25 @@ fn run(n: usize, op: usize, find_op: FindOpStrategy, calls: usize, times: usize)
         .collect()
 }
 
-fn args() -> (usize, usize, FindOpStrategy, usize, usize) {
+fn args() -> (usize, Op, FindOpStrategy, usize, usize) {
     let app = clap_app!(
         ("nddr-subtree-len") =>
             (version: crate_version!())
             (about: crate_description!())
             (author: crate_authors!())
-            (@arg n:
-                +required
-                "number of vertices"
-            )
-            (@arg op:
-                +required
-                possible_values(&["1", "2"])
-                "operation number"
-            )
             (@arg strategy:
                 +required
                 possible_values(&["adj", "adj-smaller", "balanced", "edge"])
-                "strategy used to find the operands values for op"
+                "strategy used to find the operands values for the operation"
+            )
+            (@arg op:
+                +required
+                possible_values(&["change-parent", "change-any"])
+                "operation"
+            )
+            (@arg n:
+                +required
+                "number of vertices"
             )
             (@arg calls:
                 +required
@@ -74,7 +73,11 @@ fn args() -> (usize, usize, FindOpStrategy, usize, usize) {
 
     let matches = app.get_matches();
     let n = value_t_or_exit!(matches, "n", usize);
-    let op = value_t_or_exit!(matches, "op", usize);
+    let op = match matches.value_of("op").unwrap() {
+        "change-parent" => Op::ChangeParent,
+        "change-any" => Op::ChangeAny,
+        _ => unreachable!(),
+    };
     let strategy = match matches.value_of("strategy").unwrap() {
         "adj" => FindOpStrategy::Adj,
         "adj-smaller" => FindOpStrategy::AdjSmaller,
@@ -91,4 +94,10 @@ fn new<R: Rng>(n: usize, find_op: FindOpStrategy, mut rng: R) -> NddrOneTreeFore
     let g = CompleteGraph::new(n as u32);
     let tree = random_sp(&g, &mut rng);
     NddrOneTreeForest::new_with_strategies(Rc::new(g), tree, find_op, FindVertexStrategy::Map, rng)
+}
+
+#[derive(Copy, Clone)]
+enum Op {
+    ChangeParent,
+    ChangeAny,
 }

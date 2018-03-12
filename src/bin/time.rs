@@ -1,6 +1,7 @@
 extern crate ea_tree_repr;
 extern crate fera;
 extern crate rand;
+extern crate rayon;
 
 #[macro_use]
 extern crate clap;
@@ -8,11 +9,13 @@ extern crate clap;
 use ea_tree_repr::*;
 use fera::graph::prelude::*;
 use rand::Rng;
+use rayon::prelude::*;
 
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 pub fn main() {
+    setup_rayon();
     let (sizes, diameter, repr, op, times) = args();
 
     let time = match repr {
@@ -35,10 +38,10 @@ fn run<T: Tree<CompleteGraph>>(
     op: Op,
     times: usize,
 ) -> Vec<Duration> {
-    let mut rng = rand::weak_rng();
     let mut time = vec![Duration::default(); sizes.len()];
     for _ in progress(0..times) {
-        for (t, &n) in time.iter_mut().zip(sizes) {
+        time.par_iter_mut().zip(sizes).for_each(|(t, &n)| {
+            let mut rng = rand::weak_rng();
             let (g, tree) = graph_tree(n, diameter, &mut rng);
             let tree = T::new(Rc::new(g), &*tree, &mut rng);
             let start = Instant::now();
@@ -55,7 +58,7 @@ fn run<T: Tree<CompleteGraph>>(
                 }
             }
             *t += start.elapsed();
-        }
+        })
     }
     for t in &mut time {
         *t /= 10_000 * times as u32;
