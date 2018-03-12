@@ -180,27 +180,33 @@ where
             ndd.dep -= self[r].dep;
         }
 
-        // TODO: Pre-compute subtree_end. Benchmark
         let mut r = r;
+        let mut r_end = self.subtree_end(r);
         let mut depth = 1;
         while let Some(p) = self.parent(r) {
             // Start of p subtree on new
             let s = new.len();
             // Copy p subtree skipping r subtree
+            let p_end = self.subtree_end_from(p, r_end);
             new.extend_from_slice(&self[p..r]);
-            new.extend_from_slice(&self[self.subtree_end(r)..self.subtree_end(p)]);
+            new.extend_from_slice(&self[r_end..p_end]);
             // Update depth
             for ndd in &mut new[s..] {
                 ndd.dep = (ndd.dep - self[p].dep) + depth;
             }
             depth += 1;
             r = p;
+            r_end = p_end;
         }
         self.ndds = new;
     }
 
     pub fn subtree_end(&self, i: usize) -> usize {
-        let mut end = i + 1;
+        self.subtree_end_from(i, i + 1)
+    }
+
+    pub fn subtree_end_from(&self, i: usize, from: usize) -> usize {
+        let mut end = from;
         while end < self.len() && self[end].dep > self[i].dep {
             end += 1;
         }
@@ -250,6 +256,7 @@ where
         self.parent(i).map(|p| self[p].vertex)
     }
 
+    #[inline]
     pub fn parent(&self, i: usize) -> Option<usize> {
         self[0..i].iter().rposition(|ndd| ndd.dep < self[i].dep)
     }
