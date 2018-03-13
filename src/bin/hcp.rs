@@ -64,35 +64,40 @@ where
         rng.shuffle(&mut edges);
         tree.clear();
         tree.extend(g.kruskal().edges(&edges));
-        pop.push(Ind::<T, D>::new(
-            g.clone(),
-            &tree,
-            g.vertex_prop(0),
-            &mut rng,
-        ));
+        if pop.len() == 0 {
+            pop.push(Ind::<T, D>::new(
+                g.clone(),
+                &tree,
+                g.vertex_prop(0),
+                &mut rng,
+            ));
+        } else {
+            let new = pop[0].set_edges(&tree, g.vertex_prop(0));
+            pop.push(new);
+        }
     }
 
     println!("n = {}, m = {}", g.num_vertices(), g.num_edges());
 
-    let mut best = position_min_by_key(&pop, |ind| ind.branches).unwrap();
-    println!("best = {}", pop[best].branches);
+    let mut best = position_min_by_key(&pop, |ind| ind.fitness()).unwrap();
+    println!("best = {:?}", pop[best].value());
     for it in 0.. {
         let i = rng.gen_range(0, pop.len());
         let mut new = pop[i].clone();
         new.mutate(op, &mut rng);
-        if new.branches <= pop[i].branches {
-            if new.branches < pop[best].branches {
+        if new.fitness() <= pop[i].fitness() {
+            if new.fitness() < pop[best].fitness() {
                 best = i;
-                println!("it = {}, best = {}", it, new.branches);
+                println!("it = {}, best = {:?}", it, new.value());
                 if new.branches == 0 {
                     break;
                 }
             }
             pop[i] = new;
         } else {
-            let j = position_max_by_key(&pop, |ind| ind.branches).unwrap();
+            let j = position_max_by_key(&pop, |ind| ind.fitness()).unwrap();
             pop[j] = new;
-            best = position_min_by_key(&pop, |ind| ind.branches).unwrap();
+            best = position_min_by_key(&pop, |ind| ind.fitness()).unwrap();
         }
     }
 }
@@ -155,6 +160,7 @@ where
     tree: T,
     degree: D,
     branches: u32,
+    leafs: u32,
 }
 
 impl<T, D> Ind<T, D>
@@ -162,19 +168,31 @@ where
     T: Tree<StaticGraph>,
     D: VertexPropMut<StaticGraph, u32>,
 {
-    fn new<R: Rng>(g: Rc<StaticGraph>, edges: &[Edge<StaticGraph>], mut degree: D, rng: R) -> Self {
-        let tree = T::new(g.clone(), edges, rng);
+    fn new_(tree: T, mut degree: D, edges: &[Edge<StaticGraph>]) -> Self {
+        let g = tree.graph().clone();
         for &e in edges {
             let (u, v) = g.ends(e);
             degree[u] += 1;
             degree[v] += 1;
         }
-        let branches = g.vertices().filter(|v| degree[*v] > 2).count() as u32;
+        let branches = g.vertices().filter(|v| degree[*v] > 2).count() as _;
+        let leafs = g.vertices().filter(|v| degree[*v] == 1).count() as _;
         Ind {
             tree,
             degree,
             branches,
+            leafs,
         }
+    }
+
+    fn new<R: Rng>(g: Rc<StaticGraph>, edges: &[Edge<StaticGraph>], degree: D, rng: R) -> Self {
+        Self::new_(T::new(g, edges, rng), degree, edges)
+    }
+
+    fn set_edges(&self, edges: &[Edge<StaticGraph>], degree: D) -> Self {
+        let mut tree = self.tree.clone();
+        tree.set_edges(edges);
+        Self::new_(tree, degree, edges)
     }
 
     fn mutate<R: Rng>(&mut self, op: Op, rng: R) {
@@ -187,8 +205,14 @@ where
         if self.degree[a] == 3 {
             self.branches -= 1;
         }
+        if self.degree[a] == 2 {
+            self.leafs += 1;
+        }
         if self.degree[b] == 3 {
             self.branches -= 1;
+        }
+        if self.degree[b] == 2 {
+            self.leafs += 1;
         }
         self.degree[a] -= 1;
         self.degree[b] -= 1;
@@ -197,13 +221,27 @@ where
         if self.degree[a] == 2 {
             self.branches += 1;
         }
+        if self.degree[a] == 1 {
+            self.leafs -= 1;
+        }
         if self.degree[b] == 2 {
             self.branches += 1;
+        }
+        if self.degree[b] == 1 {
+            self.leafs -= 1;
         }
         self.degree[a] += 1;
         self.degree[b] += 1;
 
         self.check();
+    }
+
+    fn value(&self) -> (u32, u32) {
+        (self.branches, self.leafs)
+    }
+
+    fn fitness(&self) -> u32 {
+        self.branches
     }
 
     fn check(&self) {
@@ -214,6 +252,14 @@ where
                 .filter(|v| self.degree[*v] > 2)
                 .count() as u32,
             self.branches
+        );
+        debug_assert_eq!(
+            self.tree
+                .graph()
+                .vertices()
+                .filter(|v| self.degree[*v] == 1)
+                .count() as u32,
+            self.leafs
         );
     }
 }

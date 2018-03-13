@@ -23,60 +23,61 @@ where
 {
     #[inline(never)]
     pub fn new(g: Rc<G>, edges: &[Edge<G>]) -> Self {
-        let prop = g.vertex_index();
-        let ends = |e| {
-            let (a, b) = g.ends(e);
-            (prop.get(a) as u32, prop.get(b) as u32)
-        };
-        // TODO: avoid using this intermediary vector
-        let mut tour = Vec::with_capacity(2 * (g.num_vertices() - 1));
-        let mut stack = vec![];
-        g.spanning_subgraph(edges)
-            .dfs(OnTraverseEvent(|evt| match evt {
-                TraverseEvent::DiscoverEdge(e) => {
-                    tour.push(ends(e));
-                    stack.push(e);
-                }
-                TraverseEvent::FinishEdge(e) => {
-                    assert_eq!(Some(e), stack.pop());
-                    tour.push(ends(g.reverse(e)));
-                }
-                _ => (),
-            }))
-            .run();
-        Self::new_(g.clone(), &tour)
-    }
-
-    #[inline(never)]
-    fn new_(g: Rc<G>, edges: &[(u32, u32)]) -> Self {
         let mut vertices = vec![g.vertices().next().unwrap(); g.num_vertices()];
         let index = g.vertex_index();
         for v in g.vertices() {
             vertices[index.get(v)] = v;
         }
 
-        let nsqrt = ((edges.len() as f64).sqrt()).round() as usize;
-        let step = edges.len() as f64 / nsqrt as f64;
+        let len = 2 * (g.num_vertices() - 1);
+        let nsqrt = ((len as f64).sqrt()).round() as usize;
+
         let mut tour = Self {
             g,
             segs: Rc::new(vec![]),
             vertices: vertices.into(),
             nsqrt: nsqrt,
-            len: edges.len(),
+            len: len,
         };
+        tour.set_edges(edges);
+        tour.check();
+        tour
+    }
+
+    fn edges_to_tour(&self, edges: &[Edge<G>]) -> Vec<(u32, u32)> {
+        let mut tour = Vec::with_capacity(2 * (self.g.num_vertices() - 1));
+        let mut stack = vec![];
+        self.g.spanning_subgraph(edges)
+            .dfs(OnTraverseEvent(|evt| match evt {
+                TraverseEvent::DiscoverEdge(e) => {
+                    tour.push(self.ends(e));
+                    stack.push(e);
+                }
+                TraverseEvent::FinishEdge(e) => {
+                    assert_eq!(Some(e), stack.pop());
+                    tour.push(self.ends(self.g.reverse(e)));
+                }
+                _ => (),
+            }))
+            .run();
+        assert!(stack.is_empty());
+        tour
+    }
+
+    pub fn set_edges(&mut self, edges: &[Edge<G>]) {
+        let edges = self.edges_to_tour(edges);
         let mut last = 0;
-        let segs = Linspace::new(nsqrt, step)
+        let step = edges.len() as f64 / self.nsqrt as f64;
+        let segs = Linspace::new(self.nsqrt, step)
             .map(|to| {
                 let seg = &edges[last..to];
                 let source = seg.iter().map(|t| t.0).collect();
                 let target = seg.iter().map(|t| t.1).collect();
                 last = to;
-                tour.new_segment(source, target)
+                self.new_segment(source, target)
             })
             .collect();
-        tour.segs = Rc::new(segs);
-        tour.check();
-        tour
+        self.segs = Rc::new(segs);
     }
 
     pub fn graph(&self) -> &Rc<G> {
@@ -844,26 +845,7 @@ mod tests {
         edges.push(e(5, 7));
         edges.push(e(5, 8));
 
-        let tour = vec![
-            (0, 1),
-            (1, 2),
-            (2, 3),
-            (3, 2),
-            (2, 1),
-            (1, 4),
-            (4, 1),
-            (1, 0),
-            (0, 5),
-            (5, 6),
-            (6, 5),
-            (5, 7),
-            (7, 5),
-            (5, 8),
-            (8, 5),
-            (5, 0),
-        ];
-
-        let tour = EulerTourTree::new_(g.clone(), &*tour);
+        let tour = EulerTourTree::new(g.clone(), &edges);
 
         assert_eq!(16, tour.subtree_len(tour.subtree(0)));
         assert_eq!(6, tour.subtree_len(tour.subtree(1)));

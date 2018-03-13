@@ -320,6 +320,10 @@ where
         }
     }
 
+    pub fn set_edges<R: Rng>(&mut self, edges: &[Edge<G>], rng: R) {
+        *self = Self::new_with_data(self.g.clone(), self.data.clone(), edges.into(), rng);
+    }
+
     pub fn graph(&self) -> &Rc<G> {
         &self.g
     }

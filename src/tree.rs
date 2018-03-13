@@ -1,7 +1,7 @@
 use fera::graph::prelude::*;
 use fera::graph::choose::Choose;
 use fera_array::Array;
-use rand::Rng;
+use rand::{Rng, XorShiftRng};
 
 use std::rc::Rc;
 
@@ -11,6 +11,8 @@ use {EulerTourTree, FindOpStrategy, FindVertexStrategy, NddrOneTree, NddrOneTree
 pub trait Tree<G: WithEdge>: Clone {
     fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], rng: R) -> Self;
 
+    fn set_edges(&mut self, edges: &[Edge<G>]);
+
     fn change_parent<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>);
 
     fn change_any<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>);
@@ -19,7 +21,7 @@ pub trait Tree<G: WithEdge>: Clone {
 }
 
 #[derive(Clone)]
-pub struct NddrAdjTree<G>(NddrOneTreeForest<G>)
+pub struct NddrAdjTree<G>(NddrOneTreeForest<G>, XorShiftRng)
 where
     G: AdjacencyGraph
         + WithVertexIndexProp
@@ -37,7 +39,8 @@ where
         + Choose,
     DefaultVertexPropMut<G, bool>: Clone,
 {
-    fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], rng: R) -> Self {
+    fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], mut rng: R) -> Self {
+        let xrng = rng.gen();
         let nddr = NddrOneTreeForest::new_with_strategies(
             g,
             edges.to_vec(),
@@ -45,7 +48,11 @@ where
             FindVertexStrategy::Map,
             rng,
         );
-        NddrAdjTree(nddr)
+        NddrAdjTree(nddr, xrng)
+    }
+
+    fn set_edges(&mut self, edges: &[Edge<G>]) {
+        self.0.set_edges(edges, &mut self.1);
     }
 
     fn change_parent<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
@@ -62,7 +69,7 @@ where
 }
 
 #[derive(Clone)]
-pub struct NddrBalancedTree<G>(NddrOneTreeForest<G>)
+pub struct NddrBalancedTree<G>(NddrOneTreeForest<G>, XorShiftRng)
 where
     G: AdjacencyGraph
         + WithVertexIndexProp
@@ -80,7 +87,8 @@ where
         + Choose,
     DefaultVertexPropMut<G, bool>: Clone,
 {
-    fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], rng: R) -> Self {
+    fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], mut rng: R) -> Self {
+        let xrng = rng.gen();
         let nddr = NddrOneTreeForest::new_with_strategies(
             g,
             edges.to_vec(),
@@ -88,7 +96,11 @@ where
             FindVertexStrategy::Map,
             rng,
         );
-        NddrBalancedTree(nddr)
+        NddrBalancedTree(nddr, xrng)
+    }
+
+    fn set_edges(&mut self, edges: &[Edge<G>]) {
+        self.0.set_edges(edges, &mut self.1);
     }
 
     fn change_parent<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
@@ -112,6 +124,10 @@ where
         NddrOneTree::new(g, edges)
     }
 
+    fn set_edges(&mut self, _edges: &[Edge<G>]) {
+        unimplemented!()
+    }
+
     fn change_parent<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
         NddrOneTree::op1(self, rng)
     }
@@ -132,6 +148,10 @@ where
 {
     fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], _rng: R) -> Self {
         ParentTree::from_iter(g, edges.iter().cloned())
+    }
+
+    fn set_edges(&mut self, edges: &[Edge<G>]) {
+        ParentTree::set_edges(self, edges.iter().cloned());
     }
 
     fn change_parent<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
@@ -157,6 +177,10 @@ where
 {
     fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], _rng: R) -> Self {
         EulerTourTree::new(g, edges)
+    }
+
+    fn set_edges(&mut self, edges: &[Edge<G>]) {
+        EulerTourTree::set_edges(self, edges);
     }
 
     fn change_parent<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {

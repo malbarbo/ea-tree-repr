@@ -32,24 +32,30 @@ where
     where
         I: IntoIterator<Item = Edge<G>>,
     {
-        let index = g.vertex_index();
-        let parent = {
-            let sub = g.spanning_subgraph(edges);
-            let r = sub.edges().next().map(|e| g.source(e));
-            let mut parent = A::with_value(G::edge_none(), g.num_vertices());
-            sub.dfs(OnDiscoverTreeEdge(|e| {
-                parent[index.get(g.target(e))] = g.reverse(e).into();
-            })).roots(r)
-                .run();
-            parent
+        let mut tree = ParentTree {
+            g: g.clone(),
+            index: g.vertex_index(),
+            parent: A::with_value(G::edge_none(), g.num_vertices()),
+            buffer: Rc::new(RefCell::new(vec![])),
         };
 
-        ParentTree {
-            g: g,
-            index,
-            parent,
-            buffer: Rc::new(RefCell::new(vec![])),
-        }
+        tree.set_edges(edges);
+        tree
+    }
+
+    pub fn set_edges<I>(&mut self, edges: I)
+    where
+        I: IntoIterator<Item = Edge<G>>,
+    {
+        let g = &self.g;
+        let index = g.vertex_index();
+        let parent = &mut self.parent;
+        let sub = g.spanning_subgraph(edges);
+        let r = sub.edges().next().map(|e| g.source(e));
+        sub.dfs(OnDiscoverTreeEdge(|e| {
+            parent[index.get(g.target(e))] = g.reverse(e).into();
+        })).roots(r)
+            .run();
     }
 
     pub fn contains(&self, e: Edge<G>) -> bool {
