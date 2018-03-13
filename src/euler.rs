@@ -48,31 +48,35 @@ where
     }
 
     #[inline(never)]
-    fn new_(g: Rc<G>, tour: &[(u32, u32)]) -> Self {
+    fn new_(g: Rc<G>, edges: &[(u32, u32)]) -> Self {
         let mut vertices = vec![g.vertices().next().unwrap(); g.num_vertices()];
         let index = g.vertex_index();
         for v in g.vertices() {
             vertices[index.get(v)] = v;
         }
 
-        let nsqrt = (tour.len() as f64).sqrt().ceil() as usize;
-        let mut tt = Self {
+        let nsqrt = ((edges.len() as f64).sqrt()).round() as usize;
+        let step = edges.len() as f64 / nsqrt as f64;
+        let mut tour = Self {
             g,
             segs: Rc::new(vec![]),
             vertices: vertices.into(),
             nsqrt: nsqrt,
-            len: tour.len(),
+            len: edges.len(),
         };
-        let segs = tour.chunks(nsqrt)
-            .map(|t| {
-                let source = t.iter().map(|st| st.0).collect();
-                let target = t.iter().map(|st| st.1).collect();
-                tt.new_segment(source, target)
+        let mut last = 0;
+        let segs = Linspace::new(nsqrt, step)
+            .map(|to| {
+                let seg = &edges[last..to];
+                let source = seg.iter().map(|t| t.0).collect();
+                let target = seg.iter().map(|t| t.1).collect();
+                last = to;
+                tour.new_segment(source, target)
             })
             .collect();
-        tt.segs = Rc::new(segs);
-        tt.fix_last();
-        tt
+        tour.segs = Rc::new(segs);
+        tour.check();
+        tour
     }
 
     pub fn graph(&self) -> &Rc<G> {
@@ -113,6 +117,8 @@ where
         } else {
             self.move_before(ins, to, sub.start, sub.start, sub.end);
         }
+
+        self.check();
 
         (ins, rem)
     }
@@ -164,11 +170,15 @@ where
                 return self.change_parent(rng);
             }
         }
+
         if to <= sub.start {
             self.move_before(ins, to, sub.start, sub_new_root, sub.end);
         } else {
             self.move_after(ins, to, sub.start, sub_new_root, sub.end);
         }
+
+        self.check();
+
         (ins, rem)
     }
 
@@ -456,7 +466,7 @@ where
             Seg::Complete(seg) => segs.push(Rc::clone(seg)),
             Seg::Partial(source, target) => {
                 if source.len() == 0 {
-                    return
+                    return;
                 }
                 if source.len() < self.min_seg_len() {
                     let (mut ss, mut tt) = match Rc::try_unwrap(segs.pop().unwrap()) {
@@ -479,32 +489,12 @@ where
             segs.push(self.new_segment(source, target));
         } else {
             let count = source.len() / self.nsqrt;
+            let step = source.len() as f64 / count as f64;
             let mut s = 0;
-            for _ in 0..(count - 1) {
-                let t = s + self.nsqrt;
+            for t in Linspace::new(count, step) {
                 segs.push(self.new_segment(source[s..t].into(), target[s..t].into()));
                 s = t;
             }
-            segs.push(self.new_segment(source[s..].into(), target[s..].into()));
-        }
-    }
-
-    #[inline(never)]
-    fn fix_last(&mut self) {
-        if self.segs.last().unwrap().len() < self.nsqrt {
-            let mut segs = ::std::mem::replace(&mut self.segs, Rc::new(vec![]));
-            {
-                let segs = Rc::make_mut(&mut segs);
-                let seg = segs.pop().unwrap();
-                let (mut source, mut target) = match Rc::try_unwrap(segs.pop().unwrap()) {
-                    Ok(seg) => (seg.source, seg.target),
-                    Err(seg) => (seg.source.clone(), seg.target.clone()),
-                };
-                source.extend(&*seg.source);
-                target.extend(&*seg.target);
-                self.push_source_target(segs, source, target);
-            }
-            self.segs = segs;
         }
     }
 
@@ -625,6 +615,9 @@ where
             (i, j - 1)
         }
     }
+
+    #[cfg(not(test))]
+    fn check(&self) {}
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
@@ -795,6 +788,32 @@ where
         assert_eq!((self.g.num_vertices() - 1) * 2, set.len());
 
         assert_eq!(self.segs.iter().map(|s| s.len()).sum::<usize>(), self.len());
+    }
+}
+
+pub struct Linspace {
+    last: usize,
+    cur: usize,
+    step: f64,
+}
+
+impl Linspace {
+    fn new(last: usize, step: f64) -> Self {
+        Self { last, cur: 0, step }
+    }
+}
+
+impl Iterator for Linspace {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.cur < self.last {
+            self.cur += 1;
+            let value = (self.cur as f64) * self.step;
+            Some(value.round() as usize)
+        } else {
+            None
+        }
     }
 }
 
