@@ -4,6 +4,7 @@ use fera::graph::traverse::{Dfs, OnDiscoverTreeEdge};
 use fera_array::{Array, CowNestedArray, CowNestedNestedArray, VecArray};
 use rand::Rng;
 
+use std::cell::RefCell;
 use std::rc::Rc;
 use std::mem;
 
@@ -19,6 +20,7 @@ where
     g: Rc<G>,
     index: VertexIndexProp<G>,
     parent: A,
+    buffer: Rc<RefCell<Vec<Edge<G>>>>,
 }
 
 impl<G, A> ParentTree<G, A>
@@ -26,16 +28,6 @@ where
     G: Graph + WithVertexIndexProp,
     A: Array<OptionEdge<G>>,
 {
-    pub fn new(g: Rc<G>) -> Self {
-        let n = g.num_vertices();
-        let index = g.vertex_index();
-        ParentTree {
-            g: g,
-            index: index,
-            parent: A::with_value(G::edge_none(), n),
-        }
-    }
-
     pub fn from_iter<I>(g: Rc<G>, edges: I) -> Self
     where
         I: IntoIterator<Item = Edge<G>>,
@@ -56,6 +48,7 @@ where
             g: g,
             index,
             parent,
+            buffer: Rc::new(RefCell::new(vec![])),
         }
     }
 
@@ -126,6 +119,49 @@ where
 
     pub fn path_to_root(&self, v: Vertex<G>) -> PathToRoot<G, A> {
         PathToRoot { tree: self, cur: v }
+    }
+
+    pub fn choose_path_edge<R: Rng>(
+        &self,
+        u: Vertex<G>,
+        v: Vertex<G>,
+        buffer: &mut Vec<Edge<G>>,
+        mut rng: R,
+    ) -> Edge<G> {
+        assert_ne!(u, v);
+        buffer.clear();
+
+        for e in self.path_to_root(u) {
+            buffer.push(e);
+            if self.g.target(e) == v {
+                return *rng.choose(buffer).unwrap();
+            }
+        }
+        let s = buffer.len();
+
+        for e in self.path_to_root(v) {
+            buffer.push(e);
+            if self.g.target(e) == u {
+                return *rng.choose(&buffer[s..]).unwrap();
+            }
+        }
+
+        let mut i = s - 1;
+        let mut j = buffer.len() - 1;
+        while buffer[i] == buffer[j] {
+            i -= 1;
+            j -= 1;
+        }
+        i += 1;
+        j += 1;
+
+        let total = (0..i).len() + (s..j).len();
+        let x = rng.gen_range(0, total);
+        if x < i {
+            buffer[x]
+        } else {
+            buffer[s..j][x - i]
+        }
     }
 
     pub fn find_path(&self, u: Vertex<G>, v: Vertex<G>, path: &mut Vec<Edge<G>>) {
@@ -214,20 +250,21 @@ where
     A: Array<OptionEdge<G>>,
 {
     pub fn change_parent<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Option<Edge<G>>) {
-        // use clone to make the borrow checker happy
-        for ins in Rc::clone(&self.g).choose_edge_iter(&mut rng) {
-            let (u, v) = self.g.ends(ins);
-            if self.contains(ins) {
-                continue;
-            }
-            if self.is_ancestor_of(u, v) {
-                let rev = self.g.reverse(ins);
-                return (ins, self.set_parent(v, rev));
-            } else {
-                return (ins, self.set_parent(u, ins));
-            }
+        let ins = self.choose_nontree_edge(&mut rng);
+        let (u, v) = self.g.ends(ins);
+        if self.is_ancestor_of(u, v) {
+            let ins = self.g.reverse(ins);
+            (ins, self.set_parent(v, ins))
+        } else if self.is_ancestor_of(v, u) {
+            (ins, self.set_parent(u, ins))
+        // u is not ancestor of v and v is not ancestor of u, so we randomly choose which
+        // parent we change
+        } else if rng.gen() {
+            let ins = self.g.reverse(ins);
+            (ins, self.set_parent(v, ins))
+        } else {
+            (ins, self.set_parent(u, ins))
         }
-        unreachable!("cannot find an edge to insert");
     }
 
     pub fn change_any<R: Rng>(
@@ -238,10 +275,16 @@ where
         // TODO: make this works with forests
         let ins = self.choose_nontree_edge(&mut rng);
         let (u, v) = self.g.ends(ins);
-        self.find_path(u, v, buffer);
-        let rem = *rng.choose(buffer).unwrap();
+        // using choose_path_edge is a bit faster than find_path
+        let rem = self.choose_path_edge(u, v, buffer, &mut rng);
         assert!(self.cut(rem));
-        assert!(self.link(ins));
+        if self.is_root(u) {
+            self.set_parent(u, ins);
+        } else {
+            self.make_root(v);
+            let ins = self.g.reverse(ins);
+            self.set_parent(v, ins);
+        }
         (ins, rem)
     }
 
@@ -250,6 +293,10 @@ where
             .choose_edge_iter(&mut rng)
             .find(|e| !self.contains(*e))
             .unwrap()
+    }
+
+    pub fn buffer(&self) -> Rc<RefCell<Vec<Edge<G>>>> {
+        self.buffer.clone()
     }
 }
 
@@ -263,6 +310,7 @@ where
             g: Rc::clone(&self.g),
             index: self.g.vertex_index(),
             parent: self.parent.clone(),
+            buffer: self.buffer.clone(),
         }
     }
 
@@ -270,6 +318,7 @@ where
         self.g.clone_from(&other.g);
         self.index = other.g.vertex_index();
         self.parent.clone_from(&other.parent);
+        self.buffer.clone_from(&other.buffer);
     }
 }
 

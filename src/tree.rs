@@ -141,9 +141,9 @@ where
     }
 
     fn change_any<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
-        let n = self.graph().num_vertices();
-        // TODO: use a shared buffer
-        ParentTree::change_any(self, &mut Vec::with_capacity(n), rng)
+        let buffer = self.buffer();
+        let mut buffer = buffer.borrow_mut();
+        ParentTree::change_any(self, &mut *buffer, rng)
     }
 
     fn graph(&self) -> &Rc<G> {
