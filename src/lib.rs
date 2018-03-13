@@ -4,7 +4,6 @@ extern crate fera;
 extern crate fera_array;
 extern crate pbr;
 extern crate rand;
-extern crate rpds;
 
 mod cowprop;
 mod euler;
