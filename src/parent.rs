@@ -52,6 +52,7 @@ where
         let parent = &mut self.parent;
         let sub = g.spanning_subgraph(edges);
         let r = sub.edges().next().map(|e| g.source(e));
+        parent[index.get(r.unwrap())] = G::edge_none();
         sub.dfs(OnDiscoverTreeEdge(|e| {
             parent[index.get(g.target(e))] = g.reverse(e).into();
         })).roots(r)
