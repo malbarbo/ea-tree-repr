@@ -5,6 +5,7 @@ extern crate fera_array;
 extern crate pbr;
 extern crate rand;
 
+mod bitset;
 mod cowprop;
 mod euler;
 mod nddr;
@@ -13,6 +14,7 @@ mod progress;
 mod random;
 mod tree;
 
+pub use self::bitset::*;
 pub use self::cowprop::*;
 pub use self::euler::*;
 pub use self::nddr::*;

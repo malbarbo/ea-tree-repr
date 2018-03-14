@@ -1,4 +1,3 @@
-use fera::ext::VecExt;
 use fera::graph::choose::Choose;
 use fera::graph::prelude::*;
 use fera::graph::traverse::{Dfs, OnTraverseEvent, TraverseEvent};
@@ -6,6 +5,8 @@ use fera::graph::traverse::{Dfs, OnTraverseEvent, TraverseEvent};
 use rand::Rng;
 
 use std::rc::Rc;
+
+use {bitset_acquire, bitset_release, Bitset};
 
 #[derive(Clone)]
 pub struct EulerTourTree<G: WithEdge> {
@@ -44,10 +45,12 @@ where
         tour
     }
 
+    #[inline(never)]
     fn edges_to_tour(&self, edges: &[Edge<G>]) -> Vec<(u32, u32)> {
         let mut tour = Vec::with_capacity(2 * (self.g.num_vertices() - 1));
         let mut stack = vec![];
-        self.g.spanning_subgraph(edges)
+        self.g
+            .spanning_subgraph(edges)
             .dfs(OnTraverseEvent(|evt| match evt {
                 TraverseEvent::DiscoverEdge(e) => {
                     tour.push(self.ends(e));
@@ -64,6 +67,7 @@ where
         tour
     }
 
+    #[inline(never)]
     pub fn set_edges(&mut self, edges: &[Edge<G>]) {
         let edges = self.edges_to_tour(edges);
         let mut last = 0;
@@ -359,6 +363,7 @@ where
         self.source(self.index_to_pos(i))
     }
 
+    #[inline(never)]
     fn subtree_len(&self, tree: Subtree) -> usize {
         if self.next_pos(tree.end) == tree.start {
             0
@@ -406,24 +411,20 @@ where
 
     #[inline(never)]
     fn segment_position_source(&self, seg: &Segment, v: u32) -> Option<usize> {
-        if let Some(i) = seg.pos.get(v as usize) {
-            let i = *i as usize;
-            if Some(&v) == seg.source.get(i) {
-                return Some(i);
-            }
+        if seg.contains(v) {
+            seg.source.iter().position(|x| *x == v)
+        } else {
+            None
         }
-        None
     }
 
     #[inline(never)]
     fn segment_rposition_source(&self, seg: &Segment, v: u32) -> Option<usize> {
-        if let Some(i) = seg.pos.get(v as usize) {
-            let i = *i as usize;
-            if Some(&v) == seg.source.get(i) {
-                return seg.source.iter().rposition(|&x| x == v);
-            }
+        if seg.contains(v) {
+            seg.source.iter().rposition(|x| *x == v)
+        } else {
+            None
         }
-        None
     }
 
     #[inline(never)]
@@ -471,7 +472,7 @@ where
                 }
                 if source.len() < self.min_seg_len() {
                     let (mut ss, mut tt) = match Rc::try_unwrap(segs.pop().unwrap()) {
-                        Ok(seg) => (seg.source, seg.target),
+                        Ok(seg) => seg.take_source_target(),
                         Err(seg) => (seg.source.clone(), seg.target.clone()),
                     };
                     ss.extend(source);
@@ -527,17 +528,16 @@ where
     fn new_segment(&self, source: Vec<u32>, target: Vec<u32>) -> Rc<Segment> {
         assert_ne!(0, source.len());
         assert_eq!(source.len(), target.len());
-        let m = *source.iter().max().unwrap() as usize;
-        let mut pos = unsafe { Vec::new_uninitialized(m + 1) };
-        for (i, &v) in source.iter().enumerate().rev() {
-            unsafe {
-                *pos.get_unchecked_mut(v as usize) = i as _;
+        let mut bitset = bitset_acquire(self.g.num_vertices() + 1);
+        unsafe {
+            for &v in &source {
+                *bitset.get_unchecked_mut(v as usize) = true;
             }
         }
         Rc::new(Segment {
             source,
             target,
-            pos,
+            bitset,
         })
     }
 
@@ -643,10 +643,9 @@ impl Subtree {
 
 #[derive(Clone, Debug)]
 struct Segment {
-    // TODO: use a bit vec?
     source: Vec<u32>,
     target: Vec<u32>,
-    pos: Vec<u32>,
+    bitset: Bitset,
 }
 
 impl Segment {
@@ -658,6 +657,35 @@ impl Segment {
     #[inline]
     fn get(&self, i: usize) -> (usize, usize) {
         (self.source[i] as usize, self.target[i] as usize)
+    }
+
+    #[inline]
+    fn contains(&self, v: u32) -> bool {
+        unsafe { *self.bitset.get_unchecked(v as usize) }
+    }
+
+    fn reset_bitset(&mut self) {
+        unsafe {
+            for &v in &self.source {
+                *self.bitset.get_unchecked_mut(v as usize) = false;
+            }
+        }
+    }
+
+    fn take_source_target(mut self) -> (Vec<u32>, Vec<u32>) {
+        use std::mem::replace;
+        self.reset_bitset();
+        (
+            replace(&mut self.source, vec![]),
+            replace(&mut self.target, vec![]),
+        )
+    }
+}
+
+impl Drop for Segment {
+    fn drop(&mut self) {
+        self.reset_bitset();
+        bitset_release(::std::mem::replace(&mut self.bitset, Bitset::default()));
     }
 }
 
