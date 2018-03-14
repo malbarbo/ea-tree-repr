@@ -2,6 +2,7 @@
 
 extern crate fera;
 extern crate fera_array;
+extern crate fixedbitset;
 extern crate pbr;
 extern crate rand;
 

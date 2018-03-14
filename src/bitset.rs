@@ -1,11 +1,13 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-pub type Bitset = Vec<bool>;
+use fixedbitset::FixedBitSet;
+
+pub type Bitset = FixedBitSet;
 
 pub fn bitset_pool() -> Rc<RefCell<Vec<Bitset>>> {
     thread_local! {
-        pub static BUFFER: Rc<RefCell<Vec<Bitset>>> = Rc::new(RefCell::new(vec![vec![]]));
+        pub static BUFFER: Rc<RefCell<Vec<Bitset>>> = Rc::new(RefCell::new(vec![Default::default()]));
     }
     BUFFER.with(|f| f.clone())
 }
@@ -13,9 +15,9 @@ pub fn bitset_pool() -> Rc<RefCell<Vec<Bitset>>> {
 pub fn bitset_acquire(n: usize) -> Bitset {
     let pool = bitset_pool();
     let mut pool = pool.borrow_mut();
-    let mut bitset = pool.pop().unwrap_or_else(|| vec![false; n]);
+    let mut bitset = pool.pop().unwrap_or_else(|| FixedBitSet::with_capacity(n));
     if bitset.len() < n {
-        bitset.resize(n, false);
+        bitset.grow(n);
     }
     bitset
 }

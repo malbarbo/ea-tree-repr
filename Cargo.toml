@@ -10,10 +10,11 @@ https://github.com/malbarbo/ec-tree-repr
 clap = { version = "2.29", default-features = false, features = ["wrap_help"] }
 fera = { version = "0.1", features = ["ext", "fun", "graph"], path = "../fera/" }
 fera-array = { path = "../fera/array" }
+fixedbitset = "0.1.8"
 pbr = "1.0"
 rand = "0.4"
-tsplib = "0.1"
 rayon = "1.0"
+tsplib = "0.1"
 
 [profile.release]
 debug = true

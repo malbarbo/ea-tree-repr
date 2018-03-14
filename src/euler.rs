@@ -22,7 +22,6 @@ impl<G> EulerTourTree<G>
 where
     G: IncidenceGraph + WithVertexIndexProp + Choose,
 {
-    #[inline(never)]
     pub fn new(g: Rc<G>, edges: &[Edge<G>]) -> Self {
         let mut vertices = vec![g.vertices().next().unwrap(); g.num_vertices()];
         let index = g.vertex_index();
@@ -45,7 +44,6 @@ where
         tour
     }
 
-    #[inline(never)]
     fn edges_to_tour(&self, edges: &[Edge<G>]) -> Vec<(u32, u32)> {
         let mut tour = Vec::with_capacity(2 * (self.g.num_vertices() - 1));
         let mut stack = vec![];
@@ -67,7 +65,6 @@ where
         tour
     }
 
-    #[inline(never)]
     pub fn set_edges(&mut self, edges: &[Edge<G>]) {
         let edges = self.edges_to_tour(edges);
         let mut last = 0;
@@ -88,7 +85,6 @@ where
         &self.g
     }
 
-    #[inline(never)]
     pub fn contains(&self, e: Edge<G>) -> bool {
         let (a, b) = self.ends(e);
         let start = self.subtree_start(a);
@@ -98,7 +94,6 @@ where
         }
     }
 
-    #[inline(never)]
     pub fn change_parent<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Edge<G>) {
         let (ins, a_sub, b_sub) = self.choose_non_tree_edge(&mut rng);
         let (ins, to, sub) = if a_sub.contains(&b_sub) {
@@ -128,7 +123,6 @@ where
         (ins, rem)
     }
 
-    #[inline(never)]
     pub fn change_any<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Edge<G>) {
         let sub = self.choose_subtree(&mut rng);
         assert_ne!((0, 0), sub.start);
@@ -187,7 +181,6 @@ where
         (ins, rem)
     }
 
-    #[inline(never)]
     fn move_before(
         &mut self,
         new: Edge<G>,
@@ -245,7 +238,6 @@ where
         self.segs = Rc::new(segs);
     }
 
-    #[inline(never)]
     fn move_after(
         &mut self,
         new: Edge<G>,
@@ -303,7 +295,6 @@ where
         self.segs = Rc::new(segs);
     }
 
-    #[inline(never)]
     fn choose_non_tree_edge<R: Rng>(&self, rng: R) -> (Edge<G>, Subtree, Subtree) {
         for e in self.g.choose_edge_iter(rng) {
             let (a, b) = self.ends(e);
@@ -324,7 +315,6 @@ where
         unreachable!()
     }
 
-    #[inline(never)]
     fn choose_subtree<R: Rng>(&self, mut rng: R) -> Subtree {
         let root = self.source((0, 0));
         let v = self.g
@@ -335,7 +325,6 @@ where
         self.subtree(v)
     }
 
-    #[inline(never)]
     fn choose_subtree_vertex<R: Rng>(&self, tree: Subtree, mut rng: R) -> Vertex<G> {
         // TODO: check if this method has some tendency. Every subtree should have the same
         // probability of being chosen
@@ -349,7 +338,6 @@ where
         }
     }
 
-    #[inline(never)]
     fn choose_non_subtree_vertex<R: Rng>(&self, tree: Subtree, mut rng: R) -> Vertex<G> {
         // TODO: check if this method has some tendency. Every subtree should have the same
         // probability of being chosen
@@ -363,7 +351,6 @@ where
         self.source(self.index_to_pos(i))
     }
 
-    #[inline(never)]
     fn subtree_len(&self, tree: Subtree) -> usize {
         if self.next_pos(tree.end) == tree.start {
             0
@@ -378,13 +365,11 @@ where
         }
     }
 
-    #[inline(never)]
     fn subtree(&self, v: Vertex<G>) -> Subtree {
         let v = self.vertex_index(v);
         Subtree::new(self.subtree_start(v), self.subtree_end(v))
     }
 
-    #[inline(never)]
     fn subtree_start(&self, v: u32) -> (usize, usize) {
         for (a, seg) in self.segs.iter().enumerate() {
             if let Some(b) = self.segment_position_source(seg, v) {
@@ -394,7 +379,6 @@ where
         unreachable!()
     }
 
-    #[inline(never)]
     fn subtree_end(&self, v: u32) -> (usize, usize) {
         // special case for the root
         if self.segs[0].source[0] == v {
@@ -409,7 +393,6 @@ where
         unreachable!()
     }
 
-    #[inline(never)]
     fn segment_position_source(&self, seg: &Segment, v: u32) -> Option<usize> {
         if seg.contains(v) {
             seg.source.iter().position(|x| *x == v)
@@ -418,7 +401,6 @@ where
         }
     }
 
-    #[inline(never)]
     fn segment_rposition_source(&self, seg: &Segment, v: u32) -> Option<usize> {
         if seg.contains(v) {
             seg.source.iter().rposition(|x| *x == v)
@@ -427,7 +409,6 @@ where
         }
     }
 
-    #[inline(never)]
     fn extend<'a>(
         &self,
         segs: &mut Vec<Rc<Segment>>,
@@ -462,7 +443,6 @@ where
         last
     }
 
-    #[inline(never)]
     fn push_last<'a>(&self, segs: &mut Vec<Rc<Segment>>, last: Seg<'a>) {
         match last {
             Seg::Complete(seg) => segs.push(Rc::clone(seg)),
@@ -485,7 +465,6 @@ where
         }
     }
 
-    #[inline(never)]
     fn push_source_target(&self, segs: &mut Vec<Rc<Segment>>, source: Vec<u32>, target: Vec<u32>) {
         if source.len() <= self.max_seg_len() {
             segs.push(self.new_segment(source, target));
@@ -500,7 +479,6 @@ where
         }
     }
 
-    #[inline(never)]
     fn push_edge<'a>(
         &self,
         segs: &mut Vec<Rc<Segment>>,
@@ -524,15 +502,12 @@ where
         SegIter::new(&self.segs, start, end)
     }
 
-    #[inline(never)]
     fn new_segment(&self, source: Vec<u32>, target: Vec<u32>) -> Rc<Segment> {
         assert_ne!(0, source.len());
         assert_eq!(source.len(), target.len());
         let mut bitset = bitset_acquire(self.g.num_vertices() + 1);
-        unsafe {
-            for &v in &source {
-                *bitset.get_unchecked_mut(v as usize) = true;
-            }
+        for &v in &source {
+            bitset.set(v as usize, true);
         }
         Rc::new(Segment {
             source,
@@ -541,7 +516,6 @@ where
         })
     }
 
-    #[inline(never)]
     fn get_edge(&self, (i, j): (usize, usize)) -> Edge<G> {
         let (a, b) = self.segs[i].get(j);
         self.g.edge_by_ends(self.vertices[a], self.vertices[b])
@@ -557,13 +531,11 @@ where
         (prop.get(a) as u32, prop.get(b) as u32)
     }
 
-    #[inline(never)]
     fn pos_to_index(&self, (i, j): (usize, usize)) -> usize {
         assert!(j < self.segs[i].len());
         self.segs[..i].iter().map(|s| s.len()).sum::<usize>() + j
     }
 
-    #[inline(never)]
     fn index_to_pos(&self, mut index: usize) -> (usize, usize) {
         assert!(index < self.len);
         let mut i = 0;
@@ -661,14 +633,12 @@ impl Segment {
 
     #[inline]
     fn contains(&self, v: u32) -> bool {
-        unsafe { *self.bitset.get_unchecked(v as usize) }
+        self.bitset[v as usize]
     }
 
     fn reset_bitset(&mut self) {
-        unsafe {
-            for &v in &self.source {
-                *self.bitset.get_unchecked_mut(v as usize) = false;
-            }
+        for &v in &self.source {
+            self.bitset.set(v as usize, false);
         }
     }
 
