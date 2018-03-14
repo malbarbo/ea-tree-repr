@@ -368,7 +368,6 @@ where
         assert!(sub.is_tree());
     }
 
-    #[inline(never)]
     fn reinit_if_needed(&self) {
         // reset the history if needed
         let mut data = self.data.borrow_mut();
@@ -461,7 +460,6 @@ where
                     || self[from].is_ancestor(p, a)))
     }
 
-    #[inline(never)]
     fn find_vertices_op1<R: Rng>(&self, mut rng: R) -> (usize, usize, usize, usize) {
         if self.should_mutate_star_tree(&mut rng) {
             return self.find_op_star_edge(&mut rng);
@@ -485,7 +483,6 @@ where
         }
     }
 
-    #[inline(never)]
     fn find_vertices_op2<R: Rng>(&self, mut rng: R) -> (usize, usize, usize, usize, usize) {
         loop {
             let (from, r, to, a) = self.find_vertices_op1(&mut rng);
@@ -769,7 +766,6 @@ where
         self.set_edges_on_m(t, false);
     }
 
-    #[inline(never)]
     fn set_edges_on_m(&self, t: usize, value: bool) {
         let mut data = self.data_mut();
         let m = data.m.as_mut().unwrap();
