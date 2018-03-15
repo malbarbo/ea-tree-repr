@@ -45,7 +45,7 @@ where
             g,
             edges.to_vec(),
             FindOpStrategy::Adj,
-            FindVertexStrategy::Map,
+            FindVertexStrategy::FatNode,
             rng,
         );
         NddrAdjTree(nddr, xrng)
@@ -93,7 +93,7 @@ where
             g,
             edges.to_vec(),
             FindOpStrategy::Balanced,
-            FindVertexStrategy::Map,
+            FindVertexStrategy::FatNode,
             rng,
         );
         NddrBalancedTree(nddr, xrng)
