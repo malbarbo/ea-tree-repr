@@ -13,7 +13,7 @@ mod euler;
 #[cfg(test)]
 mod euler_simple;
 mod nddr;
-mod parent;
+mod predecessor;
 mod progress;
 mod random;
 mod tree;
@@ -22,7 +22,7 @@ pub use self::bitset::*;
 pub use self::cowprop::*;
 pub use self::euler::*;
 pub use self::nddr::*;
-pub use self::parent::*;
+pub use self::predecessor::*;
 pub use self::progress::*;
 pub use self::random::*;
 pub use self::tree::*;

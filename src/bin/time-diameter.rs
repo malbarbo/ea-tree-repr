@@ -22,8 +22,8 @@ fn main() {
         Repr::EulerTour => run::<EulerTourTree<_>>(n, op, samples, times),
         Repr::NddrAdj => run::<NddrAdjTree<_>>(n, op, samples, times),
         Repr::NddrBalanced => run::<NddrBalancedTree<_>>(n, op, samples, times),
-        Repr::Parent => run::<ParentTree<_>>(n, op, samples, times),
-        Repr::Parent2 => run::<Parent2Tree<_>>(n, op, samples, times),
+        Repr::Predecessor => run::<PredecessorTree<_>>(n, op, samples, times),
+        Repr::Predecessor2 => run::<PredecessorTree2<_>>(n, op, samples, times),
     };
 
     println!("diameter time");
@@ -48,16 +48,12 @@ fn run<T: Tree<CompleteGraph>>(
             let tree = T::new(Rc::new(g), &*tree, &mut rng);
             let start = Instant::now();
             match op {
-                Op::ChangeParent => {
-                    for _ in 0..10_000 {
-                        tree.clone().change_parent(&mut rng);
-                    }
+                Op::ChangePred => for _ in 0..10_000 {
+                    tree.clone().change_pred(&mut rng);
                 },
-                Op::ChangeAny => {
-                    for _ in 0..10_000 {
-                        tree.clone().change_any(&mut rng);
-                    }
-                }
+                Op::ChangeAny => for _ in 0..10_000 {
+                    tree.clone().change_any(&mut rng);
+                },
             }
             *t += start.elapsed();
         })
@@ -80,15 +76,15 @@ fn args() -> (usize, Repr, Op, usize, usize) {
                     "euler-tour",
                     "nddr-adj",
                     "nddr-balanced",
-                    "parent",
-                    "parent2",
+                    "pred",
+                    "pred2",
                 ])
                 "tree representation"
             )
             (@arg op:
                 +required
                 possible_values(&[
-                    "change-parent",
+                    "change-pred",
                     "change-any"
                 ])
                 "operation"
@@ -110,12 +106,12 @@ fn args() -> (usize, Repr, Op, usize, usize) {
         "euler-tour" => Repr::EulerTour,
         "nddr-adj" => Repr::NddrAdj,
         "nddr-balanced" => Repr::NddrBalanced,
-        "parent" => Repr::Parent,
-        "parent2" => Repr::Parent2,
+        "pred" => Repr::Predecessor,
+        "pred2" => Repr::Predecessor2,
         _ => unreachable!(),
     };
     let op = match matches.value_of("op").unwrap() {
-        "change-parent" => Op::ChangeParent,
+        "change-pred" => Op::ChangePred,
         "change-any" => Op::ChangeAny,
         _ => unreachable!(),
     };
@@ -135,12 +131,12 @@ enum Repr {
     EulerTour,
     NddrAdj,
     NddrBalanced,
-    Parent,
-    Parent2,
+    Predecessor,
+    Predecessor2,
 }
 
 #[derive(Copy, Clone)]
 enum Op {
-    ChangeParent,
+    ChangePred,
     ChangeAny,
 }

@@ -8,22 +8,22 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::mem;
 
-pub type Parent2Tree<G> = ParentTree<G, CowNestedArray<OptionEdge<G>>>;
-pub type Parent3Tree<G> = ParentTree<G, CowNestedNestedArray<OptionEdge<G>>>;
+pub type PredecessorTree2<G> = PredecessorTree<G, CowNestedArray<OptionEdge<G>>>;
+pub type PredecessorTree3<G> = PredecessorTree<G, CowNestedNestedArray<OptionEdge<G>>>;
 
 // This also works with forests, maybe we should change the name.
-pub struct ParentTree<G, A = VecArray<OptionEdge<G>>>
+pub struct PredecessorTree<G, A = VecArray<OptionEdge<G>>>
 where
     G: Graph + WithVertexIndexProp,
     A: Array<OptionEdge<G>>,
 {
     g: Rc<G>,
     index: VertexIndexProp<G>,
-    parent: A,
+    pred: A,
     buffer: Rc<RefCell<Vec<Edge<G>>>>,
 }
 
-impl<G, A> ParentTree<G, A>
+impl<G, A> PredecessorTree<G, A>
 where
     G: Graph + WithVertexIndexProp,
     A: Array<OptionEdge<G>>,
@@ -32,10 +32,10 @@ where
     where
         I: IntoIterator<Item = Edge<G>>,
     {
-        let mut tree = ParentTree {
+        let mut tree = PredecessorTree {
             g: g.clone(),
             index: g.vertex_index(),
-            parent: A::with_value(G::edge_none(), g.num_vertices()),
+            pred: A::with_value(G::edge_none(), g.num_vertices()),
             buffer: Rc::new(RefCell::new(vec![])),
         };
 
@@ -49,19 +49,19 @@ where
     {
         let g = &self.g;
         let index = g.vertex_index();
-        let parent = &mut self.parent;
+        let pred = &mut self.pred;
         let sub = g.spanning_subgraph(edges);
         let r = sub.edges().next().map(|e| g.source(e));
-        parent[index.get(r.unwrap())] = G::edge_none();
+        pred[index.get(r.unwrap())] = G::edge_none();
         sub.dfs(OnDiscoverTreeEdge(|e| {
-            parent[index.get(g.target(e))] = g.reverse(e).into();
+            pred[index.get(g.target(e))] = g.reverse(e).into();
         })).roots(r)
             .run();
     }
 
     pub fn contains(&self, e: Edge<G>) -> bool {
         let (u, v) = self.g.ends(e);
-        self.parent(u) == Some(e) || self.parent(v) == Some(e)
+        self.pred(u) == Some(e) || self.pred(v) == Some(e)
     }
 
     pub fn is_connected(&self, u: Vertex<G>, v: Vertex<G>) -> bool {
@@ -73,35 +73,35 @@ where
         if self.is_connected(u, v) {
             false
         } else if self.is_root(u) {
-            self.set_parent(u, e);
+            self.set_pred(u, e);
             true
         } else {
             self.make_root(v);
             let e = self.g.reverse(e);
-            self.set_parent(v, e);
+            self.set_pred(v, e);
             true
         }
     }
 
     pub fn cut(&mut self, e: Edge<G>) -> bool {
         let (u, v) = self.g.ends(e);
-        if self.parent(u) == Some(e) {
-            self.cut_parent(u);
+        if self.pred(u) == Some(e) {
+            self.cut_pred(u);
             true
-        } else if self.parent(v) == Some(e) {
-            self.cut_parent(v);
+        } else if self.pred(v) == Some(e) {
+            self.cut_pred(v);
             true
         } else {
             false
         }
     }
 
-    pub fn cut_parent(&mut self, v: Vertex<G>) -> Option<Edge<G>> {
-        mem::replace(&mut self.parent[self.index.get(v)], G::edge_none()).into_option()
+    pub fn cut_pred(&mut self, v: Vertex<G>) -> Option<Edge<G>> {
+        mem::replace(&mut self.pred[self.index.get(v)], G::edge_none()).into_option()
     }
 
-    pub fn parent(&self, v: Vertex<G>) -> Option<Edge<G>> {
-        self.parent[self.index.get(v)].into_option()
+    pub fn pred(&self, v: Vertex<G>) -> Option<Edge<G>> {
+        self.pred[self.index.get(v)].into_option()
     }
 
     pub fn find_root(&self, v: Vertex<G>) -> Vertex<G> {
@@ -112,15 +112,15 @@ where
     }
 
     pub fn is_root(&self, u: Vertex<G>) -> bool {
-        self.parent(u).is_none()
+        self.pred(u).is_none()
     }
 
     pub fn make_root(&mut self, u: Vertex<G>) {
-        let mut parent = self.cut_parent(u);
-        while let Some(e) = parent {
+        let mut pred = self.cut_pred(u);
+        while let Some(e) = pred {
             let t = self.g.target(e);
             let e = self.g.reverse(e);
-            parent = self.set_parent(t, e);
+            pred = self.set_pred(t, e);
         }
     }
 
@@ -208,7 +208,7 @@ where
         path.truncate(j + 1);
         path.drain((i + 1)..s);
 
-        // reverse the path from v to the common parent
+        // reverse the path from v to the common predecessor
         path[(i + 1)..].reverse();
         for e in &mut path[(i + 1)..] {
             *e = self.g.reverse(*e);
@@ -224,14 +224,14 @@ where
     }
 
     fn num_edges(&self) -> usize {
-        self.g.vertices().filter_map(|v| self.parent(v)).count()
+        self.g.vertices().filter_map(|v| self.pred(v)).count()
     }
 
-    fn set_parent(&mut self, v: Vertex<G>, e: Edge<G>) -> Option<Edge<G>> {
+    fn set_pred(&mut self, v: Vertex<G>, e: Edge<G>) -> Option<Edge<G>> {
         debug_assert_eq!(v, self.g.source(e));
         let i = self.index.get(v);
-        let old = self.parent[i].into_option();
-        self.parent[i] = e.into();
+        let old = self.pred[i].into_option();
+        self.pred[i] = e.into();
         old
     }
 
@@ -241,7 +241,7 @@ where
 
         assert!(
             self.g
-                .spanning_subgraph(self.g.vertices().filter_map(|v| self.parent(v)))
+                .spanning_subgraph(self.g.vertices().filter_map(|v| self.pred(v)))
                 .is_tree()
         );
 
@@ -251,26 +251,26 @@ where
     }
 }
 
-impl<G, A> ParentTree<G, A>
+impl<G, A> PredecessorTree<G, A>
 where
     G: Graph + Choose + WithVertexIndexProp,
     A: Array<OptionEdge<G>>,
 {
-    pub fn change_parent<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Option<Edge<G>>) {
+    pub fn change_pred<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Option<Edge<G>>) {
         let ins = self.choose_nontree_edge(&mut rng);
         let (u, v) = self.g.ends(ins);
         if self.is_ancestor_of(u, v) {
             let ins = self.g.reverse(ins);
-            (ins, self.set_parent(v, ins))
+            (ins, self.set_pred(v, ins))
         } else if self.is_ancestor_of(v, u) {
-            (ins, self.set_parent(u, ins))
+            (ins, self.set_pred(u, ins))
         // u is not ancestor of v and v is not ancestor of u, so we randomly choose which
-        // parent we change
+        // pred we change
         } else if rng.gen() {
             let ins = self.g.reverse(ins);
-            (ins, self.set_parent(v, ins))
+            (ins, self.set_pred(v, ins))
         } else {
-            (ins, self.set_parent(u, ins))
+            (ins, self.set_pred(u, ins))
         }
     }
 
@@ -286,11 +286,11 @@ where
         let rem = self.choose_path_edge(u, v, buffer, &mut rng);
         assert!(self.cut(rem));
         if self.is_root(u) {
-            self.set_parent(u, ins);
+            self.set_pred(u, ins);
         } else {
             self.make_root(v);
             let ins = self.g.reverse(ins);
-            self.set_parent(v, ins);
+            self.set_pred(v, ins);
         }
         (ins, rem)
     }
@@ -307,7 +307,7 @@ where
     }
 }
 
-impl<G, A> Clone for ParentTree<G, A>
+impl<G, A> Clone for PredecessorTree<G, A>
 where
     G: Graph + WithVertexIndexProp,
     A: Array<OptionEdge<G>> + Clone,
@@ -316,7 +316,7 @@ where
         Self {
             g: Rc::clone(&self.g),
             index: self.g.vertex_index(),
-            parent: self.parent.clone(),
+            pred: self.pred.clone(),
             buffer: self.buffer.clone(),
         }
     }
@@ -324,12 +324,12 @@ where
     fn clone_from(&mut self, other: &Self) {
         self.g.clone_from(&other.g);
         self.index = other.g.vertex_index();
-        self.parent.clone_from(&other.parent);
+        self.pred.clone_from(&other.pred);
         self.buffer.clone_from(&other.buffer);
     }
 }
 
-impl<G, A> PartialEq for ParentTree<G, A>
+impl<G, A> PartialEq for PredecessorTree<G, A>
 where
     G: Graph + WithVertexIndexProp,
     A: Array<OptionEdge<G>>,
@@ -338,7 +338,7 @@ where
         self.num_edges() == other.num_edges()
             && self.g
                 .vertices()
-                .filter_map(|v| self.parent(v))
+                .filter_map(|v| self.pred(v))
                 .all(|e| other.contains(e))
     }
 }
@@ -348,7 +348,7 @@ where
     G: 'a + Graph + WithVertexIndexProp,
     A: 'a + Array<OptionEdge<G>>,
 {
-    tree: &'a ParentTree<G, A>,
+    tree: &'a PredecessorTree<G, A>,
     cur: Vertex<G>,
 }
 
@@ -361,7 +361,7 @@ where
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.tree.parent(self.cur).map(|e| {
+        self.tree.pred(self.cur).map(|e| {
             self.cur = self.tree.g.target(e);
             e
         })
@@ -392,10 +392,10 @@ mod tests {
     }
 
     def_tests!(
-        parent,
+        pred,
         VecArray<_>,
         eq,
-        change_parent,
+        change_pred,
         change_any,
         make_root,
         find_root,
@@ -403,10 +403,10 @@ mod tests {
     );
 
     def_tests!(
-        parent2,
+        pred2,
         CowNestedArray<_>,
         eq,
-        change_parent,
+        change_pred,
         change_any,
         make_root,
         find_root,
@@ -414,10 +414,10 @@ mod tests {
     );
 
     def_tests!(
-        parent3,
+        pred3,
         CowNestedNestedArray<_>,
         eq,
-        change_parent,
+        change_pred,
         change_any,
         make_root,
         find_root,
@@ -434,9 +434,9 @@ mod tests {
         let mut rng = rand::weak_rng();
         let n = 30;
         let (g, mut tree) = graph_tree(n);
-        let trees: Vec<ParentTree<CompleteGraph, A>> = vec((0..n).map(|_| {
+        let trees: Vec<PredecessorTree<CompleteGraph, A>> = vec((0..n).map(|_| {
             rng.shuffle(&mut *tree);
-            ParentTree::from_iter(g.clone(), tree.clone())
+            PredecessorTree::from_iter(g.clone(), tree.clone())
         }));
         for i in 0..(n as usize) {
             for j in 0..(n as usize) {
@@ -445,14 +445,14 @@ mod tests {
         }
     }
 
-    fn change_parent<A: Clone + Array<OptionEdge<CompleteGraph>>>() {
+    fn change_pred<A: Clone + Array<OptionEdge<CompleteGraph>>>() {
         let mut rng = rand::weak_rng();
         let n = 30;
         let (g, tree) = graph_tree(n);
-        let mut tree: ParentTree<CompleteGraph, A> = ParentTree::from_iter(g, tree);
+        let mut tree: PredecessorTree<CompleteGraph, A> = PredecessorTree::from_iter(g, tree);
         for _ in 0..1000 {
             let mut new = tree.clone();
-            let (ins, rem) = new.change_parent(&mut rng);
+            let (ins, rem) = new.change_pred(&mut rng);
             new.check();
             assert!(new.contains(ins));
             assert!(rem.map(|rem| !new.contains(rem)).unwrap_or(true));
@@ -466,7 +466,7 @@ mod tests {
         let mut buffer = vec![];
         let n = 30;
         let (g, tree) = graph_tree(n);
-        let mut tree: ParentTree<CompleteGraph, A> = ParentTree::from_iter(g, tree);
+        let mut tree: PredecessorTree<CompleteGraph, A> = PredecessorTree::from_iter(g, tree);
         for _ in 0..1000 {
             let mut new = tree.clone();
             let (ins, rem) = new.change_any(&mut buffer, &mut rng);
@@ -482,7 +482,8 @@ mod tests {
         let mut rng = rand::weak_rng();
         let n = 30;
         let (g, tree) = graph_tree(n);
-        let mut tree: ParentTree<CompleteGraph, A> = ParentTree::from_iter(g.clone(), tree);
+        let mut tree: PredecessorTree<CompleteGraph, A> =
+            PredecessorTree::from_iter(g.clone(), tree);
         for u in g.choose_vertex_iter(&mut rng).take(1000) {
             let mut new = tree.clone();
             new.make_root(u);
@@ -497,7 +498,7 @@ mod tests {
         let n = 30;
         let (g, tree) = graph_tree(n);
         let r = g.source(tree[0]);
-        let tree: ParentTree<CompleteGraph, A> = ParentTree::from_iter(g.clone(), tree);
+        let tree: PredecessorTree<CompleteGraph, A> = PredecessorTree::from_iter(g.clone(), tree);
         for v in g.vertices() {
             assert_eq!(r == v, tree.is_root(v));
             assert_eq!(r, tree.find_root(v));
@@ -518,7 +519,7 @@ mod tests {
         let g = Rc::new(CompleteGraph::new(n));
         let e = |u, v| g.edge_by_ends(u, v);
 
-        let tree: ParentTree<CompleteGraph, A> = ParentTree::from_iter(
+        let tree: PredecessorTree<CompleteGraph, A> = PredecessorTree::from_iter(
             g.clone(),
             vec![
                 e(0, 1),

@@ -12,7 +12,7 @@ impl<T: PartialEq + Debug> EulerTourSimple<T> {
         Self { values }
     }
 
-    pub fn change_parent<R: Rng>(&mut self, mut rng: R) -> usize {
+    pub fn change_pred<R: Rng>(&mut self, mut rng: R) -> usize {
         let (start, end) = self.choose_subtree(&mut rng);
         assert!(start < end);
         assert_eq!(self.values[start], self.values[end]);
@@ -88,7 +88,7 @@ mod tests {
             let mut tree = EulerTourSimple::new((0..n).chain((0..n).rev()).collect());
             tree.check();
             for _ in 0..100 {
-                tree.change_parent(&mut rng);
+                tree.change_pred(&mut rng);
                 tree.check();
             }
         }

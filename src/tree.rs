@@ -5,7 +5,8 @@ use rand::{Rng, XorShiftRng};
 
 use std::rc::Rc;
 
-use {EulerTourTree, FindOpStrategy, FindVertexStrategy, NddrOneTree, NddrOneTreeForest, ParentTree};
+use {EulerTourTree, FindOpStrategy, FindVertexStrategy, NddrOneTree, NddrOneTreeForest,
+     PredecessorTree};
 
 // This trait creates a uniform interface to make it easy to run the experiments
 pub trait Tree<G: WithEdge>: Clone {
@@ -13,7 +14,7 @@ pub trait Tree<G: WithEdge>: Clone {
 
     fn set_edges(&mut self, edges: &[Edge<G>]);
 
-    fn change_parent<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>);
+    fn change_pred<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>);
 
     fn change_any<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>);
 
@@ -55,7 +56,7 @@ where
         self.0.set_edges(edges, &mut self.1);
     }
 
-    fn change_parent<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
+    fn change_pred<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
         self.0.op1(rng)
     }
 
@@ -103,7 +104,7 @@ where
         self.0.set_edges(edges, &mut self.1);
     }
 
-    fn change_parent<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
+    fn change_pred<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
         self.0.op1(rng)
     }
 
@@ -128,7 +129,7 @@ where
         unimplemented!()
     }
 
-    fn change_parent<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
+    fn change_pred<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
         NddrOneTree::op1(self, rng)
     }
 
@@ -141,33 +142,33 @@ where
     }
 }
 
-impl<G, A> Tree<G> for ParentTree<G, A>
+impl<G, A> Tree<G> for PredecessorTree<G, A>
 where
     G: Graph + WithVertexIndexProp + Choose,
     A: Clone + Array<OptionEdge<G>>,
 {
     fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], _rng: R) -> Self {
-        ParentTree::from_iter(g, edges.iter().cloned())
+        PredecessorTree::from_iter(g, edges.iter().cloned())
     }
 
     fn set_edges(&mut self, edges: &[Edge<G>]) {
-        ParentTree::set_edges(self, edges.iter().cloned());
+        PredecessorTree::set_edges(self, edges.iter().cloned());
     }
 
-    fn change_parent<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
-        let (ins, rem) = ParentTree::change_parent(self, rng);
-        // FIXME: change Tree::parent signature
+    fn change_pred<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
+        let (ins, rem) = PredecessorTree::change_pred(self, rng);
+        // FIXME: change Tree::pred signature
         (ins, rem.unwrap())
     }
 
     fn change_any<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
         let buffer = self.buffer();
         let mut buffer = buffer.borrow_mut();
-        ParentTree::change_any(self, &mut *buffer, rng)
+        PredecessorTree::change_any(self, &mut *buffer, rng)
     }
 
     fn graph(&self) -> &Rc<G> {
-        ParentTree::graph(self)
+        PredecessorTree::graph(self)
     }
 }
 
@@ -183,8 +184,8 @@ where
         EulerTourTree::set_edges(self, edges);
     }
 
-    fn change_parent<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
-        EulerTourTree::change_parent(self, rng)
+    fn change_pred<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
+        EulerTourTree::change_pred(self, rng)
     }
 
     fn change_any<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {

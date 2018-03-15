@@ -95,7 +95,7 @@ where
         }
     }
 
-    pub fn change_parent<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Edge<G>) {
+    pub fn change_pred<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Edge<G>) {
         let (ins, a_sub, b_sub) = self.choose_non_tree_edge(&mut rng);
         let (ins, to, sub) = if a_sub.contains(&b_sub) {
             // change b parent
@@ -148,7 +148,7 @@ where
                     sub_new_root = self.subtree_start(self.vertex_index(x));
                     break 'out1;
                 }
-                return self.change_parent(rng);
+                return self.change_pred(rng);
             }
         } else {
             'out2: loop {
@@ -167,7 +167,7 @@ where
                     sub_new_root = yi;
                     break 'out2;
                 }
-                return self.change_parent(rng);
+                return self.change_pred(rng);
             }
         }
 
@@ -890,7 +890,7 @@ mod tests {
     }
 
     #[test]
-    fn change_parent() {
+    fn change_pred() {
         let mut rng = rand::XorShiftRng::new_unseeded();
         for n in 5..30 {
             let g = Rc::new(CompleteGraph::new(n));
@@ -898,7 +898,7 @@ mod tests {
             tour.check();
             for _ in 0..100 {
                 let old = tour.clone();
-                let (ins, rem) = tour.change_parent(&mut rng);
+                let (ins, rem) = tour.change_pred(&mut rng);
                 assert_ne!(ins, rem);
                 tour.check();
                 assert_ne!(old.tour_edges(), tour.tour_edges());

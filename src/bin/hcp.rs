@@ -45,8 +45,12 @@ pub fn main() {
         Repr::NddrBalanced => {
             run::<NddrBalancedTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, op)
         }
-        Repr::Parent => run::<ParentTree<_>, DefaultVertexPropMut<StaticGraph, u32>>(g, op),
-        Repr::Parent2 => run::<Parent2Tree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, op),
+        Repr::Predecessor => {
+            run::<PredecessorTree<_>, DefaultVertexPropMut<StaticGraph, u32>>(g, op)
+        }
+        Repr::Predecessor2 => {
+            run::<PredecessorTree2<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, op)
+        }
     }
 }
 
@@ -114,15 +118,15 @@ fn args() -> (Repr, Op, String) {
                     "euler-tour",
                     "nddr-adj",
                     "nddr-balanced",
-                    "parent",
-                    "parent2",
+                    "pred",
+                    "pred2",
                 ])
                 "tree representation"
             )
             (@arg op:
                 +required
                 possible_values(&[
-                    "change-parent",
+                    "change-pred",
                     "change-any"
                 ])
                 "operation"
@@ -138,12 +142,12 @@ fn args() -> (Repr, Op, String) {
         "euler-tour" => Repr::EulerTour,
         "nddr-adj" => Repr::NddrAdj,
         "nddr-balanced" => Repr::NddrBalanced,
-        "parent" => Repr::Parent,
-        "parent2" => Repr::Parent2,
+        "pred" => Repr::Predecessor,
+        "pred2" => Repr::Predecessor2,
         _ => unreachable!(),
     };
     let op = match matches.value_of("op").unwrap() {
-        "change-parent" => Op::ChangeParent,
+        "change-pred" => Op::ChangePred,
         "change-any" => Op::ChangeAny,
         _ => unreachable!(),
     };
@@ -198,7 +202,7 @@ where
     fn mutate<R: Rng>(&mut self, op: Op, rng: R) {
         let (ins, rem) = match op {
             Op::ChangeAny => self.tree.change_any(rng),
-            Op::ChangeParent => self.tree.change_parent(rng),
+            Op::ChangePred => self.tree.change_pred(rng),
         };
 
         let (a, b) = self.tree.graph().ends(rem);
@@ -269,12 +273,12 @@ enum Repr {
     EulerTour,
     NddrAdj,
     NddrBalanced,
-    Parent,
-    Parent2,
+    Predecessor,
+    Predecessor2,
 }
 
 #[derive(Copy, Clone)]
 enum Op {
-    ChangeParent,
+    ChangePred,
     ChangeAny,
 }
