@@ -36,7 +36,7 @@ impl<G: AdjacencyGraph + Choose> NddrOneTree<G> {
             let mut ndds = collect_ndds(&sub, &[r]);
             assert_eq!(1, ndds.len());
             let mut t = NddTree::new(ndds.pop().unwrap());
-            // TODO: this should not be necessary
+            // TODO: find an away to not pass this closure
             t.calc_degs(|v| g.out_degree(v));
             t
         };
@@ -93,7 +93,7 @@ impl<G: AdjacencyGraph + Choose> NddrOneTree<G> {
     }
 
     fn find_op2<R: Rng>(&self, mut rng: R) -> (Edge<G>, usize, usize, usize) {
-        loop {
+        for _ in 0..1_000_000 {
             let (ins, r, a) = self.find_op1(&mut rng);
             let mut count = 0;
             let mut p = r;
@@ -111,6 +111,7 @@ impl<G: AdjacencyGraph + Choose> NddrOneTree<G> {
                 return (ins, p, r, a);
             }
         }
+        unreachable!("find_op2: could not find operands!")
     }
 }
 

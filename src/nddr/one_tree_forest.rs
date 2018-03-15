@@ -121,7 +121,6 @@ where
     last_op_size: usize,
 
     // The star tree is kept in trees[0]. The star tree connects the roots of the trees.
-    // TODO: Use RcArray
     trees: Vec<Rc<NddTree<Vertex<G>>>>,
     // Edges (u, v) such that u and v are star tree vertices (that is, tree roots)
     star_edges: Rc<RefCell<Vec<Edge<G>>>>,
@@ -131,7 +130,7 @@ where
     // if trees[i][maps[i][vertex_index[v]]].vertex == v,
     // then v is in tree[i] in position maps[i][vertex_index[v]]
     // len(trees) == len(maps) == O(sqrt(n))
-    // TODO: move this to NddTree
+    // TODO: move this to NddTree and use bitset like in euler tour
     maps: Vec<Rc<Vec<usize>>>,
 
     // Used if find_vertex_strategy = FatNode
@@ -190,7 +189,6 @@ where
             return true;
         }
 
-        // TODO: make it faster
         for e in self.edges_vec() {
             if !other.contains(e) {
                 return false;
@@ -265,7 +263,6 @@ where
             star_edges
         };
 
-        // TODO: improve
         edges.retain(|&e| {
             let (u, v) = g.ends(e);
             !star_tree.contains_edge(u, v)
@@ -347,9 +344,11 @@ where
 
     fn contains(&self, e: Edge<G>) -> bool {
         self.reinit_if_needed();
-        // TODO: what is the execution time?
         let (u, v) = self.graph().ends(e);
-        self.trees.iter().any(|t| t.contains_edge(u, v))
+        self.trees[0].contains_edge(u, v) || {
+            let (i, _) = self.find_index(u);
+            self.trees[i].contains_edge(u, v)
+        }
     }
 
     #[cfg(test)]
@@ -421,7 +420,7 @@ where
             self.replace1(ifrom, new);
         } else {
             let (from, to) = op1(&self[ifrom], p, &self[ito], a);
-            self.replace(ifrom, from, ito, to);
+            self.replace(ifrom, from, ito, Some(to));
         }
 
         (ins, rem)
@@ -440,7 +439,7 @@ where
             self.replace1(ifrom, new);
         } else {
             let (from, to) = op2(&self[ifrom], p, r, &self[ito], a);
-            self.replace(ifrom, from, ito, to);
+            self.replace(ifrom, from, ito, Some(to));
         }
 
         (ins, rem)
@@ -463,8 +462,7 @@ where
                 return ops;
             }
         }
-        // TODO: add limit
-        loop {
+        for _ in 0..1_000_000 {
             let (from, p, to, a) = match self.find_op_strategy() {
                 FindOpStrategy::Adj => self.find_op_adj(&mut rng),
                 FindOpStrategy::AdjSmaller => self.find_op_adj_smaller(&mut rng),
@@ -480,10 +478,11 @@ where
                 return (from, p, to, a);
             }
         }
+        unreachable!("find_vertices_op1: could not find valid operands!")
     }
 
     fn find_vertices_op2<R: Rng>(&self, mut rng: R) -> (usize, usize, usize, usize, usize) {
-        loop {
+        for _ in 0..1_000 {
             let (from, r, to, a) = self.find_vertices_op1(&mut rng);
             let mut count = 0;
             let mut p = r;
@@ -504,6 +503,7 @@ where
                 return (from, p, r, to, a);
             }
         }
+        unreachable!("find_vertices_op2: could not find valid operands!")
     }
 
     fn find_op_adj<R: Rng>(&self, mut rng: R) -> (usize, usize, usize, usize) {
@@ -619,23 +619,8 @@ where
 
     // Misc
 
-    fn replace1(&mut self, i: usize, mut ti: NddTree<Vertex<G>>) {
-        // TODO: unify replace1 and replace
-        if self.find_vertex_strategy() == FindVertexStrategy::FatNode {
-            self.new_version();
-            let data = &mut *self.data_mut();
-            Self::add_fat_node(data, self.version.get(), i, &ti);
-        }
-
-        if self.find_vertex_strategy() == FindVertexStrategy::Map {
-            let indices = &(self.data.borrow().vertex_index);
-            self.maps[i] = Self::new_map(indices, i, &ti);
-        }
-
-        // TODO: call only when its needed
-        ti.calc_degs(|v| self.graph().out_degree(v));
-
-        self.trees[i] = Rc::new(ti);
+    fn replace1(&mut self, i: usize, ti: NddTree<Vertex<G>>) {
+        self.replace(i, ti, 0, None);
     }
 
     fn replace(
@@ -643,27 +628,35 @@ where
         i: usize,
         mut ti: NddTree<Vertex<G>>,
         j: usize,
-        mut tj: NddTree<Vertex<G>>,
+        mut tj: Option<NddTree<Vertex<G>>>,
     ) {
         if self.find_vertex_strategy() == FindVertexStrategy::FatNode {
             self.new_version();
             let data = &mut *self.data_mut();
             Self::add_fat_node(data, self.version.get(), i, &ti);
-            Self::add_fat_node(data, self.version.get(), j, &tj);
+            if let Some(ref tj) = tj {
+                Self::add_fat_node(data, self.version.get(), j, &tj);
+            }
         }
 
         if self.find_vertex_strategy() == FindVertexStrategy::Map {
             let indices = &(self.data.borrow().vertex_index);
             self.maps[i] = Self::new_map(indices, i, &ti);
-            self.maps[j] = Self::new_map(indices, j, &tj);
+            if let Some(ref tj) = tj {
+                self.maps[j] = Self::new_map(indices, j, &tj);
+            }
         }
 
         // TODO: call only when its needed
         ti.calc_degs(|v| self.graph().out_degree(v));
-        tj.calc_degs(|v| self.graph().out_degree(v));
+        if let Some(ref mut tj) = tj {
+            tj.calc_degs(|v| self.graph().out_degree(v));
+        }
 
         self.trees[i] = Rc::new(ti);
-        self.trees[j] = Rc::new(tj);
+        if let Some(tj) = tj {
+            self.trees[j] = Rc::new(tj);
+        }
     }
 
     fn new_map(indices: &VertexIndexProp<G>, i: usize, ti: &NddTree<Vertex<G>>) -> Rc<Vec<usize>> {
@@ -716,13 +709,13 @@ where
     where
         F: FnMut(usize) -> bool,
     {
-        // TODO: add a limit or use sample without replacement
-        loop {
+        for _ in 0..10 * self[i].len() {
             let i = rng.gen_range(0, self[i].len());
             if f(i) {
                 return i;
             }
         }
+        unreachable!("select_tree_vertex_if: could not find vertex!")
     }
 
     fn find_index(&self, v: Vertex<G>) -> (usize, usize) {

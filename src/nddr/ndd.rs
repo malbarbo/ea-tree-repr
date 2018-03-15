@@ -123,8 +123,8 @@ impl<V> NddTree<V>
 where
     V: Copy + Hash + Eq + PartialEq + Debug,
 {
+    #[cfg(test)]
     pub fn from_vecs(vertices: &[V], dep: &[usize], deg: &[usize]) -> Self {
-        // TODO: Validade input or make private
         NddTree::new(
             vertices
                 .into_iter()
@@ -298,7 +298,6 @@ where
     V: Copy + Hash + Eq + PartialEq + Debug,
 {
     fn eq(&self, other: &Self) -> bool {
-        // TODO: Write test
         self.len() == other.len() && self.edges().iter().all(|e| other.contains_edge(e.0, e.1))
     }
 }
@@ -448,6 +447,12 @@ mod tests {
         );
         tree.change_root(5);
         assert_eq!(exp, tree);
+
+        for v in 0..tree.len() {
+            let mut new = tree.clone();
+            new.change_root(v);
+            assert_eq!(new, tree);
+        }
     }
 
     #[test]
