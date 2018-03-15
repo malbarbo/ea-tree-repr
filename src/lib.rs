@@ -1,4 +1,5 @@
 #![cfg_attr(test, feature(slice_rotate))]
+#![feature(vec_remove_item)]
 
 extern crate fera;
 extern crate fera_array;

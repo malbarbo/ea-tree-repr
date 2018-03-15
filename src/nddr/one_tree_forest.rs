@@ -54,7 +54,6 @@ where
     // replacement in select_tree_if. This does the role of the L_O array described in the paper.
     tree_indices: Vec<usize>,
     // Used to mark edges in a tree (M_E_T in the paper)
-    // TODO: Use a thread local bitmap
     m: Option<DefaultVertexPropMut<G, DefaultVertexPropMut<G, bool>>>,
 
     // The next fields are use if find_vertex_strategy = FatNode. In forest version h, the vertex
@@ -236,7 +235,7 @@ where
         g: Rc<G>,
         data: Rc<RefCell<Data<G>>>,
         mut edges: Vec<Edge<G>>,
-        mut rng: R,
+        rng: R,
     ) -> Self {
         let data_ = data;
         // use a clone to make the borrow checker happy
@@ -244,12 +243,11 @@ where
         let mut data = data.borrow_mut();
         let nsqrt = data.nsqrt;
 
-        let star_tree = {
-            let s = g.spanning_subgraph(&edges);
-            let r = s.choose_vertex(&mut rng).unwrap();
-            // let r = tree_center(&s);
-            Rc::new(NddTree::new(find_star_tree(&s, r, nsqrt, rng)))
-        };
+        let star_tree = Rc::new(NddTree::new(find_star_tree(
+            &g.spanning_subgraph(&edges),
+            nsqrt,
+            rng,
+        )));
 
         let roots = vec(star_tree.iter().map(|ndd| ndd.vertex()));
         let star_edges = {
@@ -275,7 +273,6 @@ where
 
         let mut trees = vec![star_tree];
 
-        // TODO: try to create a balanced NddrOneTreeForest
         trees.extend({
             let s = g.spanning_subgraph(edges);
             collect_ndds(&s, &roots).into_iter().map(|t| {

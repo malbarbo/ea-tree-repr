@@ -1,5 +1,12 @@
 use fera::graph::prelude::*;
+use fera::graph::algs::Degrees;
+use fera::graph::choose::Choose;
 use fera::graph::traverse::{continue_if, Control, Dfs, OnDiscoverTreeEdge, Visitor};
+
+use rand::Rng;
+
+use std::collections::{BinaryHeap, VecDeque};
+use std::cmp::Ordering;
 
 use Ndd;
 
@@ -37,20 +44,175 @@ where
     vis.trees
 }
 
-pub fn find_star_tree<G>(g: &G, v: Vertex<G>, n: usize) -> Vec<Ndd<Vertex<G>>>
+pub fn find_star_tree<G, R>(g: &G, n: usize, rng: R) -> Vec<Ndd<Vertex<G>>>
 where
-    G: IncidenceGraph,
+    G: IncidenceGraph + Choose,
+    R: Rng,
 {
+    find_star_tree_balanced(g, n, rng)
+}
+
+pub fn find_star_tree_dfs<G, R>(g: &G, n: usize, mut rng: R) -> Vec<Ndd<Vertex<G>>>
+where
+    G: IncidenceGraph + Choose,
+    R: Rng,
+{
+    let r = g.choose_vertex(&mut rng).unwrap();
     let mut edges = vec![];
-    // TODO: use a randwalk, so star_edges do not have a tendency
-    g.dfs(&mut OnDiscoverTreeEdge(|e| {
+
+    g.dfs(OnDiscoverTreeEdge(|e| {
         edges.push(e);
         continue_if(edges.len() + 1 < n)
-    })).root(v)
+    })).root(r)
         .run();
 
     let s = g.edge_induced_subgraph(edges);
-    collect_ndds(&s, &[v]).into_iter().next().unwrap()
+    collect_ndds(&s, &[r]).into_iter().next().unwrap()
+}
+
+pub fn find_star_tree_balanced<G, R>(g: &G, n: usize, rng: R) -> Vec<Ndd<Vertex<G>>>
+where
+    G: IncidenceGraph + Choose,
+    R: Rng,
+{
+    // used in binary heap ordered by the minimum sublen value
+    #[derive(Copy, Clone, Eq, PartialEq)]
+    struct Key<E: Copy + Eq + PartialEq> {
+        edge: E,
+        sublen: usize,
+    }
+
+    impl<E: Copy + Eq + PartialEq> Ord for Key<E> {
+        fn cmp(&self, other: &Self) -> Ordering {
+            // we want a min heap, so invert the comparison
+            other.sublen.cmp(&self.sublen)
+        }
+    }
+
+    impl<E: Copy + Eq + PartialEq> PartialOrd for Key<E> {
+        fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+            Some(self.cmp(other))
+        }
+    }
+
+    // the vertices that will form the star tree
+    let mut star = g.default_vertex_prop(true);
+    let mut sublen = g.default_vertex_prop(1usize);
+    let mut out: DefaultVertexPropMut<G, Vec<Edge<G>>> = g.vertex_prop(vec![]);
+    for e in g.edges() {
+        let (u, v) = g.ends(e);
+        out[u].push(e);
+        out[v].push(g.reverse(e));
+    }
+
+    // BinaryHeap does not support removing arbitrary entries, we work around this by adding
+    // repeated entries with updated sublen add validating the sublen before using a poped entry
+    let mut leafs: BinaryHeap<_> = g.vertices()
+        .filter(|&u| out[u].len() == 1)
+        .map(|u| {
+            let v = g.target(out[u][0]);
+            Key {
+                edge: out[u][0],
+                sublen: sublen[u] + sublen[v],
+            }
+        })
+        .collect();
+
+    for _ in 0..(g.num_vertices() - n) {
+        // u is a vertex with only one edge (u, v) such that sublen[u] + sublen[v] is minimum
+        let u = (0..)
+            .filter_map(|_| {
+                let Key { edge, sublen: len } = leafs.pop().unwrap();
+                let (u, v) = g.ends(edge);
+                // discard entries with incorrect sublen
+                if sublen[u] + sublen[v] == len {
+                    Some(u)
+                } else {
+                    None
+                }
+            })
+            .next()
+            .unwrap();
+
+        star[u] = false;
+
+        assert!(out[u].len() == 1);
+        let e = out[u].pop().unwrap();
+        let v = g.target(e);
+        sublen[v] += sublen[u];
+        out[v].remove_item(&e).unwrap();
+
+        if out[v].len() == 1 {
+            let e = out[v][0];
+            let w = g.target(e);
+            leafs.push(Key {
+                edge: e,
+                sublen: sublen[v] + sublen[w],
+            })
+        } else {
+            // re add leafs with the corrected sublen
+            for &e in &out[v] {
+                let e = g.reverse(e);
+                let (u, v) = g.ends(e);
+                if out[u].len() == 1 {
+                    leafs.push(Key {
+                        edge: out[u][0],
+                        sublen: sublen[u] + sublen[v],
+                    })
+                }
+            }
+        }
+    }
+
+    // we are left with g.num_vertices() - n star vertices, so we that the edges that
+    // connect this vertices
+    let edges: Vec<_> = g.edges()
+        .filter(|e| {
+            let (u, v) = g.ends(*e);
+            star[u] && star[v]
+        })
+        .collect();
+
+    find_star_tree_dfs(&g.edge_induced_subgraph(edges), n, rng)
+}
+
+pub fn find_star_tree_random_walk<G, R>(g: &G, n: usize, rng: R) -> Vec<Ndd<Vertex<G>>>
+where
+    G: IncidenceGraph + Choose,
+    R: Rng,
+{
+    let start = tree_center(g);
+    let mut edges = vec![];
+    for e in g.random_walk(rng).start(start) {
+        if !edges.contains(&e) {
+            edges.push(e);
+            if edges.len() + 1 == n {
+                break;
+            }
+        }
+    }
+
+    let s = g.edge_induced_subgraph(edges);
+    collect_ndds(&s, &[start]).into_iter().next().unwrap()
+}
+
+fn tree_center<G: AdjacencyGraph>(g: &G) -> Vertex<G> {
+    let mut deg = g.degree_spanning_subgraph(g.edges());
+    let mut q: VecDeque<_> = g.vertices().filter(|&v| deg[v] == 1).collect();
+    for _ in 0..g.num_vertices() - 1 {
+        let u = q.pop_front().unwrap();
+        for v in g.out_neighbors(u) {
+            if let Some(d) = deg[v].checked_sub(1) {
+                deg[v] = d;
+                if d == 1 {
+                    q.push_back(v);
+                }
+            }
+        }
+        deg[u] = 0;
+    }
+    assert_eq!(1, q.len());
+    q.pop_back().unwrap()
 }
 
 #[cfg(test)]
