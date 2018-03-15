@@ -459,7 +459,9 @@ where
 
     fn find_vertices_op1<R: Rng>(&self, mut rng: R) -> (usize, usize, usize, usize) {
         if self.should_mutate_star_tree(&mut rng) {
-            return self.find_op_star_edge(&mut rng);
+            if let Some(ops) = self.find_op_star_edge(&mut rng) {
+                return ops;
+            }
         }
         // TODO: add limit
         loop {
@@ -590,26 +592,29 @@ where
 
     fn can_insert_star_edge(&self, ins: Edge<G>) -> bool {
         let (u, v) = self.graph().ends(ins);
-        // FIXME: contains_edge is linear!, this can compromise O(sqrt(n)) time
-        // for non complete graph
-        // FIXME: when this function is called from find_op_star_edge find_vertex in called twice
-        self[0][0].vertex() != u && !self[0].contains_edge(u, v) && {
-            let p = self[0].find_vertex(u).unwrap();
-            let a = self[0].find_vertex(v).unwrap();
-            !self[0].is_ancestor(p, a)
-        }
+        self[0][0].vertex() != u && !self[0].contains_edge(u, v)
     }
 
-    fn find_op_star_edge<R: Rng>(&self, rng: &mut R) -> (usize, usize, usize, usize) {
+    fn find_op_star_edge<R: Rng>(&self, rng: &mut R) -> Option<(usize, usize, usize, usize)> {
         let e = {
-            *sample_without_replacement(&mut *self.star_edges.borrow_mut(), rng, |e| {
-                self.can_insert_star_edge(*e)
-            }).unwrap()
+            if let Some(&e) =
+                sample_without_replacement(&mut *self.star_edges.borrow_mut(), rng, |e| {
+                    self.can_insert_star_edge(*e)
+                }) {
+                e
+            } else {
+                // No edge can be inserted
+                return None;
+            }
         };
         let (u, v) = self.graph().ends(e);
         let p = self[0].find_vertex(u).unwrap();
         let a = self[0].find_vertex(v).unwrap();
-        (0, p, 0, a)
+        if !self[0].is_ancestor(p, a) {
+            Some((0, p, 0, a))
+        } else {
+            Some((0, a, 0, p))
+        }
     }
 
     // Misc
@@ -687,12 +692,8 @@ where
     }
 
     fn should_mutate_star_tree<R: Rng>(&self, rng: &mut R) -> bool {
-        // TODO: explain
-        // For now, we are only interested in moving subtrees. When we implement a real GA, we should
-        // enable this
-        let f = || false;
-        f() && self.trees[0].len() > 2 && 2 * self.star_edges.borrow().len() >= self.trees[0].len()
-            && rng.gen_range(0, self.data().nsqrt + 1) == self.data().nsqrt
+        // Do it with probability 1/nsqrt
+        rng.gen_range(0, self.data().nsqrt + 1) == 0
     }
 
     fn select_tree_if<R, F>(&self, rng: &mut R, mut f: F) -> Option<usize>
