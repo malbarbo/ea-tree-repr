@@ -9,6 +9,8 @@ extern crate rand;
 mod bitset;
 mod cowprop;
 mod euler;
+#[cfg(test)]
+mod euler_simple;
 mod nddr;
 mod parent;
 mod progress;
