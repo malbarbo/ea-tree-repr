@@ -1,7 +1,6 @@
 use rand::Rng;
 
 use std::fmt::Debug;
-use std::rc::Rc;
 
 // An simple implementation of EulerTour to help understand the change operations
 pub struct EulerTourSimple<T: PartialEq> {

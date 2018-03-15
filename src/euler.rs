@@ -6,6 +6,7 @@ use rand::Rng;
 
 use std::rc::Rc;
 
+// TODO: use a shared pool, like we use buffer in ParentTree
 use {bitset_acquire, bitset_release, Bitset};
 
 #[derive(Clone)]
