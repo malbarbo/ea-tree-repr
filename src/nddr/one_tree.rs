@@ -40,7 +40,7 @@ impl<G: AdjacencyGraph + Choose> NddrOneTree<G> {
             t.calc_degs(|v| g.out_degree(v));
             t
         };
-        Self { g: g, tree: tree }
+        Self { g, tree }
     }
 
     pub fn graph(&self) -> &Rc<G> {

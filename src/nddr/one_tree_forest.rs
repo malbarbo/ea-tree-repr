@@ -94,18 +94,18 @@ where
         let pi_pos = g.vertex_prop(Vec::<u32>::new());
         let vertex_index = g.vertex_index();
         Data {
-            nsqrt: nsqrt,
+            nsqrt,
             find_op_strategy: find_op,
             find_vertex_strategy: find_vertex,
-            vertex_index: vertex_index,
-            tree_indices: tree_indices,
-            m: m,
+            vertex_index,
+            tree_indices,
+            m,
             version: 0,
             k: DEFAULT_K,
             num_reinits: 0,
-            pi_version: pi_version,
-            pi_tree: pi_tree,
-            pi_pos: pi_pos,
+            pi_version,
+            pi_tree,
+            pi_pos,
         }
     }
 }
@@ -302,11 +302,11 @@ where
         let reinit = data.num_reinits;
 
         NddrOneTreeForest {
-            g: g,
+            g,
             data: data_,
             last_op_size: 0,
-            trees: trees,
-            maps: maps,
+            trees,
+            maps,
             version: Cell::new(version),
             reinit: Cell::new(reinit),
             history: RefCell::new(vec![version]),
@@ -635,7 +635,7 @@ where
             let data = &mut *self.data_mut();
             Self::add_fat_node(data, self.version.get(), i, &ti);
             if let Some(ref tj) = tj {
-                Self::add_fat_node(data, self.version.get(), j, &tj);
+                Self::add_fat_node(data, self.version.get(), j, tj);
             }
         }
 
@@ -643,7 +643,7 @@ where
             let indices = &(self.data.borrow().vertex_index);
             self.maps[i] = Self::new_map(indices, i, &ti);
             if let Some(ref tj) = tj {
-                self.maps[j] = Self::new_map(indices, j, &tj);
+                self.maps[j] = Self::new_map(indices, j, tj);
             }
         }
 

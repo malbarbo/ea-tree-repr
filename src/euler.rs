@@ -9,6 +9,8 @@ use std::rc::Rc;
 // TODO: use a shared pool, like we use buffer in ParentTree
 use {bitset_acquire, bitset_release, Bitset};
 
+const MAX_TRIES_CHANGE_ANY: usize = 5;
+
 #[derive(Clone)]
 pub struct EulerTourTree<G: WithEdge> {
     g: Rc<G>,
@@ -37,8 +39,8 @@ where
             g,
             segs: Rc::new(vec![]),
             vertices: vertices.into(),
-            nsqrt: nsqrt,
-            len: len,
+            nsqrt,
+            len,
         };
         tour.set_edges(edges);
         tour.check();
@@ -132,9 +134,13 @@ where
         let to;
         let sub_new_root;
         if self.subtree_len(sub) <= self.len / 2 {
+            // TODO: extract to a function
             'out1: loop {
                 let x = self.choose_subtree_vertex(sub, &mut rng);
-                for e in self.g.choose_out_edge_iter(x, &mut rng).take(5) {
+                for e in self.g
+                    .choose_out_edge_iter(x, &mut rng)
+                    .take(MAX_TRIES_CHANGE_ANY)
+                {
                     if e == rem {
                         continue;
                     }
@@ -151,9 +157,13 @@ where
                 return self.change_pred(rng);
             }
         } else {
+            // TODO: extract to a function
             'out2: loop {
                 let x = self.choose_non_subtree_vertex(sub, &mut rng);
-                for e in self.g.choose_out_edge_iter(x, &mut rng).take(5) {
+                for e in self.g
+                    .choose_out_edge_iter(x, &mut rng)
+                    .take(MAX_TRIES_CHANGE_ANY)
+                {
                     if e == rem || x == self.source(sub.start) {
                         continue;
                     }
@@ -302,16 +312,14 @@ where
             let a_start = self.subtree_start(a);
             if a_start != (0, 0) && self.get_edge(self.prev_pos(a_start)) == e {
                 continue;
-            } else {
-                let b_start = self.subtree_start(b);
-                if b_start != (0, 0) && self.get_edge(self.prev_pos(b_start)) == e {
-                    continue;
-                } else {
-                    let a_sub = Subtree::new(a_start, self.subtree_end(a));
-                    let b_sub = Subtree::new(b_start, self.subtree_end(b));
-                    return (e, a_sub, b_sub);
-                }
             }
+            let b_start = self.subtree_start(b);
+            if b_start != (0, 0) && self.get_edge(self.prev_pos(b_start)) == e {
+                continue;
+            }
+            let a_sub = Subtree::new(a_start, self.subtree_end(a));
+            let b_sub = Subtree::new(b_start, self.subtree_end(b));
+            return (e, a_sub, b_sub);
         }
         unreachable!()
     }
@@ -320,8 +328,7 @@ where
         let root = self.source((0, 0));
         let v = self.g
             .choose_vertex_iter(&mut rng)
-            .filter(|v| *v != root)
-            .next()
+            .find(|v| *v != root)
             .unwrap();
         self.subtree(v)
     }
@@ -346,7 +353,7 @@ where
         let end = self.pos_to_index(tree.end) + 1;
         let mut i = rng.gen_range(0, self.len - (end - start));
         if i >= start {
-            i = i + (end - start);
+            i += end - start;
         }
         assert!(!tree.contains_pos(self.index_to_pos(i)));
         self.source(self.index_to_pos(i))
@@ -448,7 +455,7 @@ where
         match last {
             Seg::Complete(seg) => segs.push(Rc::clone(seg)),
             Seg::Partial(source, target) => {
-                if source.len() == 0 {
+                if source.is_empty() {
                     return;
                 }
                 if source.len() < self.min_seg_len() {

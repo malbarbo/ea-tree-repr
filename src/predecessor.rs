@@ -32,10 +32,12 @@ where
     where
         I: IntoIterator<Item = Edge<G>>,
     {
+        let n = g.num_vertices();
+        let index = g.vertex_index();
         let mut tree = PredecessorTree {
-            g: g.clone(),
-            index: g.vertex_index(),
-            pred: A::with_value(G::edge_none(), g.num_vertices()),
+            g,
+            index,
+            pred: A::with_value(G::edge_none(), n),
             buffer: Rc::new(RefCell::new(vec![])),
         };
 

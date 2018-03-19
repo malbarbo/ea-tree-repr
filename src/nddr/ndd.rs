@@ -138,7 +138,7 @@ where
     pub fn new(ndds: Vec<Ndd<V>>) -> Self {
         // TODO: Validade input or make private
         NddTree {
-            ndds: ndds,
+            ndds,
             parents: RefCell::new(vec![]),
             deg: 0,
             deg_in_g: 0,
