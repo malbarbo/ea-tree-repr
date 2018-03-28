@@ -19,6 +19,8 @@ pub trait Tree<G: WithEdge>: Clone {
     fn change_any<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>);
 
     fn graph(&self) -> &Rc<G>;
+
+    fn edges(&self) -> Vec<Edge<G>>;
 }
 
 #[derive(Clone)]
@@ -30,6 +32,20 @@ where
         + Clone
         + Choose,
     DefaultVertexPropMut<G, bool>: Clone;
+
+impl<G> PartialEq for NddrAdjTree<G>
+where
+    G: AdjacencyGraph
+        + WithVertexIndexProp
+        + WithVertexProp<DefaultVertexPropMut<G, bool>>
+        + Clone
+        + Choose,
+    DefaultVertexPropMut<G, bool>: Clone,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
 
 impl<G> Tree<G> for NddrAdjTree<G>
 where
@@ -67,6 +83,10 @@ where
     fn graph(&self) -> &Rc<G> {
         self.0.graph()
     }
+
+    fn edges(&self) -> Vec<Edge<G>> {
+        self.0.edges()
+    }
 }
 
 #[derive(Clone)]
@@ -78,6 +98,20 @@ where
         + Clone
         + Choose,
     DefaultVertexPropMut<G, bool>: Clone;
+
+impl<G> PartialEq for NddrBalancedTree<G>
+where
+    G: AdjacencyGraph
+        + WithVertexIndexProp
+        + WithVertexProp<DefaultVertexPropMut<G, bool>>
+        + Clone
+        + Choose,
+    DefaultVertexPropMut<G, bool>: Clone,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
 
 impl<G> Tree<G> for NddrBalancedTree<G>
 where
@@ -115,6 +149,10 @@ where
     fn graph(&self) -> &Rc<G> {
         self.0.graph()
     }
+
+    fn edges(&self) -> Vec<Edge<G>> {
+        self.0.edges()
+    }
 }
 
 impl<G> Tree<G> for NddrOneTree<G>
@@ -139,6 +177,10 @@ where
 
     fn graph(&self) -> &Rc<G> {
         NddrOneTree::graph(self)
+    }
+
+    fn edges(&self) -> Vec<Edge<G>> {
+        NddrOneTree::edges(self)
     }
 }
 
@@ -170,6 +212,10 @@ where
     fn graph(&self) -> &Rc<G> {
         PredecessorTree::graph(self)
     }
+
+    fn edges(&self) -> Vec<Edge<G>> {
+        self.graph().vertices().filter_map(|v| self.pred(v)).collect()
+    }
 }
 
 impl<G> Tree<G> for EulerTourTree<G>
@@ -194,5 +240,9 @@ where
 
     fn graph(&self) -> &Rc<G> {
         EulerTourTree::graph(self)
+    }
+
+    fn edges(&self) -> Vec<Edge<G>> {
+        EulerTourTree::edges(self)
     }
 }

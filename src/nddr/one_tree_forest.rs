@@ -7,8 +7,8 @@ use rand::Rng;
 
 // system
 use std::cell::{Cell, Ref, RefCell, RefMut};
-use std::rc::Rc;
 use std::ops::Deref;
+use std::rc::Rc;
 
 // internal
 use {collect_ndds, find_star_tree, NddTree, one_tree_op1, one_tree_op2, op1, op2};
@@ -189,7 +189,7 @@ where
             return true;
         }
 
-        for e in self.edges_vec() {
+        for e in self.edges() {
             if !other.contains(e) {
                 return false;
             }
@@ -354,7 +354,7 @@ where
     #[cfg(test)]
     fn check(&self) {
         use fera::graph::algs::Trees;
-        let edges = self.edges_vec();
+        let edges = self.edges();
         for &e in &edges {
             assert!(self.contains(e));
         }
@@ -770,11 +770,11 @@ where
         self.history.borrow_mut().push(version);
     }
 
-    fn edges_vec(&self) -> Vec<Edge<G>> {
-        let v = vec(self.iter().map(|t| t.edges()));
-        vec(v.iter()
-            .flat_map(|t| t.iter())
-            .map(|&(u, v)| self.edge_by_ends(u, v)))
+    pub fn edges(&self) -> Vec<Edge<G>> {
+        self.iter()
+            .flat_map(|t| t.edges())
+            .map(|(u, v)| self.edge_by_ends(u, v))
+            .collect()
     }
 
     fn edge_by_ends(&self, u: Vertex<G>, v: Vertex<G>) -> Edge<G> {
@@ -867,7 +867,7 @@ mod tests {
     }
 
     macro_rules! def_test {
-        ($name:ident, $op:ident, $vertex:ident) => (
+        ($name: ident, $op: ident, $vertex: ident) => {
             #[test]
             fn $name() {
                 let mut rng = rand::weak_rng();
@@ -892,7 +892,7 @@ mod tests {
                     }
                 }
             }
-        )
+        };
     }
 
     def_test!(test_op1_adj_fatnode, Adj, FatNode);

@@ -84,6 +84,23 @@ where
         self.segs = Rc::new(segs);
     }
 
+    pub fn edges(&self) -> Vec<Edge<G>> {
+        let mut stack = vec![];
+        (0..self.segs.len())
+            .flat_map(|i| (0..self.segs[i].len()).map(move |j| (i, j)))
+            .filter_map(|(i, j)| {
+                let (u, v) = self.segs[i].get(j);
+                if stack.last() == Some(&(v, u)) || stack.last() == Some(&(u, v)) {
+                    stack.pop();
+                    None
+                } else {
+                    stack.push((u, v));
+                    Some(self.get_edge((i, j)))
+                }
+            })
+            .collect()
+    }
+
     pub fn graph(&self) -> &Rc<G> {
         &self.g
     }
@@ -750,16 +767,9 @@ where
             .collect()
     }
 
-    pub fn edges(&self) -> Vec<Edge<G>> {
-        self.tour_edges()
-            .into_iter()
-            .map(|(a, b)| self.g.edge_by_ends(self.vertices[a], self.vertices[b]))
-            .collect()
-    }
-
     pub fn check(&self) {
         use std::collections::HashSet;
-        use fera::graph::algs::{Paths, Trees};
+        use fera::graph::algs::Trees;
 
         // check seg lens
         for seg in self.segs.iter() {
@@ -774,11 +784,9 @@ where
             last = edge.1;
         }
 
-        let edges_set: HashSet<_> = self.edges().into_iter().collect();
-        assert!(self.g.spanning_subgraph(edges_set).is_tree());
+        assert!(self.g.spanning_subgraph(self.edges()).is_tree());
 
         // check if the tour is an euler tour
-        assert!(self.g.is_walk(self.edges()));
         let mut stack = vec![];
         for (a, b) in self.tour_edges() {
             let last = stack.last().cloned();

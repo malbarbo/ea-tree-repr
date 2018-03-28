@@ -1,5 +1,5 @@
-use fera::graph::prelude::*;
 use fera::graph::choose::Choose;
+use fera::graph::prelude::*;
 use rand::Rng;
 
 use std::rc::Rc;
@@ -50,6 +50,15 @@ impl<G: AdjacencyGraph + Choose> NddrOneTree<G> {
     pub fn contains(&self, e: Edge<G>) -> bool {
         let (u, v) = self.g.ends(e);
         self.tree.contains_edge(u, v)
+    }
+
+    pub fn edges(&self) -> Vec<Edge<G>> {
+        (1..self.tree.len())
+            .map(|i| {
+                let v = self.tree[i].vertex();
+                self.g.edge_by_ends(v, self.tree.parent_vertex(i).unwrap())
+            })
+            .collect()
     }
 
     pub fn op1<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
@@ -117,6 +126,8 @@ mod tests {
     use super::*;
     use rand;
     use random_sp;
+    use fera::graph::algs::Trees;
+
 
     fn new(n: u32) -> NddrOneTree<CompleteGraph> {
         let mut rng = rand::weak_rng();
@@ -133,6 +144,7 @@ mod tests {
             let (ins, rem) = tree.op1(&mut rng);
             assert!(tree.contains(ins));
             assert!(!tree.contains(rem));
+            assert!(tree.g.spanning_subgraph(tree.edges()).is_tree());
         }
     }
 
@@ -144,6 +156,7 @@ mod tests {
             let (ins, rem) = tree.op2(&mut rng);
             assert!(tree.contains(ins));
             assert!(!tree.contains(rem));
+            assert!(tree.g.spanning_subgraph(tree.edges()).is_tree());
         }
     }
 }
