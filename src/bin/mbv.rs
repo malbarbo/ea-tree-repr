@@ -44,10 +44,10 @@ pub fn main() {
     }
 
     let g = builder.finalize();
-    let g = if args.path {
-        Rc::new(g)
-    } else {
+    let g = if args.kind == Kind::Cycle {
         Rc::new(transform(&g))
+    } else {
+        Rc::new(g)
     };
     let g = &g;
 
@@ -68,40 +68,48 @@ pub fn main() {
         }
     }
 
-    let edges = match args.repr {
+    let (edges, branches) = match args.repr {
         Repr::EulerTour => {
-            run::<EulerTourTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, &args).edges()
+            run::<EulerTourTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, &args)
         }
         Repr::NddrAdj => {
-            run::<NddrAdjTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, &args).edges()
+            run::<NddrAdjTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, &args)
         }
         Repr::NddrBalanced => {
-            run::<NddrBalancedTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, &args).edges()
+            run::<NddrBalancedTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, &args)
         }
         Repr::Predecessor => {
-            run::<PredecessorTree<_>, DefaultVertexPropMut<StaticGraph, u32>>(g, &args).edges()
+            run::<PredecessorTree<_>, DefaultVertexPropMut<StaticGraph, u32>>(g, &args)
         }
         Repr::Predecessor2 => {
-            run::<PredecessorTree2<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, &args).edges()
+            run::<PredecessorTree2<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, &args)
         }
     };
 
-    let mut path = path(g, &edges);
-
-    if !args.path {
-        transform_path(g, &mut path);
+    if args.kind == Kind::Mbv {
+        print!("{} {}", args.input, branches);
+        for e in edges {
+            let (u, v) = g.ends(e);
+            print!(" {}-{}", u + 1, v + 1)
+        }
+        println!();
+    } else {
+        if branches != 0 {
+            panic!("cannot find an {:?}", args.kind);
+        }
+        let mut path = path(g, &edges);
+        if args.kind == Kind::Cycle {
+            transform_path(g, &mut path);
+        }
+        print!("{}", args.input);
+        for u in path.iter().map(|&e| g.source(e)) {
+            print!(" {}", u + 1);
+        }
+        println!(" {}", g.target(*path.last().unwrap()) + 1);
     }
-
-    print!("{} ", args.input);
-    let mut space = "";
-    for u in path.iter().map(|&e| g.source(e)) {
-        print!("{}{}", space, u + 1);
-        space = " ";
-    }
-    println!("{}{}", space, g.target(*path.last().unwrap()) + 1);
 }
 
-fn run<T, D>(g: &Rc<StaticGraph>, args: &Args) -> T
+fn run<T, D>(g: &Rc<StaticGraph>, args: &Args) -> (Vec<Edge<StaticGraph>>, u32)
 where
     T: Tree<StaticGraph>,
     D: VertexPropMutNew<StaticGraph, u32>,
@@ -131,7 +139,7 @@ where
     let mut best = position_min_by_key(&pop, |ind| ind.fitness()).unwrap();
 
     if pop[best].is_optimum() {
-        return pop[best].clone().tree;
+        return (pop[best].tree.edges(), pop[best].branches);
     }
 
     if !args.quiet {
@@ -175,7 +183,8 @@ where
             break;
         }
     }
-    pop[best].clone().tree
+
+    (pop[best].tree.edges(), pop[best].branches)
 }
 
 #[derive(Clone)]
@@ -384,7 +393,7 @@ struct Args {
     pop_size: u32,
     max_num_iters: Option<u64>,
     max_num_iters_no_impr: Option<u64>,
-    path: bool,
+    kind: Kind,
     quiet: bool,
 }
 
@@ -411,7 +420,17 @@ fn args() -> Args {
                 --max_num_iters_no_impr
                 +takes_value
                 "The maximum number of iterations without improvements")
-            (@arg path: --path "Find a Hamiltonian path instead of a cycle")
+            (@arg kind:
+                --kind
+                +takes_value
+                default_value("mbv")
+                possible_values(&[
+                    "mbv",
+                    "path",
+                    "cycle",
+                ])
+                "The kind of problem to solve: Minimum branch vertices, Hamiltonian path or Hamiltonian cycle"
+            )
             (@arg quiet: --quiet "Only prints the final solution")
             (@arg repr:
                 +required
@@ -467,7 +486,12 @@ fn args() -> Args {
                     e.exit()
                 }
             }),
-        path: matches.is_present("path"),
+        kind: match matches.value_of("kind").unwrap() {
+            "mbv" => Kind::Mbv,
+            "path" => Kind::Path,
+            "cycle" => Kind::Cycle,
+            _ => unreachable!(),
+        },
         quiet: matches.is_present("quiet"),
         repr: match matches.value_of("repr").unwrap() {
             "euler-tour" => Repr::EulerTour,
@@ -499,4 +523,11 @@ enum Repr {
 enum Op {
     ChangePred,
     ChangeAny,
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+enum Kind {
+    Mbv,
+    Path,
+    Cycle,
 }
