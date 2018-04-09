@@ -1,0 +1,75 @@
+#!/usr/bin/python3
+
+import sys
+
+import networkx as nx
+
+
+def main():
+    for i, line in enumerate(sys.stdin.readlines()):
+        n, g, branches, edges = parse(line)
+        error = check(n, g, branches, edges)
+        if error:
+            print("{}: Fail\n  {}".format(i + 1, error))
+        else:
+            print("{}: Ok".format(i + 1))
+
+
+def check(n, g, branches, edges):
+    deg = [0] * (n + 1)
+    for u, v in edges:
+        if (u, v) not in g:
+            return "invalid edge: {}".format((u, v))
+        deg[u] += 1
+        deg[v] += 1
+    b = sum(1 for u in range(1, n + 1) if deg[u] > 2)
+    if b != branches:
+        return "wrong number of branches: {} != {}".format(b, branches)
+    if n - 1 != len(edges):
+        return "wrong number of edges: {} != {}".format(n - 1, len(edges))
+    if not is_connected(edges):
+        return "the graph is not connected"
+    return None
+
+
+def is_connected(edges):
+    g = nx.Graph()
+    g.add_edges_from(edges)
+    return nx.is_connected(g)
+
+
+def parse(line):
+    values = line.split()
+    n, g = read_graph(open(values[0]))
+    branches = int(values[1])
+    edges = parse_edges(values[2:])
+    return n, g, branches, edges
+
+
+def parse_edges(edges):
+    r = []
+    for edge in edges:
+        a, b = edge.split('-')
+        r.append((int(a), int(b)))
+    return r
+
+
+def read_graph(reader):
+    n = 0
+    edges = set()
+    for line in reader.readlines():
+        try:
+            (a, b) = line.split()
+            a = int(a)
+            b = int(b)
+            n = max(n, a)
+            n = max(n, b)
+            edges.add((a, b))
+            edges.add((b, a))
+        except:
+            pass
+
+    return n, edges
+
+if __name__ == "__main__":
+    main()

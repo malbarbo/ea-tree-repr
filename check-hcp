@@ -1,0 +1,66 @@
+#!/usr/bin/python3
+
+import sys
+import argparse
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description='Check hamiltonian problems solutions',
+    )
+    parser.add_argument(
+        '-p',
+        help='check if the solution is a path instead of a cycle',
+        action="store_true"
+    )
+    args = parser.parse_args()
+    for i, line in enumerate(sys.stdin.readlines()):
+        n, g, sol = parse(line)
+        error = check(args.p, n, g, sol,)
+        if error:
+            print("{}: Fail\n  {}".format(i + 1, error))
+        else:
+            print("{}: Ok".format(i + 1))
+
+
+def check(path, n, g, sol):
+    visited = [False] * (n + 1)
+    if not path and sol[0] != sol[-1]:
+        return "the first and last vertex are different: {} != {}".format(sol[0], sol[-1])
+    ll = n if path else n + 1
+    if ll != len(sol):
+        return "wrong number of vertices: {} != {}".format(ll, len(sol))
+    for (u, v) in zip(sol, sol[1:]):
+        if visited[u]:
+            return "vertex visited twice: {}".format(u)
+        if (u, v) not in g:
+            return "invalid edge: {}".format((u, v))
+        visited[u] = True
+    return None
+
+
+def parse(line):
+    values = line.split()
+    n, g = read_graph(open(values[0]))
+    return n, g, list(map(int, values[1:]))
+
+
+def read_graph(reader):
+    n = 0
+    edges = set()
+    for line in reader.readlines():
+        try:
+            (a, b) = line.split()
+            a = int(a)
+            b = int(b)
+            n = max(n, a)
+            n = max(n, b)
+            edges.add((a, b))
+            edges.add((b, a))
+        except:
+            pass
+
+    return n, edges
+
+if __name__ == "__main__":
+    main()
