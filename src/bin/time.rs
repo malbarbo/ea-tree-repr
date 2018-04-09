@@ -12,7 +12,7 @@ use rand::Rng;
 use rayon::prelude::*;
 
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 pub fn main() {
     setup_rayon();
@@ -26,9 +26,9 @@ pub fn main() {
         Repr::Predecessor2 => run::<PredecessorTree2<_>>(&*sizes, diameter, op, times),
     };
 
-    println!("size time");
+    println!("size time clone change");
     for (s, t) in sizes.into_iter().zip(time) {
-        println!("{} {:.03}", s, micro_secs(t));
+        println!("{} {:.03} {:.03} {:.03}", s, micro_secs(t.0 + t.1), micro_secs(t.0), micro_secs(t.1));
     }
 }
 
@@ -37,27 +37,33 @@ fn run<T: Tree<CompleteGraph>>(
     diameter: Option<f32>,
     op: Op,
     times: usize,
-) -> Vec<Duration> {
-    let mut time = vec![Duration::default(); sizes.len()];
+) -> Vec<(Duration, Duration)> {
+    const TIMES: usize = 100_000;
+    let mut time = vec![(Duration::default(), Duration::default()); sizes.len()];
     for _ in progress(0..times) {
         time.par_iter_mut().zip(sizes).for_each(|(t, &n)| {
             let mut rng = rand::weak_rng();
             let (g, tree) = graph_tree(n, diameter, &mut rng);
             let tree = T::new(Rc::new(g), &*tree, &mut rng);
-            let start = Instant::now();
             match op {
-                Op::ChangePred => for _ in 0..10_000 {
-                    tree.clone().change_pred(&mut rng);
+                Op::ChangePred => for _ in 0..TIMES {
+                    let (t0, mut tree) = time_it(|| tree.clone());
+                    let (t1, _) = time_it(|| tree.change_pred(&mut rng));
+                    t.0 += t0;
+                    t.1 += t1;
                 },
-                Op::ChangeAny => for _ in 0..10_000 {
-                    tree.clone().change_any(&mut rng);
+                Op::ChangeAny => for _ in 0..TIMES {
+                    let (t0, mut tree) = time_it(|| tree.clone());
+                    let (t1, _) = time_it(|| tree.change_any(&mut rng));
+                    t.0 += t0;
+                    t.1 += t1;
                 },
             }
-            *t += start.elapsed();
         })
     }
     for t in &mut time {
-        *t /= 10_000 * times as u32;
+        t.0 /= (TIMES * times) as u32;
+        t.1 /= (TIMES * times) as u32;
     }
     time
 }

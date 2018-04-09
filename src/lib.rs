@@ -27,7 +27,13 @@ pub use self::progress::*;
 pub use self::random::*;
 pub use self::tree::*;
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
+
+pub fn time_it<T, F: FnOnce() -> T>(fun: F) -> (Duration, T) {
+    let start = Instant::now();
+    let r = fun();
+    (start.elapsed(), r)
+}
 
 pub fn nano_secs(t: Duration) -> u64 {
     1_000_000_000 * t.as_secs() + t.subsec_nanos() as u64
