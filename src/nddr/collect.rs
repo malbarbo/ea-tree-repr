@@ -1,12 +1,12 @@
-use fera::graph::prelude::*;
 use fera::graph::algs::Degrees;
 use fera::graph::choose::Choose;
+use fera::graph::prelude::*;
 use fera::graph::traverse::{continue_if, Control, Dfs, OnDiscoverTreeEdge, Visitor};
 
 use rand::Rng;
 
-use std::collections::{BinaryHeap, VecDeque};
 use std::cmp::Ordering;
+use std::collections::{BinaryHeap, VecDeque};
 
 use Ndd;
 

@@ -1,5 +1,5 @@
-use fera::graph::prelude::*;
 use fera::graph::choose::Choose;
+use fera::graph::prelude::*;
 use fera_array::Array;
 use rand::{Rng, XorShiftRng};
 
@@ -214,7 +214,10 @@ where
     }
 
     fn edges(&self) -> Vec<Edge<G>> {
-        self.graph().vertices().filter_map(|v| self.pred(v)).collect()
+        self.graph()
+            .vertices()
+            .filter_map(|v| self.pred(v))
+            .collect()
     }
 }
 

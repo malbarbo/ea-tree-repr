@@ -768,8 +768,8 @@ where
     }
 
     pub fn check(&self) {
-        use std::collections::HashSet;
         use fera::graph::algs::Trees;
+        use std::collections::HashSet;
 
         // check seg lens
         for seg in self.segs.iter() {

@@ -1,12 +1,12 @@
-use fera::graph::prelude::*;
 use fera::graph::choose::Choose;
+use fera::graph::prelude::*;
 use fera::graph::traverse::{Dfs, OnDiscoverTreeEdge};
 use fera_array::{Array, CowNestedArray, CowNestedNestedArray, VecArray};
 use rand::Rng;
 
 use std::cell::RefCell;
-use std::rc::Rc;
 use std::mem;
+use std::rc::Rc;
 
 pub type PredecessorTree2<G> = PredecessorTree<G, CowNestedArray<OptionEdge<G>>>;
 pub type PredecessorTree3<G> = PredecessorTree<G, CowNestedNestedArray<OptionEdge<G>>>;

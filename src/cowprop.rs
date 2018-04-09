@@ -1,5 +1,5 @@
-use fera_array::{Array, CowNestedArray};
 use fera::graph::prelude::*;
+use fera_array::{Array, CowNestedArray};
 
 use std::ops::{Index, IndexMut};
 

@@ -867,7 +867,7 @@ mod tests {
     }
 
     macro_rules! def_test {
-        ($name: ident, $op: ident, $vertex: ident) => {
+        ($name:ident, $op:ident, $vertex:ident) => {
             #[test]
             fn $name() {
                 let mut rng = rand::weak_rng();
