@@ -52,13 +52,15 @@ where
         let g = &self.g;
         let index = g.vertex_index();
         let pred = &mut self.pred;
+        for v in g.vertices() {
+            pred[index.get(v)] = G::edge_none();
+        }
         let sub = g.spanning_subgraph(edges);
         let r = sub.edges().next().map(|e| g.source(e));
-        pred[index.get(r.unwrap())] = G::edge_none();
-        sub.dfs(OnDiscoverTreeEdge(|e| {
-            pred[index.get(g.target(e))] = g.reverse(e).into();
-        })).roots(r)
-            .run();
+            sub.dfs(OnDiscoverTreeEdge(|e| {
+                pred[index.get(g.target(e))] = g.reverse(e).into();
+            })).roots(r)
+                .run();
     }
 
     pub fn contains(&self, e: Edge<G>) -> bool {
@@ -295,6 +297,24 @@ where
             self.set_pred(v, ins);
         }
         (ins, rem)
+    }
+
+    pub fn insert_remove<F>(&mut self, buffer: &mut Vec<Edge<G>>, ins: Edge<G>, rem: F) -> Edge<G>
+    where
+        F: FnOnce(&[Edge<G>]) -> usize,
+    {
+        let (u, v) = self.g.ends(ins);
+        self.find_path(u, v, buffer);
+        let rem = buffer[rem(buffer)];
+        assert!(self.cut(rem));
+        if self.is_root(u) {
+            self.set_pred(u, ins);
+        } else {
+            self.make_root(v);
+            let ins = self.g.reverse(ins);
+            self.set_pred(v, ins);
+        }
+        rem
     }
 
     fn choose_nontree_edge<R: Rng>(&self, mut rng: R) -> Edge<G> {
