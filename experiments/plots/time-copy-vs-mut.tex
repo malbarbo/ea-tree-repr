@@ -1,0 +1,22 @@
+\documentclass[tikz]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.13}
+\usepackage{siunitx}
+
+\begin{document}
+  \begin{tikzpicture}
+    \begin{axis}[
+        legend pos = north west,
+        scaled x ticks = false,
+        scaled y ticks = false,
+        xlabel=Number of vertices,
+        ylabel=Time (\si{\us}),
+      ]
+      \addplot+ [mark=none] table[y index = 2] {../results/time-copy-vs-mut-pred-0};
+      \addplot+ [mark=none] table[y index = 3] {../results/time-copy-vs-mut-pred-0};
+      \addplot+ [mark=none] table[y index = 3] {../results/time-copy-vs-mut-pred-1};
+      \legend{Copy, ChangePred, ChangeAny}
+    \end{axis}
+  \end{tikzpicture}
+\end{document}
