@@ -1,0 +1,18 @@
+\documentclass[tikz]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage[brazil]{babel}
+\usepackage{pgfplots}
+
+\begin{document}
+  \begin{tikzpicture}
+    \begin{axis}[
+        legend pos = north west,
+        xlabel=Mutation,
+        ylabel=Subtree length,
+      ]
+      \addplot+ [mark=none] table {../results/nddr-subtree-len-1-0};
+      \addplot+ [mark=none] table {../results/nddr-subtree-len-1-1};
+      \legend{Adjacent, Balanced}
+    \end{axis}
+  \end{tikzpicture}
+\end{document}
