@@ -17,7 +17,9 @@ use rand::{Rng, SeedableRng, XorShiftRng};
 use std::rc::Rc;
 
 // local
-use ea_tree_repr::PredecessorTree;
+use ea_tree_repr::{PredecessorTree, Tree};
+
+const SCALE: f64 = 10000000000.0;
 
 pub fn main() {
     let args = args();
@@ -25,12 +27,24 @@ pub fn main() {
         println!("{:#?}", args);
     }
     let (g, w) = read(&args.input);
-    run(Rc::new(g), w, &args);
+    let (it, weight, edges) = run(Rc::new(g), w, &args);
+    println!("it = {}, best = {}", it, weight as f64 / SCALE);
+    print!("{}", weight as f64 / SCALE);
+    for (u, v) in g.ends(edges) {
+        print!(" {:?}-{:?}", u, v);
+    }
+    println!()
 }
 
-fn run(g: Rc<CompleteGraph>, w: DefaultEdgePropMut<CompleteGraph, u64>, args: &Args) {
+fn run(
+    g: Rc<CompleteGraph>,
+    w: DefaultEdgePropMut<CompleteGraph, u64>,
+    args: &Args,
+) -> (u64, u64, Vec<Edge<CompleteGraph>>) {
     let mut rng = XorShiftRng::from_seed([args.seed, args.seed, args.seed, args.seed]);
     let mut edges = vec(g.edges());
+
+    // Initialize the population
     let mut pop = vec![];
     for _ in 0..args.pop_size {
         rng.shuffle(&mut edges);
@@ -43,6 +57,7 @@ fn run(g: Rc<CompleteGraph>, w: DefaultEdgePropMut<CompleteGraph, u64>, args: &A
         }
     }
 
+    // Saves the best
     let mut best = position_min_by_key(&pop, |ind| ind.fitness()).unwrap();
 
     if !args.quiet {
@@ -57,17 +72,23 @@ fn run(g: Rc<CompleteGraph>, w: DefaultEdgePropMut<CompleteGraph, u64>, args: &A
         rng.clone(),
     );
 
-    let mut last_it_impr = 0;
+    let mut it_best = 0;
     for it in 0..=args.max_num_iters.unwrap_or(u64::max_value()) {
         let i = rng.gen_range(0, pop.len());
         let mut new = pop[i].clone();
-        op.mutate(&w, &mut new);
+
+        if args.op == Op::ChangePred {
+            op.change_pred(&w, &mut new);
+        } else {
+            op.change_any(&w, &mut new);
+        }
         if pop.contains(&new) {
             continue;
         }
+
         if new.fitness() <= pop[i].fitness() {
             if new.fitness() < pop[best].fitness() {
-                last_it_impr = it;
+                it_best = it;
                 best = i;
                 if !args.quiet {
                     println!("it = {}, best = {:?}", it, new.weight);
@@ -80,7 +101,7 @@ fn run(g: Rc<CompleteGraph>, w: DefaultEdgePropMut<CompleteGraph, u64>, args: &A
             best = position_min_by_key(&pop, |ind| ind.fitness()).unwrap();
         }
 
-        if it - last_it_impr >= args.max_num_iters_no_impr.unwrap_or(u64::max_value()) {
+        if it - it_best >= args.max_num_iters_no_impr.unwrap_or(u64::max_value()) {
             if !args.quiet {
                 println!(
                     "max number of iterations without improvement reached: {:?}",
@@ -91,7 +112,7 @@ fn run(g: Rc<CompleteGraph>, w: DefaultEdgePropMut<CompleteGraph, u64>, args: &A
         }
     }
 
-    panic!()
+    (it_best, pop[best].weight, pop[best].tree.edges())
 }
 
 #[derive(Clone)]
@@ -151,6 +172,20 @@ where
         self.weight = weight;
     }
 
+    fn update_deg_weight(&mut self, ins: Edge<G>, rem: Edge<G>, w: &DefaultEdgePropMut<G, u64>) {
+        let g = self.tree.graph();
+        self.weight -= w[rem];
+        self.weight += w[ins];
+
+        let (u, v) = g.ends(ins);
+        self.deg[u] += 1;
+        self.deg[v] += 1;
+
+        let (u, v) = g.ends(rem);
+        self.deg[u] -= 1;
+        self.deg[v] -= 1;
+    }
+
     fn fitness(&self) -> u64 {
         self.weight
     }
@@ -183,7 +218,52 @@ where
         }
     }
 
-    pub fn mutate(&mut self, w: &DefaultEdgePropMut<G, u64>, ind: &mut Ind<G>) {
+    pub fn change_pred(&mut self, w: &DefaultEdgePropMut<G, u64>, ind: &mut Ind<G>) {
+        let g = ind.tree.graph().clone();
+        let mut ins;
+        let rem;
+        loop {
+            ins = self.choose_edge(&ind.deg, &ind.tree);
+            let (u, v) = g.ends(ins);
+
+            if ind.tree.is_ancestor_of(u, v) {
+                if ind.deg[u] < self.dc {
+                    ins = g.reverse(ins);
+                    rem = ind.tree.set_pred(v, ins);
+                    break;
+                }
+            } else if ind.tree.is_ancestor_of(v, u) {
+                if ind.deg[v] < self.dc {
+                    rem = ind.tree.set_pred(u, ins);
+                    break;
+                }
+            } else {
+                match (ind.deg[u] < self.dc, ind.deg[v] < self.dc) {
+                    (false, false) => panic!(),
+                    (false, true) => {
+                        rem = ind.tree.set_pred(u, ins);
+                    }
+                    (true, false) => {
+                        ins = g.reverse(ins);
+                        rem = ind.tree.set_pred(v, ins);
+                    }
+                    (true, true) => {
+                        if self.rng.gen() {
+                            rem = ind.tree.set_pred(u, ins);
+                        } else {
+                            ins = g.reverse(ins);
+                            rem = ind.tree.set_pred(v, ins);
+                        }
+                    }
+                }
+                break;
+            }
+        }
+
+        ind.update_deg_weight(ins, rem.unwrap(), w)
+    }
+
+    pub fn change_any(&mut self, w: &DefaultEdgePropMut<G, u64>, ind: &mut Ind<G>) {
         let g = ind.tree.graph().clone();
         let ins = self.choose_edge(&ind.deg, &ind.tree);
 
@@ -203,16 +283,7 @@ where
             })
         };
 
-        ind.weight -= w[rem];
-        ind.weight += w[ins];
-
-        let (u, v) = g.ends(ins);
-        ind.deg[u] += 1;
-        ind.deg[v] += 1;
-
-        let (u, v) = g.ends(rem);
-        ind.deg[u] -= 1;
-        ind.deg[v] -= 1;
+        ind.update_deg_weight(ins, rem, w);
     }
 
     fn choose_edge<Deg>(&mut self, deg: &Deg, tree: &PredecessorTree<G>) -> Edge<G>
@@ -257,8 +328,7 @@ fn read(input: &str) -> (CompleteGraph, DefaultEdgePropMut<CompleteGraph, u64>) 
             if data[i * n + j] != data[j * n + i] {
                 panic!()
             }
-            // TODO: use a constant
-            w[e] = (100000000.0 * data[i * n + j]) as _;
+            w[e] = (SCALE * data[i * n + j]) as _;
         }
     }
     return (g, w);
@@ -266,6 +336,7 @@ fn read(input: &str) -> (CompleteGraph, DefaultEdgePropMut<CompleteGraph, u64>) 
 
 #[derive(Debug)]
 struct Args {
+    op: Op,
     dc: u32,
     input: String,
     seed: u32,
@@ -304,6 +375,14 @@ fn args() -> Args {
                 +takes_value
                 "The maximum number of iterations without improvements")
             (@arg quiet: --quiet "Only prints the final solution")
+            (@arg op:
+                +required
+                possible_values(&[
+                    "change-pred",
+                    "change-any"
+                ])
+                "operation"
+            )
             (@arg dc:
                 +required
                 "degree constraint"
@@ -353,7 +432,18 @@ fn args() -> Args {
                 }
             }),
         quiet: matches.is_present("quiet"),
+        op: match matches.value_of("op").unwrap() {
+            "change-pred" => Op::ChangePred,
+            "change-any" => Op::ChangeAny,
+            _ => unreachable!(),
+        },
         dc: value_t_or_exit!(matches.value_of("dc"), u32),
         input: matches.value_of("input").unwrap().to_string(),
     }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq)]
+enum Op {
+    ChangePred,
+    ChangeAny,
 }
