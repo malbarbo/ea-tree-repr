@@ -6,17 +6,23 @@
 BASE := ../target/release
 COPY_VS_MUT := $(shell seq 1000 1000 65000)
 SUBTREE_FIRST := $(shell seq 10 10 1000)
+CHANGE_PRED := $(shell seq 100 100 10000)
+CHANGE_ANY := ${CHANGE_PRED}
 
 all: \
 	results/time-copy-vs-mut.pdf \
 	results/time-copy-vs-mut-2.pdf \
 	results/nddr-subtree-len-1.pdf \
 	results/nddr-subtree-len-2.pdf \
-	results/nddr-subtree-len-first-1.pdf
+	results/nddr-subtree-len-first-1.pdf \
+	results/time-change-pred.pdf \
+	results/time-change-any.pdf \
+	results/time-diameter-change-pred.pdf \
+	results/time-diameter-change-any.pdf
 
 
 #######################
-# Time Copy vs Mutation
+# Copy time vs Mutation time
 
 results/time-copy-vs-mut.pdf:
 	mkdir -p results
@@ -36,7 +42,7 @@ results/time-copy-vs-mut-2.pdf:
 
 
 #######################
-# Time NDDR subtree
+# NDDR subtree length
 
 results/nddr-subtree-len-1.pdf:
 	mkdir -p results
@@ -61,3 +67,43 @@ results/nddr-subtree-len-first-1.pdf:
 		results/nddr-subtree-len-first-1 \
 		"adj|balanced change-any 10000 ${SUBTREE_FIRST}" # times sizes
 	tectonic plots/nddr-subtree-len-first-1.tex -o results/
+
+
+#######################
+# Mutation time vs tree size with random diameter
+
+results/time-change-pred.pdf:
+	mkdir -p results
+	./run-combinations \
+		${BASE}/time \
+		results/time-change-pred \
+		"euler-tour|nddr-balanced|pred|pred2 change-pred 100 ${CHANGE_PRED}" # times sizes
+	tectonic plots/time-change-pred.tex -o results/
+
+results/time-change-any.pdf:
+	mkdir -p results
+	./run-combinations \
+		${BASE}/time \
+		results/time-change-any \
+		"euler-tour|nddr-balanced|pred|pred2 change-any 100 ${CHANGE_ANY}" # times sizes
+	tectonic plots/time-change-any.tex -o results/
+
+
+#######################
+# Mutation time vs tree diameter
+
+results/time-diameter-change-pred.pdf:
+	mkdir -p results
+	./run-combinations \
+		${BASE}/time-diameter \
+		results/time-diameter-change-pred \
+		"euler-tour|nddr-balanced|pred|pred2 change-pred 1000 100 100" # n samples times
+	tectonic plots/time-diameter-change-pred.tex -o results/
+
+results/time-diameter-change-any.pdf:
+	mkdir -p results
+	./run-combinations \
+		${BASE}/time-diameter \
+		results/time-diameter-change-any \
+		"euler-tour|nddr-balanced|pred|pred2 change-any 1000 100 100" # n samples times
+	tectonic plots/time-diameter-change-any.tex -o results/

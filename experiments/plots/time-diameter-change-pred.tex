@@ -1,0 +1,24 @@
+\documentclass[tikz]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage[brazil]{babel}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.13}
+\usepackage{siunitx}
+
+\begin{document}
+  \begin{tikzpicture}
+    \begin{axis}[
+        legend pos = north west,
+        scaled x ticks = false,
+        scaled y ticks = false,
+        xlabel=Diameter,
+        ylabel=Time (\si{\us}),
+      ]
+      \addplot+ [mark=none] table {../results/time-diameter-change-pred-0};
+      \addplot+ [mark=none] table {../results/time-diameter-change-pred-1};
+      \addplot+ [mark=none] table {../results/time-diameter-change-pred-2};
+      \addplot+ [mark=none] table {../results/time-diameter-change-pred-3};
+      \legend{EulerTour, NddrBalanced, Parent, Parent2}
+    \end{axis}
+  \end{tikzpicture}
+\end{document}
