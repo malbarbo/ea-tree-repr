@@ -1,13 +1,17 @@
+#[macro_use]
+extern crate clap;
 extern crate ea_tree_repr;
 extern crate fera;
+#[macro_use]
+extern crate log;
 extern crate rand;
 extern crate tsplib;
 
-#[macro_use]
-extern crate clap;
+// system
+use std::collections::BTreeMap;
+use std::rc::Rc;
 
-use ea_tree_repr::*;
-
+// external
 use clap::ErrorKind;
 use fera::fun::{position_max_by_key, position_min_by_key, vec};
 use fera::graph::algs::{Kruskal, Paths};
@@ -15,15 +19,16 @@ use fera::graph::prelude::*;
 use fera::graph::traverse::{Dfs, OnDiscoverTreeEdge};
 use rand::{Rng, SeedableRng};
 
-use std::collections::BTreeMap;
-use std::rc::Rc;
+// local
+use ea_tree_repr::{init_logger, CowNestedArrayVertexProp, EulerTourTree, NddrAdjTree,
+                   NddrBalancedTree, PredecessorTree, PredecessorTree2, Tree};
 
 pub fn main() {
     let args = args();
 
-    if !args.quiet {
-        println!("{:#?}", args);
-    }
+    init_logger(if args.quiet { "warn" } else { "info" });
+
+    info!("{:#?}", args);
 
     let instance = tsplib::read(&args.input).expect("Fail to parse input file");
 
@@ -56,16 +61,14 @@ pub fn main() {
         *count.entry(g.out_degree(u)).or_insert(0) += 1;
     }
 
-    if !args.quiet {
-        println!(
-            "graph size\n  n = {}\n  m = {}",
-            g.num_vertices(),
-            g.num_edges()
-        );
-        println!("degree distribution");
-        for (d, c) in count {
-            println!("{:2} = {:2}", d, c);
-        }
+    info!(
+        "graph size\n  n = {}\n  m = {}",
+        g.num_vertices(),
+        g.num_edges()
+    );
+    info!("degree distribution");
+    for (d, c) in count {
+        info!("{:2} = {:2}", d, c);
     }
 
     let (edges, branches) = match args.repr {
@@ -142,9 +145,7 @@ where
         return (pop[best].tree.edges(), pop[best].branches);
     }
 
-    if !args.quiet {
-        println!("best = {:?}", pop[best].value());
-    }
+    info!("best = {:?}", pop[best].value());
 
     let mut last_it_impr = 0;
     for it in 0..=args.max_num_iters.unwrap_or(u64::max_value()) {
@@ -158,9 +159,7 @@ where
             if new.fitness() < pop[best].fitness() {
                 last_it_impr = it;
                 best = i;
-                if !args.quiet {
-                    println!("it = {}, best = {:?}", it, new.value());
-                }
+                info!("it = {}, best = {:?}", it, new.value());
                 if new.is_optimum() {
                     pop[i] = new;
                     break;
@@ -174,12 +173,10 @@ where
         }
 
         if it - last_it_impr >= args.max_num_iters_no_impr.unwrap_or(u64::max_value()) {
-            if !args.quiet {
-                println!(
-                    "max number of iterations without improvement reached: {:?}",
-                    args.max_num_iters_no_impr
-                );
-            }
+            info!(
+                "max number of iterations without improvement reached: {:?}",
+                args.max_num_iters_no_impr
+            );
             break;
         }
     }

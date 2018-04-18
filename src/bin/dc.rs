@@ -2,7 +2,12 @@
 extern crate clap;
 extern crate ea_tree_repr;
 extern crate fera;
+#[macro_use]
+extern crate log;
 extern crate rand;
+
+// system
+use std::rc::Rc;
 
 // external
 use clap::ErrorKind;
@@ -13,22 +18,21 @@ use fera::graph::prelude::*;
 use rand::distributions::{IndependentSample, Normal};
 use rand::{Rng, SeedableRng, XorShiftRng};
 
-// std
-use std::rc::Rc;
-
 // local
-use ea_tree_repr::{PredecessorTree, Tree};
+use ea_tree_repr::{PredecessorTree, Tree, init_logger};
 
 const SCALE: f64 = 10000000000.0;
 
 pub fn main() {
     let args = args();
-    if !args.quiet {
-        println!("{:#?}", args);
-    }
+
+    init_logger(if args.quiet { "warn" } else { "info" });
+
+    info!("{:#?}", args);
+
     let (g, w) = read(&args.input);
     let (it, weight, edges) = run(Rc::new(g), w, &args);
-    println!("it = {}, best = {}", it, weight as f64 / SCALE);
+    info!("it = {}, best = {}", it, weight as f64 / SCALE);
     print!("{}", weight as f64 / SCALE);
     for (u, v) in g.ends(edges) {
         print!(" {:?}-{:?}", u, v);
@@ -60,9 +64,7 @@ fn run(
     // Saves the best
     let mut best = position_min_by_key(&pop, |ind| ind.fitness()).unwrap();
 
-    if !args.quiet {
-        println!("best = {:?}", pop[best].weight);
-    }
+    info!("best = {:?}", pop[best].weight);
 
     let mut op = InsertRemove::new(
         g.num_vertices(),
@@ -90,9 +92,7 @@ fn run(
             if new.fitness() < pop[best].fitness() {
                 it_best = it;
                 best = i;
-                if !args.quiet {
-                    println!("it = {}, best = {:?}", it, new.weight);
-                }
+                info!("it = {}, best = {:?}", it, new.weight);
             }
             pop[i] = new;
         } else {
@@ -102,12 +102,10 @@ fn run(
         }
 
         if it - it_best >= args.max_num_iters_no_impr.unwrap_or(u64::max_value()) {
-            if !args.quiet {
-                println!(
-                    "max number of iterations without improvement reached: {:?}",
-                    args.max_num_iters_no_impr
-                );
-            }
+            info!(
+                "max number of iterations without improvement reached: {:?}",
+                args.max_num_iters_no_impr
+            );
             break;
         }
     }

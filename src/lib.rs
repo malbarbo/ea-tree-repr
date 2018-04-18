@@ -4,6 +4,8 @@
 extern crate fera;
 extern crate fera_array;
 extern crate fixedbitset;
+#[macro_use]
+extern crate log;
 extern crate pbr;
 extern crate rand;
 
@@ -12,6 +14,7 @@ mod cowprop;
 mod euler;
 #[cfg(test)]
 mod euler_simple;
+mod logger;
 mod nddr;
 mod predecessor;
 mod progress;
@@ -21,6 +24,7 @@ mod tree;
 pub use self::bitset::*;
 pub use self::cowprop::*;
 pub use self::euler::*;
+pub use self::logger::*;
 pub use self::nddr::*;
 pub use self::predecessor::*;
 pub use self::progress::*;

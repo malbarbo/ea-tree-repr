@@ -11,6 +11,7 @@ clap = { version = "2.29", default-features = false, features = ["wrap_help"] }
 fera = { version = "0.1", features = ["ext", "fun", "graph"], path = "../fera/" }
 fera-array = { path = "../fera/array" }
 fixedbitset = "0.1.8"
+log = { version = "0.4", features = ["std"] }
 pbr = "1.0"
 rand = "0.4"
 rayon = "1.0"
