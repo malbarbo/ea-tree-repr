@@ -223,7 +223,7 @@ where
         &self.g
     }
 
-    fn is_ancestor_of(&self, ancestor: Vertex<G>, u: Vertex<G>) -> bool {
+    pub fn is_ancestor_of(&self, ancestor: Vertex<G>, u: Vertex<G>) -> bool {
         self.path_to_root(u).any(|e| self.g.target(e) == ancestor)
     }
 
@@ -231,7 +231,7 @@ where
         self.g.vertices().filter_map(|v| self.pred(v)).count()
     }
 
-    fn set_pred(&mut self, v: Vertex<G>, e: Edge<G>) -> Option<Edge<G>> {
+    pub fn set_pred(&mut self, v: Vertex<G>, e: Edge<G>) -> Option<Edge<G>> {
         debug_assert_eq!(v, self.g.source(e));
         let i = self.index.get(v);
         let old = self.pred[i].into_option();
@@ -325,7 +325,7 @@ where
     }
 
     pub fn buffer(&self) -> Rc<RefCell<Vec<Edge<G>>>> {
-        self.buffer.clone()
+        Rc::clone(&self.buffer)
     }
 }
 
@@ -339,7 +339,7 @@ where
             g: Rc::clone(&self.g),
             index: self.g.vertex_index(),
             pred: self.pred.clone(),
-            buffer: self.buffer.clone(),
+            buffer: Rc::clone(&self.buffer),
         }
     }
 

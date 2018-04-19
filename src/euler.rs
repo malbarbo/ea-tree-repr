@@ -143,6 +143,7 @@ where
         (ins, rem)
     }
 
+    #[cfg_attr(feature = "cargo-clippy", allow(never_loop))]
     pub fn change_any<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Edge<G>) {
         let sub = self.choose_subtree(&mut rng);
         assert_ne!((0, 0), sub.start);

@@ -21,7 +21,7 @@ use rand::{Rng, SeedableRng, XorShiftRng};
 // local
 use ea_tree_repr::{PredecessorTree, Tree, init_logger};
 
-const SCALE: f64 = 10000000000.0;
+const SCALE: f64 = 10_000_000_000.0;
 
 pub fn main() {
     let args = args();
@@ -31,7 +31,7 @@ pub fn main() {
     info!("{:#?}", args);
 
     let (g, w) = read(&args.input);
-    let (it, weight, edges) = run(Rc::new(g), w, &args);
+    let (it, weight, edges) = run(&Rc::new(g), &w, &args);
     info!("it = {}, best = {}", it, weight as f64 / SCALE);
     print!("{}", weight as f64 / SCALE);
     for (u, v) in g.ends(edges) {
@@ -41,8 +41,8 @@ pub fn main() {
 }
 
 fn run(
-    g: Rc<CompleteGraph>,
-    w: DefaultEdgePropMut<CompleteGraph, u64>,
+    g: &Rc<CompleteGraph>,
+    w: &DefaultEdgePropMut<CompleteGraph, u64>,
     args: &Args,
 ) -> (u64, u64, Vec<Edge<CompleteGraph>>) {
     let mut rng = XorShiftRng::from_seed([args.seed, args.seed, args.seed, args.seed]);
@@ -53,10 +53,10 @@ fn run(
     for _ in 0..args.pop_size {
         rng.shuffle(&mut edges);
         if pop.is_empty() {
-            pop.push(Ind::new(g.clone(), &w, args.dc, &edges));
+            pop.push(Ind::new(Rc::clone(g), w, args.dc, &edges));
         } else {
             let mut new = pop[0].clone();
-            new.set_edges(&w, args.dc, &edges);
+            new.set_edges(w, args.dc, &edges);
             pop.push(new);
         }
     }
@@ -69,7 +69,7 @@ fn run(
     let mut op = InsertRemove::new(
         g.num_vertices(),
         args.dc,
-        vec(g.edges()).sorted_by_prop(&w),
+        vec(g.edges()).sorted_by_prop(w),
         args.beta,
         rng.clone(),
     );
@@ -80,9 +80,9 @@ fn run(
         let mut new = pop[i].clone();
 
         if args.op == Op::ChangePred {
-            op.change_pred(&w, &mut new);
+            op.change_pred(w, &mut new);
         } else {
-            op.change_any(&w, &mut new);
+            op.change_any(w, &mut new);
         }
         if pop.contains(&new) {
             continue;
@@ -207,7 +207,7 @@ where
     R: Rng,
 {
     pub fn new(n: usize, dc: u32, edges: Vec<Edge<G>>, beta: Option<f64>, rng: R) -> Self {
-        let normal = beta.map(|beta| Normal::new(0.0, f64::from(beta) * (n as f64)));
+        let normal = beta.map(|beta| Normal::new(0.0, beta * (n as f64)));
         InsertRemove {
             dc,
             edges,
@@ -309,6 +309,7 @@ where
     }
 }
 
+#[cfg_attr(feature = "cargo-clippy", allow(float_cmp))]
 fn read(input: &str) -> (CompleteGraph, DefaultEdgePropMut<CompleteGraph, u64>) {
     use std::fs;
     let data = fs::read_to_string(input).unwrap();
@@ -329,7 +330,7 @@ fn read(input: &str) -> (CompleteGraph, DefaultEdgePropMut<CompleteGraph, u64>) 
             w[e] = (SCALE * data[i * n + j]) as _;
         }
     }
-    return (g, w);
+    (g, w)
 }
 
 #[derive(Debug)]
@@ -403,7 +404,7 @@ fn args() -> Args {
         }),
         pop_size: value_t_or_exit!(matches.value_of("pop_size"), u32),
         max_num_iters: value_t!(matches.value_of("max_num_iters"), u64)
-            .map(|v| Some(v))
+            .map(Some)
             .unwrap_or_else(|e| {
                 if e.kind == ErrorKind::ArgumentNotFound {
                     None
@@ -412,7 +413,7 @@ fn args() -> Args {
                 }
             }),
         max_num_iters_no_impr: value_t!(matches.value_of("max_num_iters_no_impr"), u64)
-            .map(|v| Some(v))
+            .map(Some)
             .unwrap_or_else(|e| {
                 if e.kind == ErrorKind::ArgumentNotFound {
                     None
@@ -421,7 +422,7 @@ fn args() -> Args {
                 }
             }),
         beta: value_t!(matches.value_of("beta"), f64)
-            .map(|v| Some(v))
+            .map(Some)
             .unwrap_or_else(|e| {
                 if e.kind == ErrorKind::ArgumentNotFound {
                     None

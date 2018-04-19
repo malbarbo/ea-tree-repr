@@ -1,5 +1,6 @@
 #![cfg_attr(test, feature(slice_rotate))]
 #![feature(vec_remove_item)]
+#![cfg_attr(feature = "cargo-clippy", warn(clone_on_ref_ptr))]
 
 extern crate fera;
 extern crate fera_array;
@@ -40,15 +41,15 @@ pub fn time_it<T, F: FnOnce() -> T>(fun: F) -> (Duration, T) {
 }
 
 pub fn nano_secs(t: Duration) -> u64 {
-    1_000_000_000 * t.as_secs() + t.subsec_nanos() as u64
+    1_000_000_000 * t.as_secs() + u64::from(t.subsec_nanos())
 }
 
 pub fn micro_secs(t: Duration) -> f64 {
-    1_000_000.0 * t.as_secs() as f64 + t.subsec_nanos() as f64 / 1_000.0
+    1_000_000.0 * t.as_secs() as f64 + f64::from(t.subsec_nanos()) / 1_000.0
 }
 
 pub fn milli_secs(t: Duration) -> f64 {
-    1_000.0 * t.as_secs() as f64 + t.subsec_nanos() as f64 / 1_000_000.0
+    1_000.0 * t.as_secs() as f64 + f64::from(t.subsec_nanos()) / 1_000_000.0
 }
 
 pub fn setup_rayon() {

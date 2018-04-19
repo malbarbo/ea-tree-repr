@@ -466,7 +466,7 @@ fn args() -> Args {
         }),
         pop_size: value_t_or_exit!(matches.value_of("pop_size"), u32),
         max_num_iters: value_t!(matches.value_of("max_num_iters"), u64)
-            .map(|v| Some(v))
+            .map(Some)
             .unwrap_or_else(|e| {
                 if e.kind == ErrorKind::ArgumentNotFound {
                     None
@@ -475,7 +475,7 @@ fn args() -> Args {
                 }
             }),
         max_num_iters_no_impr: value_t!(matches.value_of("max_num_iters_no_impr"), u64)
-            .map(|v| Some(v))
+            .map(Some)
             .unwrap_or_else(|e| {
                 if e.kind == ErrorKind::ArgumentNotFound {
                     None

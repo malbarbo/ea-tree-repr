@@ -9,7 +9,7 @@ pub fn bitset_pool() -> Rc<RefCell<Vec<Bitset>>> {
     thread_local! {
         pub static BUFFER: Rc<RefCell<Vec<Bitset>>> = Rc::new(RefCell::new(vec![Default::default()]));
     }
-    BUFFER.with(|f| f.clone())
+    BUFFER.with(|f| Rc::clone(f))
 }
 
 pub fn bitset_acquire(n: usize) -> Bitset {

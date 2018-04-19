@@ -11,7 +11,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 // internal
-use {collect_ndds, find_star_tree, NddTree, one_tree_op1, one_tree_op2, op1, op2};
+use {collect_ndds, find_star_tree, one_tree_op1, one_tree_op2, op1, op2, NddTree};
 
 // pg 836 5) Step 5 - the value of the k constant is not specified, we use the default value of 1
 const DEFAULT_K: usize = 1;
@@ -315,7 +315,7 @@ where
     }
 
     pub fn set_edges<R: Rng>(&mut self, edges: &[Edge<G>], rng: R) {
-        *self = Self::new_with_data(self.g.clone(), self.data.clone(), edges.into(), rng);
+        *self = Self::new_with_data(Rc::clone(&self.g), Rc::clone(&self.data), edges.into(), rng);
     }
 
     pub fn graph(&self) -> &Rc<G> {
