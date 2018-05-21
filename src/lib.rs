@@ -1,5 +1,3 @@
-#![cfg_attr(test, feature(slice_rotate))]
-#![feature(vec_remove_item)]
 #![cfg_attr(feature = "cargo-clippy", warn(clone_on_ref_ptr))]
 
 extern crate fera;

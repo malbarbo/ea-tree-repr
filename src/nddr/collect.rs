@@ -140,7 +140,11 @@ where
         let e = out[u].pop().unwrap();
         let v = g.target(e);
         sublen[v] += sublen[u];
-        out[v].remove_item(&e).unwrap();
+
+        // TODO: use remove_item when it became stable
+        // out[v].remove_item(&e).unwrap();
+        let pos = out[v].iter().position(|x| *x == e).unwrap();
+        out[v].remove(pos);
 
         if out[v].len() == 1 {
             let e = out[v][0];
