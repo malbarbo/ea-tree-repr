@@ -5,8 +5,10 @@ use rand::{Rng, XorShiftRng};
 
 use std::rc::Rc;
 
-use {EulerTourTree, FindOpStrategy, FindVertexStrategy, NddrOneTree, NddrOneTreeForest,
-     PredecessorTree};
+use {
+    EulerTourTree, FindOpStrategy, FindVertexStrategy, NddrOneTree, NddrOneTreeForest,
+    PredecessorTree,
+};
 
 // This trait creates a uniform interface to make it easy to run the experiments
 pub trait Tree<G: WithEdge>: Clone {

@@ -19,7 +19,7 @@ use rand::distributions::{IndependentSample, Normal};
 use rand::{Rng, SeedableRng, XorShiftRng};
 
 // local
-use ea_tree_repr::{PredecessorTree, Tree, init_logger};
+use ea_tree_repr::{init_logger, PredecessorTree, Tree};
 
 const SCALE: f64 = 10_000_000_000.0;
 

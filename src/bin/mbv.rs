@@ -20,8 +20,10 @@ use fera::graph::traverse::{Dfs, OnDiscoverTreeEdge};
 use rand::{Rng, SeedableRng};
 
 // local
-use ea_tree_repr::{init_logger, CowNestedArrayVertexProp, EulerTourTree, NddrAdjTree,
-                   NddrBalancedTree, PredecessorTree, PredecessorTree2, Tree};
+use ea_tree_repr::{
+    init_logger, CowNestedArrayVertexProp, EulerTourTree, NddrAdjTree, NddrBalancedTree,
+    PredecessorTree, PredecessorTree2, Tree,
+};
 
 pub fn main() {
     let args = args();
@@ -159,7 +161,7 @@ where
             if new.fitness() < pop[best].fitness() {
                 last_it_impr = it;
                 best = i;
-                info!("it = {}, best = {:?}", it, new.value());
+                info!("it = {}, best = {}/{}", it, new.value().0, new.value().1);
                 if new.is_optimum() {
                     pop[i] = new;
                     break;
@@ -342,6 +344,7 @@ fn path(g: &StaticGraph, edges: &[Edge<StaticGraph>]) -> Vec<Edge<StaticGraph>> 
     path
 }
 
+// https://math.stackexchange.com/questions/7130/reduction-from-hamiltonian-cycle-to-hamiltonian-path
 fn transform(g: &StaticGraph) -> StaticGraph {
     let n = g.num_vertices();
     let v = n - 1;

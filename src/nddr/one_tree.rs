@@ -4,7 +4,7 @@ use rand::Rng;
 
 use std::rc::Rc;
 
-use {collect_ndds, NddTree, one_tree_op1, one_tree_op2};
+use {collect_ndds, one_tree_op1, one_tree_op2, NddTree};
 
 pub struct NddrOneTree<G: WithVertex>
 where

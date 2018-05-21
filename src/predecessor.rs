@@ -57,10 +57,10 @@ where
         }
         let sub = g.spanning_subgraph(edges);
         let r = sub.edges().next().map(|e| g.source(e));
-            sub.dfs(OnDiscoverTreeEdge(|e| {
-                pred[index.get(g.target(e))] = g.reverse(e).into();
-            })).roots(r)
-                .run();
+        sub.dfs(OnDiscoverTreeEdge(|e| {
+            pred[index.get(g.target(e))] = g.reverse(e).into();
+        })).roots(r)
+            .run();
     }
 
     pub fn contains(&self, e: Edge<G>) -> bool {
