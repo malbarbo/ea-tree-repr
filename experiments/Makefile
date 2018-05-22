@@ -1,12 +1,12 @@
 # This makefile was write to help run the experiments but it does not "works"
-# like an traditional makefile, that is, it does not list the inputs for the
+# like a traditional makefile, that is, it does not list the inputs for the
 # targets. So, when an input changes, the target must be manually erased and
 # then regenerated with the appropriated make command.
 
 BASE := ../target/release
-COPY_VS_MUT := $(shell seq 1000 1000 65000)
+COPY_VS_MUT := $(shell seq 1000 1000 75000)
 SUBTREE_FIRST := $(shell seq 10 10 1000)
-CHANGE_PRED := $(shell seq 100 100 10000)
+CHANGE_PRED := $(shell seq 1000 1000 75000)
 CHANGE_ANY := ${CHANGE_PRED}
 
 all: \
@@ -20,6 +20,11 @@ all: \
 	results/time-diameter-change-pred.pdf \
 	results/time-diameter-change-any.pdf
 
+
+cases/fhcp:
+	curl -O "http://www.flinders.edu.au/science_engineering/fms/School-CSEM/csem_image_files/FMSL/HCP%20Project%20Website/FHCPCS.7z"
+	mkdir -p cases/fhcp && cd cases/fhcp && 7z x ../../FHCPCS.7z
+	rm FHCPCS.7z
 
 #######################
 # Copy time vs Mutation time
@@ -85,7 +90,7 @@ results/time-change-any.pdf:
 	./run-combinations \
 		${BASE}/time \
 		results/time-change-any \
-		"euler-tour|nddr-balanced|pred|pred2 change-any 100 ${CHANGE_ANY}" # times sizes
+		"euler-tour|nddr-balanced|pred change-any 100 ${CHANGE_ANY}" # times sizes
 	tectonic plots/time-change-any.tex -o results/
 
 
