@@ -18,9 +18,10 @@ pub fn main() {
     setup_rayon();
     let (op, strategy, times, sizes) = args();
     let subtree_len = run(op, strategy, times, &sizes);
-    println!("n subtree_len");
+    println!("n subtree_len expected");
     for (n, len) in sizes.into_iter().zip(subtree_len) {
-        println!("{} {}", n, len);
+        let sqrt_n = (n as f64).sqrt();
+        println!("{} {} {}", n, len, 2.0 * sqrt_n);
     }
 }
 
