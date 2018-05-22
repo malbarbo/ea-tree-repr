@@ -28,7 +28,13 @@ pub fn main() {
 
     println!("size time clone change");
     for (s, t) in sizes.into_iter().zip(time) {
-        println!("{} {:.03} {:.03} {:.03}", s, micro_secs(t.0 + t.1), micro_secs(t.0), micro_secs(t.1));
+        println!(
+            "{} {:.03} {:.03} {:.03}",
+            s,
+            micro_secs(t.0 + t.1),
+            micro_secs(t.0),
+            micro_secs(t.1)
+        );
     }
 }
 
@@ -38,23 +44,25 @@ fn run<T: Tree<CompleteGraph>>(
     op: Op,
     times: usize,
 ) -> Vec<(Duration, Duration)> {
-    const TIMES: usize = 100_000;
+    const TIMES: usize = 10_000;
     let mut time = vec![(Duration::default(), Duration::default()); sizes.len()];
     for _ in progress(0..times) {
         time.par_iter_mut().zip(sizes).for_each(|(t, &n)| {
             let mut rng = rand::weak_rng();
             let (g, tree) = graph_tree(n, diameter, &mut rng);
-            let tree = T::new(Rc::new(g), &*tree, &mut rng);
+            let mut tree = T::new(Rc::new(g), &*tree, &mut rng);
             match op {
                 Op::ChangePred => for _ in 0..TIMES {
-                    let (t0, mut tree) = time_it(|| tree.clone());
-                    let (t1, _) = time_it(|| tree.change_pred(&mut rng));
+                    let (t0, mut tt) = time_it(|| tree.clone());
+                    let (t1, _) = time_it(|| tt.change_pred(&mut rng));
+                    tree = tt;
                     t.0 += t0;
                     t.1 += t1;
                 },
                 Op::ChangeAny => for _ in 0..TIMES {
-                    let (t0, mut tree) = time_it(|| tree.clone());
-                    let (t1, _) = time_it(|| tree.change_any(&mut rng));
+                    let (t0, mut tt) = time_it(|| tree.clone());
+                    let (t1, _) = time_it(|| tt.change_any(&mut rng));
+                    tree = tt;
                     t.0 += t0;
                     t.1 += t1;
                 },
