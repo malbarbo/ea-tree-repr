@@ -37,7 +37,7 @@ impl<G: AdjacencyGraph + Choose> NddrOneTree<G> {
             assert_eq!(1, ndds.len());
             let mut t = NddTree::new(ndds.pop().unwrap());
             // TODO: find an away to not pass this closure
-            t.calc_degs(|v| g.out_degree(v));
+            t.calc_degs(|v| g.out_degree(v) as u32);
             t
         };
         Self { g, tree }

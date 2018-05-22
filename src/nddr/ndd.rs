@@ -9,16 +9,16 @@ use std::ops::Deref;
 #[derive(Clone, Copy, Eq, PartialEq, Debug)]
 pub struct Ndd<V: Copy + Eq + PartialEq + Debug> {
     vertex: V,
-    dep: usize,
-    deg: usize,
+    dep: u32,
+    deg: u32,
 }
 
 impl<V: Copy + Eq + PartialEq + Debug> Ndd<V> {
-    pub fn new(vertex: V, dep: usize, deg: usize) -> Ndd<V> {
+    pub fn new(vertex: V, dep: u32, deg: u32) -> Ndd<V> {
         Ndd { vertex, dep, deg }
     }
 
-    pub fn deg(&self) -> usize {
+    pub fn deg(&self) -> u32 {
         self.deg
     }
 
@@ -34,8 +34,8 @@ pub struct NddTree<V: Copy + Hash + Eq + PartialEq + Debug> {
     // parents is used to cache the parent of each node.
     // parent[i] is the parent of ndds[i-1].vertex
     parents: RefCell<Vec<V>>,
-    deg: usize,
-    deg_in_g: usize,
+    deg: u32,
+    deg_in_g: u32,
 }
 
 pub fn op1<V>(from: &NddTree<V>, p: usize, to: &NddTree<V>, a: usize) -> (NddTree<V>, NddTree<V>)
@@ -124,7 +124,7 @@ where
     V: Copy + Hash + Eq + PartialEq + Debug,
 {
     #[cfg(test)]
-    pub fn from_vecs(vertices: &[V], dep: &[usize], deg: &[usize]) -> Self {
+    pub fn from_vecs(vertices: &[V], dep: &[u32], deg: &[u32]) -> Self {
         NddTree::new(
             vertices
                 .into_iter()
@@ -234,7 +234,7 @@ where
 
     pub fn calc_degs<F>(&mut self, degree: F)
     where
-        F: Fn(V) -> usize,
+        F: Fn(V) -> u32,
     {
         self.deg = 0;
         self.deg_in_g = 0;
@@ -244,11 +244,11 @@ where
         }
     }
 
-    pub fn deg(&self) -> usize {
+    pub fn deg(&self) -> u32 {
         self.deg
     }
 
-    pub fn deg_in_g(&self) -> usize {
+    pub fn deg_in_g(&self) -> u32 {
         self.deg_in_g
     }
 

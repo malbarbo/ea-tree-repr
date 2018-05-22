@@ -16,12 +16,12 @@ where
 {
     struct CompsVisitor<G: IncidenceGraph> {
         trees: Vec<Vec<Ndd<Vertex<G>>>>,
-        depth: DefaultVertexPropMut<G, usize>,
+        depth: DefaultVertexPropMut<G, u32>,
     }
 
     impl<G: IncidenceGraph> Visitor<G> for CompsVisitor<G> {
         fn discover_root_vertex(&mut self, g: &G, v: Vertex<G>) -> Control {
-            self.trees.push(vec![Ndd::new(v, 0, g.out_degree(v))]);
+            self.trees.push(vec![Ndd::new(v, 0, g.out_degree(v) as u32)]);
             Control::Continue
         }
 
@@ -31,14 +31,14 @@ where
             self.trees
                 .last_mut()
                 .unwrap()
-                .push(Ndd::new(v, self.depth[v], g.out_degree(v)));
+                .push(Ndd::new(v, self.depth[v], g.out_degree(v) as u32));
             Control::Continue
         }
     }
 
     let mut vis = CompsVisitor {
         trees: vec![],
-        depth: g.vertex_prop(0usize),
+        depth: g.vertex_prop(0u32),
     };
     g.dfs(&mut vis).roots(roots.iter().cloned()).run();
     vis.trees
