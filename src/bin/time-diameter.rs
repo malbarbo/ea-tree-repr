@@ -6,24 +6,31 @@ extern crate rayon;
 #[macro_use]
 extern crate clap;
 
-use ea_tree_repr::*;
+// external
 use fera::fun::vec;
 use fera::graph::prelude::*;
 use rayon::prelude::*;
 
+// system
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
+// local
+use ea_tree_repr::{
+    micro_secs, progress, random_sp_with_diameter, setup_rayon, EulerTourTree, NddrAdjTree,
+    NddrBalancedTree, PredecessorTree, PredecessorTree2, Tree,
+};
+
 fn main() {
     setup_rayon();
-    let (n, repr, op, samples, times) = args();
+    let (n, ds, op, samples, times) = args();
 
-    let (d, time) = match repr {
-        Repr::EulerTour => run::<EulerTourTree<_>>(n, op, samples, times),
-        Repr::NddrAdj => run::<NddrAdjTree<_>>(n, op, samples, times),
-        Repr::NddrBalanced => run::<NddrBalancedTree<_>>(n, op, samples, times),
-        Repr::Predecessor => run::<PredecessorTree<_>>(n, op, samples, times),
-        Repr::Predecessor2 => run::<PredecessorTree2<_>>(n, op, samples, times),
+    let (d, time) = match ds {
+        Ds::EulerTour => run::<EulerTourTree<_>>(n, op, samples, times),
+        Ds::NddrAdj => run::<NddrAdjTree<_>>(n, op, samples, times),
+        Ds::NddrBalanced => run::<NddrBalancedTree<_>>(n, op, samples, times),
+        Ds::Predecessor => run::<PredecessorTree<_>>(n, op, samples, times),
+        Ds::Predecessor2 => run::<PredecessorTree2<_>>(n, op, samples, times),
     };
 
     println!("diameter time");
@@ -64,13 +71,13 @@ fn run<T: Tree<CompleteGraph>>(
     (ds, time)
 }
 
-fn args() -> (usize, Repr, Op, usize, usize) {
+fn args() -> (usize, Ds, Op, usize, usize) {
     let app = clap_app!(
         ("time-diameter") =>
             (version: crate_version!())
             (about: crate_description!())
             (author: crate_authors!())
-            (@arg repr:
+            (@arg ds:
                 +required
                 possible_values(&[
                     "euler-tour",
@@ -79,35 +86,33 @@ fn args() -> (usize, Repr, Op, usize, usize) {
                     "pred",
                     "pred2",
                 ])
-                "tree representation"
-            )
+                "Data structure")
             (@arg op:
                 +required
                 possible_values(&[
                     "change-pred",
                     "change-any"
                 ])
-                "operation"
-            )
-            (@arg n: +required "number of vertices")
+                "Operator")
+            (@arg n:
+                +required
+                "Number of vertices")
             (@arg samples:
                 +required
-                "number of tree diameter samples"
-            )
+                "Number of tree diameter samples")
             (@arg times:
                 +required
-                "number of times to executed the experiment"
-            )
+                "Number of times to executed the experiment")
     );
 
     let matches = app.get_matches();
     let n = value_t_or_exit!(matches, "n", usize);
-    let repr = match matches.value_of("repr").unwrap() {
-        "euler-tour" => Repr::EulerTour,
-        "nddr-adj" => Repr::NddrAdj,
-        "nddr-balanced" => Repr::NddrBalanced,
-        "pred" => Repr::Predecessor,
-        "pred2" => Repr::Predecessor2,
+    let ds = match matches.value_of("ds").unwrap() {
+        "euler-tour" => Ds::EulerTour,
+        "nddr-adj" => Ds::NddrAdj,
+        "nddr-balanced" => Ds::NddrBalanced,
+        "pred" => Ds::Predecessor,
+        "pred2" => Ds::Predecessor2,
         _ => unreachable!(),
     };
     let op = match matches.value_of("op").unwrap() {
@@ -117,7 +122,7 @@ fn args() -> (usize, Repr, Op, usize, usize) {
     };
     let samples = value_t_or_exit!(matches, "samples", usize);
     let times = value_t_or_exit!(matches, "times", usize);
-    (n, repr, op, samples, times)
+    (n, ds, op, samples, times)
 }
 
 fn graph_tree(n: usize, d: usize) -> (CompleteGraph, Vec<Edge<CompleteGraph>>) {
@@ -127,7 +132,7 @@ fn graph_tree(n: usize, d: usize) -> (CompleteGraph, Vec<Edge<CompleteGraph>>) {
 }
 
 #[derive(Copy, Clone)]
-enum Repr {
+enum Ds {
     EulerTour,
     NddrAdj,
     NddrBalanced,

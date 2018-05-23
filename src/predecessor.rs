@@ -358,7 +358,8 @@ where
 {
     fn eq(&self, other: &Self) -> bool {
         self.num_edges() == other.num_edges()
-            && self.g
+            && self
+                .g
                 .vertices()
                 .filter_map(|v| self.pred(v))
                 .all(|e| other.contains(e))

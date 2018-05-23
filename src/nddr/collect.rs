@@ -21,7 +21,8 @@ where
 
     impl<G: IncidenceGraph> Visitor<G> for CompsVisitor<G> {
         fn discover_root_vertex(&mut self, g: &G, v: Vertex<G>) -> Control {
-            self.trees.push(vec![Ndd::new(v, 0, g.out_degree(v) as u32)]);
+            self.trees
+                .push(vec![Ndd::new(v, 0, g.out_degree(v) as u32)]);
             Control::Continue
         }
 
@@ -107,7 +108,8 @@ where
 
     // BinaryHeap does not support removing arbitrary entries, we work around this by adding
     // repeated entries with updated sublen add validating the sublen before using a poped entry
-    let mut leafs: BinaryHeap<_> = g.vertices()
+    let mut leafs: BinaryHeap<_> = g
+        .vertices()
         .filter(|&u| out[u].len() == 1)
         .map(|u| {
             let v = g.target(out[u][0]);
@@ -170,7 +172,8 @@ where
 
     // we are left with g.num_vertices() - n star vertices, so we that the edges that
     // connect this vertices
-    let edges: Vec<_> = g.edges()
+    let edges: Vec<_> = g
+        .edges()
         .filter(|e| {
             let (u, v) = g.ends(*e);
             star[u] && star[v]

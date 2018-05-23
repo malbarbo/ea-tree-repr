@@ -155,7 +155,8 @@ where
             // TODO: extract to a function
             'out1: loop {
                 let x = self.choose_subtree_vertex(sub, &mut rng);
-                for e in self.g
+                for e in self
+                    .g
                     .choose_out_edge_iter(x, &mut rng)
                     .take(MAX_TRIES_CHANGE_ANY)
                 {
@@ -178,7 +179,8 @@ where
             // TODO: extract to a function
             'out2: loop {
                 let x = self.choose_non_subtree_vertex(sub, &mut rng);
-                for e in self.g
+                for e in self
+                    .g
                     .choose_out_edge_iter(x, &mut rng)
                     .take(MAX_TRIES_CHANGE_ANY)
                 {
@@ -344,7 +346,8 @@ where
 
     fn choose_subtree<R: Rng>(&self, mut rng: R) -> Subtree {
         let root = self.source((0, 0));
-        let v = self.g
+        let v = self
+            .g
             .choose_vertex_iter(&mut rng)
             .find(|v| *v != root)
             .unwrap();

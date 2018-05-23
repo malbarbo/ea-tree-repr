@@ -63,7 +63,8 @@ impl<G: AdjacencyGraph + Choose> NddrOneTree<G> {
 
     pub fn op1<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
         let (ins, p, a) = self.find_op1(rng);
-        let rem = self.g
+        let rem = self
+            .g
             .edge_by_ends(self.tree[p].vertex(), self.tree.parent_vertex(p).unwrap());
         self.tree = one_tree_op1(&self.tree, p, a);
         (ins, rem)
@@ -71,7 +72,8 @@ impl<G: AdjacencyGraph + Choose> NddrOneTree<G> {
 
     pub fn op2<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
         let (ins, p, r, a) = self.find_op2(rng);
-        let rem = self.g
+        let rem = self
+            .g
             .edge_by_ends(self.tree[p].vertex(), self.tree.parent_vertex(p).unwrap());
         self.tree = one_tree_op2(&self.tree, p, r, a);
         (ins, rem)

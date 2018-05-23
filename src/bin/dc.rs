@@ -1,25 +1,25 @@
-#[macro_use]
-extern crate clap;
 extern crate ea_tree_repr;
 extern crate fera;
-#[macro_use]
-extern crate log;
 extern crate rand;
 
-// system
-use std::rc::Rc;
+#[macro_use]
+extern crate clap;
+#[macro_use]
+extern crate log;
 
 // external
-use clap::ErrorKind;
 use fera::fun::{position_max_by_key, position_min_by_key, vec};
 use fera::graph::algs::Kruskal;
 use fera::graph::choose::Choose;
 use fera::graph::prelude::*;
 use rand::distributions::{IndependentSample, Normal};
-use rand::{Rng, SeedableRng, XorShiftRng};
+use rand::Rng;
+
+// system
+use std::rc::Rc;
 
 // local
-use ea_tree_repr::{init_logger, PredecessorTree, Tree};
+use ea_tree_repr::{init_logger, new_rng, PredecessorTree, Tree};
 
 const SCALE: f64 = 10_000_000_000.0;
 
@@ -45,7 +45,7 @@ fn run(
     w: &DefaultEdgePropMut<CompleteGraph, u64>,
     args: &Args,
 ) -> (u64, u64, Vec<Edge<CompleteGraph>>) {
-    let mut rng = XorShiftRng::from_seed([args.seed, args.seed, args.seed, args.seed]);
+    let mut rng = new_rng(args.seed);
     let mut edges = vec(g.edges());
 
     // Initialize the population
@@ -55,6 +55,8 @@ fn run(
         if pop.is_empty() {
             pop.push(Ind::new(Rc::clone(g), w, args.dc, &edges));
         } else {
+            // We create a new individual based on an existing one so tree data structures can
+            // share internal state
             let mut new = pop[0].clone();
             new.set_edges(w, args.dc, &edges);
             pop.push(new);
@@ -355,88 +357,73 @@ fn args() -> Args {
             (@arg seed:
                 --seed
                 +takes_value
-                "The seed used in the random number generator. A random value is used if none is specified")
+                "Seed used in the random number generator. A random value is used if none is specified")
             (@arg beta:
                 --beta
                 +takes_value
-                "With no value is specifed then no heuristic selections is used")
+                "Beta parameter. If no value is specifed then no heuristic selection is used")
             (@arg pop_size:
                 --pop_size
                 +takes_value
                 default_value("10")
-                "The number of individual in the population")
+                "Number of individual in the population")
             (@arg max_num_iters:
                 --max_num_iters
                 +takes_value
-                "The maximum number of iterations")
+                "Maximum number of iterations")
             (@arg max_num_iters_no_impr:
                 --max_num_iters_no_impr
                 +takes_value
-                "The maximum number of iterations without improvements")
-            (@arg quiet: --quiet "Only prints the final solution")
+                "Maximum number of iterations without improvements")
+            (@arg quiet:
+                --quiet
+                "Only prints the final solution")
             (@arg op:
                 +required
                 possible_values(&[
                     "change-pred",
                     "change-any"
                 ])
-                "operation"
-            )
+                "Operator")
             (@arg dc:
                 +required
-                "degree constraint"
-            )
+                "Degree constraint")
             (@arg input:
                 +required
-                "input file graph (weight matrix)"
-            )
+                "Input file graph (weight matrix)")
     );
 
     let matches = app.get_matches();
 
     Args {
-        seed: value_t!(matches.value_of("seed"), u32).unwrap_or_else(|e| {
-            if e.kind == ErrorKind::ArgumentNotFound {
-                rand::thread_rng().gen()
-            } else {
-                e.exit()
-            }
-        }),
-        pop_size: value_t_or_exit!(matches.value_of("pop_size"), u32),
-        max_num_iters: value_t!(matches.value_of("max_num_iters"), u64)
-            .map(Some)
-            .unwrap_or_else(|e| {
-                if e.kind == ErrorKind::ArgumentNotFound {
-                    None
-                } else {
-                    e.exit()
-                }
-            }),
-        max_num_iters_no_impr: value_t!(matches.value_of("max_num_iters_no_impr"), u64)
-            .map(Some)
-            .unwrap_or_else(|e| {
-                if e.kind == ErrorKind::ArgumentNotFound {
-                    None
-                } else {
-                    e.exit()
-                }
-            }),
-        beta: value_t!(matches.value_of("beta"), f64)
-            .map(Some)
-            .unwrap_or_else(|e| {
-                if e.kind == ErrorKind::ArgumentNotFound {
-                    None
-                } else {
-                    e.exit()
-                }
-            }),
+        seed: if matches.is_present("seed") {
+            value_t_or_exit!(matches, "seed", u32)
+        } else {
+            rand::thread_rng().gen()
+        },
+        pop_size: value_t_or_exit!(matches, "pop_size", u32),
+        max_num_iters: if matches.is_present("max_num_iters") {
+            Some(value_t_or_exit!(matches, "max_num_iters", u64))
+        } else {
+            None
+        },
+        max_num_iters_no_impr: if matches.is_present("max_num_iters_no_impr") {
+            Some(value_t_or_exit!(matches, "max_num_iters_no_impr", u64))
+        } else {
+            None
+        },
+        beta: if matches.is_present("beta") {
+            Some(value_t_or_exit!(matches, "beta", f64))
+        } else {
+            None
+        },
         quiet: matches.is_present("quiet"),
         op: match matches.value_of("op").unwrap() {
             "change-pred" => Op::ChangePred,
             "change-any" => Op::ChangeAny,
             _ => unreachable!(),
         },
-        dc: value_t_or_exit!(matches.value_of("dc"), u32),
+        dc: value_t_or_exit!(matches, "dc", u32),
         input: matches.value_of("input").unwrap().to_string(),
     }
 }

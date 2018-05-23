@@ -1,5 +1,9 @@
 use fera::graph::prelude::*;
-use rand::Rng;
+use rand::{Rng, SeedableRng, XorShiftRng};
+
+pub fn new_rng(seed: u32) -> XorShiftRng {
+    XorShiftRng::from_seed([seed, seed, seed, seed]).gen()
+}
 
 pub fn random_sp<R: Rng>(g: &CompleteGraph, rng: R) -> Vec<Edge<CompleteGraph>> {
     StaticGraph::new_random_tree(g.num_vertices(), rng)

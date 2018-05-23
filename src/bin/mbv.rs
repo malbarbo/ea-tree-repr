@@ -1,27 +1,27 @@
-#[macro_use]
-extern crate clap;
 extern crate ea_tree_repr;
 extern crate fera;
-#[macro_use]
-extern crate log;
 extern crate rand;
 extern crate tsplib;
+
+#[macro_use]
+extern crate clap;
+#[macro_use]
+extern crate log;
 
 // system
 use std::collections::BTreeMap;
 use std::rc::Rc;
 
 // external
-use clap::ErrorKind;
 use fera::fun::{position_max_by_key, position_min_by_key, vec};
 use fera::graph::algs::{Kruskal, Paths};
 use fera::graph::prelude::*;
 use fera::graph::traverse::{Dfs, OnDiscoverTreeEdge};
-use rand::{Rng, SeedableRng};
+use rand::Rng;
 
 // local
 use ea_tree_repr::{
-    init_logger, CowNestedArrayVertexProp, EulerTourTree, NddrAdjTree, NddrBalancedTree,
+    init_logger, new_rng, CowNestedArrayVertexProp, EulerTourTree, NddrAdjTree, NddrBalancedTree,
     PredecessorTree, PredecessorTree2, Tree,
 };
 
@@ -73,20 +73,18 @@ pub fn main() {
         info!("{:2} = {:2}", d, c);
     }
 
-    let (edges, branches) = match args.repr {
-        Repr::EulerTour => {
+    let (edges, branches) = match args.ds {
+        Ds::EulerTour => {
             run::<EulerTourTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, &args)
         }
-        Repr::NddrAdj => {
-            run::<NddrAdjTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, &args)
-        }
-        Repr::NddrBalanced => {
+        Ds::NddrAdj => run::<NddrAdjTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, &args),
+        Ds::NddrBalanced => {
             run::<NddrBalancedTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, &args)
         }
-        Repr::Predecessor => {
+        Ds::Predecessor => {
             run::<PredecessorTree<_>, DefaultVertexPropMut<StaticGraph, u32>>(g, &args)
         }
-        Repr::Predecessor2 => {
+        Ds::Predecessor2 => {
             run::<PredecessorTree2<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, &args)
         }
     };
@@ -120,7 +118,7 @@ where
     D: VertexPropMutNew<StaticGraph, u32>,
     Ind<T, D>: Clone,
 {
-    let mut rng = rand::XorShiftRng::from_seed([args.seed, args.seed, args.seed, args.seed]);
+    let mut rng = new_rng(args.seed);
     let mut edges = vec(g.edges());
     let mut tree = vec![];
     let mut pop = vec![];
@@ -136,6 +134,8 @@ where
                 &mut rng,
             ));
         } else {
+            // We create a new individual based on an existing one so tree data structures can
+            // share internal state
             let new = pop[0].set_edges(&tree, g.vertex_prop(0));
             pop.push(new);
         }
@@ -386,7 +386,7 @@ fn transform_path(g: &StaticGraph, path: &mut Vec<Edge<StaticGraph>>) {
 
 #[derive(Debug)]
 struct Args {
-    repr: Repr,
+    ds: Ds,
     op: Op,
     input: String,
     seed: u32,
@@ -406,20 +406,20 @@ fn args() -> Args {
             (@arg seed:
                 --seed
                 +takes_value
-                "The seed used in the random number generator. A random value is used if none is specified")
+                "Seed used in the random number generator. A random value is used if none is specified")
             (@arg pop_size:
                 --pop_size
                 +takes_value
                 default_value("10")
-                "The number of individual in the population")
+                "Number of individual in the population")
             (@arg max_num_iters:
                 --max_num_iters
                 +takes_value
-                "The maximum number of iterations")
+                "Maximum number of iterations")
             (@arg max_num_iters_no_impr:
                 --max_num_iters_no_impr
                 +takes_value
-                "The maximum number of iterations without improvements")
+                "Maximum number of iterations without improvements")
             (@arg kind:
                 --kind
                 +takes_value
@@ -429,10 +429,11 @@ fn args() -> Args {
                     "path",
                     "cycle",
                 ])
-                "The kind of problem to solve: Minimum branch vertices, Hamiltonian path or Hamiltonian cycle"
-            )
-            (@arg quiet: --quiet "Only prints the final solution")
-            (@arg repr:
+                "The kind of problem to solve: Minimum branch vertices, Hamiltonian path or Hamiltonian cycle")
+            (@arg quiet:
+                --quiet
+                "Only prints the final solution")
+            (@arg ds:
                 +required
                 possible_values(&[
                     "euler-tour",
@@ -441,51 +442,38 @@ fn args() -> Args {
                     "pred",
                     "pred2",
                 ])
-                "tree representation"
-            )
+                "Data structure")
             (@arg op:
                 +required
                 possible_values(&[
                     "change-pred",
                     "change-any"
                 ])
-                "operation"
-            )
+                "Operator")
             (@arg input:
                 +required
-                "input file graph (an HCP tsplib instance)"
-            )
+                "Input file graph (an HCP tsplib instance)")
     );
 
     let matches = app.get_matches();
 
     Args {
-        seed: value_t!(matches.value_of("seed"), u32).unwrap_or_else(|e| {
-            if e.kind == ErrorKind::ArgumentNotFound {
-                rand::thread_rng().gen()
-            } else {
-                e.exit()
-            }
-        }),
+        seed: if matches.is_present("seed") {
+            value_t_or_exit!(matches, "seed", u32)
+        } else {
+            rand::thread_rng().gen()
+        },
         pop_size: value_t_or_exit!(matches.value_of("pop_size"), u32),
-        max_num_iters: value_t!(matches.value_of("max_num_iters"), u64)
-            .map(Some)
-            .unwrap_or_else(|e| {
-                if e.kind == ErrorKind::ArgumentNotFound {
-                    None
-                } else {
-                    e.exit()
-                }
-            }),
-        max_num_iters_no_impr: value_t!(matches.value_of("max_num_iters_no_impr"), u64)
-            .map(Some)
-            .unwrap_or_else(|e| {
-                if e.kind == ErrorKind::ArgumentNotFound {
-                    None
-                } else {
-                    e.exit()
-                }
-            }),
+        max_num_iters: if matches.is_present("max_num_iters") {
+            Some(value_t_or_exit!(matches, "max_num_iters", u64))
+        } else {
+            None
+        },
+        max_num_iters_no_impr: if matches.is_present("max_num_iters_no_impr") {
+            Some(value_t_or_exit!(matches, "max_num_iters_no_impr", u64))
+        } else {
+            None
+        },
         kind: match matches.value_of("kind").unwrap() {
             "mbv" => Kind::Mbv,
             "path" => Kind::Path,
@@ -493,12 +481,12 @@ fn args() -> Args {
             _ => unreachable!(),
         },
         quiet: matches.is_present("quiet"),
-        repr: match matches.value_of("repr").unwrap() {
-            "euler-tour" => Repr::EulerTour,
-            "nddr-adj" => Repr::NddrAdj,
-            "nddr-balanced" => Repr::NddrBalanced,
-            "pred" => Repr::Predecessor,
-            "pred2" => Repr::Predecessor2,
+        ds: match matches.value_of("ds").unwrap() {
+            "euler-tour" => Ds::EulerTour,
+            "nddr-adj" => Ds::NddrAdj,
+            "nddr-balanced" => Ds::NddrBalanced,
+            "pred" => Ds::Predecessor,
+            "pred2" => Ds::Predecessor2,
             _ => unreachable!(),
         },
         op: match matches.value_of("op").unwrap() {
@@ -511,7 +499,7 @@ fn args() -> Args {
 }
 
 #[derive(Copy, Clone, Debug)]
-enum Repr {
+enum Ds {
     EulerTour,
     NddrAdj,
     NddrBalanced,

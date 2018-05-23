@@ -6,24 +6,31 @@ extern crate rayon;
 #[macro_use]
 extern crate clap;
 
-use ea_tree_repr::*;
+// external
 use fera::graph::prelude::*;
 use rand::Rng;
 use rayon::prelude::*;
 
+// system
 use std::rc::Rc;
 use std::time::Duration;
 
+// local
+use ea_tree_repr::{
+    micro_secs, progress, random_sp, random_sp_with_diameter, setup_rayon, time_it, EulerTourTree,
+    NddrAdjTree, NddrBalancedTree, PredecessorTree, PredecessorTree2, Tree,
+};
+
 pub fn main() {
     setup_rayon();
-    let (sizes, diameter, repr, op, times) = args();
+    let (sizes, diameter, ds, op, times) = args();
 
-    let time = match repr {
-        Repr::EulerTour => run::<EulerTourTree<_>>(&*sizes, diameter, op, times),
-        Repr::NddrAdj => run::<NddrAdjTree<_>>(&*sizes, diameter, op, times),
-        Repr::NddrBalanced => run::<NddrBalancedTree<_>>(&*sizes, diameter, op, times),
-        Repr::Predecessor => run::<PredecessorTree<_>>(&*sizes, diameter, op, times),
-        Repr::Predecessor2 => run::<PredecessorTree2<_>>(&*sizes, diameter, op, times),
+    let time = match ds {
+        Ds::EulerTour => run::<EulerTourTree<_>>(&*sizes, diameter, op, times),
+        Ds::NddrAdj => run::<NddrAdjTree<_>>(&*sizes, diameter, op, times),
+        Ds::NddrBalanced => run::<NddrBalancedTree<_>>(&*sizes, diameter, op, times),
+        Ds::Predecessor => run::<PredecessorTree<_>>(&*sizes, diameter, op, times),
+        Ds::Predecessor2 => run::<PredecessorTree2<_>>(&*sizes, diameter, op, times),
     };
 
     println!("size time clone change");
@@ -76,13 +83,13 @@ fn run<T: Tree<CompleteGraph>>(
     time
 }
 
-fn args() -> (Vec<usize>, Option<f32>, Repr, Op, usize) {
+fn args() -> (Vec<usize>, Option<f32>, Ds, Op, usize) {
     let app = clap_app!(
         ("time") =>
             (version: crate_version!())
             (about: crate_description!())
             (author: crate_authors!())
-            (@arg repr:
+            (@arg ds:
                 +required
                 possible_values(&[
                     "euler-tour",
@@ -91,37 +98,35 @@ fn args() -> (Vec<usize>, Option<f32>, Repr, Op, usize) {
                     "pred",
                     "pred2",
                 ])
-                "tree representation"
-            )
+                "Data structure")
             (@arg op:
                 +required
                 possible_values(&[
                     "change-pred",
                     "change-any"
                 ])
-                "operation"
-            )
-            (@arg diameter: -d --diameter +takes_value
-                "the diamenter of the random trees [0, 1] - (0.0 = diameter 2, 1.0 = diamenter n - 1). Default is to generate trees with random diameters."
-            )
+                "Operator")
+            (@arg diameter:
+                -d
+                --diameter
+                +takes_value
+                "Diameter of the random trees [0, 1] - (0.0 = diameter 2, 1.0 = diamenter n - 1). Default is to generate trees with random diameter.")
             (@arg times:
                 +required
-                "number of times to executed the experiment"
-            )
+                "Number of times to executed the experiment")
             (@arg sizes:
                 +required
                 multiple(true)
-                "list of number of vertices"
-            )
+                "List of the number of vertices")
     );
 
     let matches = app.get_matches();
-    let repr = match matches.value_of("repr").unwrap() {
-        "euler-tour" => Repr::EulerTour,
-        "nddr-adj" => Repr::NddrAdj,
-        "nddr-balanced" => Repr::NddrBalanced,
-        "pred" => Repr::Predecessor,
-        "pred2" => Repr::Predecessor2,
+    let ds = match matches.value_of("ds").unwrap() {
+        "euler-tour" => Ds::EulerTour,
+        "nddr-adj" => Ds::NddrAdj,
+        "nddr-balanced" => Ds::NddrBalanced,
+        "pred" => Ds::Predecessor,
+        "pred2" => Ds::Predecessor2,
         _ => unreachable!(),
     };
     let op = match matches.value_of("op").unwrap() {
@@ -144,7 +149,7 @@ fn args() -> (Vec<usize>, Option<f32>, Repr, Op, usize) {
         .unwrap()
         .map(|x| x.parse::<usize>().unwrap())
         .collect();
-    (sizes, diameter, repr, op, times)
+    (sizes, diameter, ds, op, times)
 }
 
 fn graph_tree<R: Rng>(
@@ -163,7 +168,7 @@ fn graph_tree<R: Rng>(
 }
 
 #[derive(Copy, Clone)]
-enum Repr {
+enum Ds {
     EulerTour,
     NddrAdj,
     NddrBalanced,

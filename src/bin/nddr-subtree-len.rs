@@ -5,13 +5,20 @@ extern crate rand;
 #[macro_use]
 extern crate clap;
 
-use ea_tree_repr::*;
+// external
 use fera::graph::prelude::*;
 use rand::Rng;
 
+// system
 use std::rc::Rc;
 
+// local
+use ea_tree_repr::{
+    progress, random_sp, setup_rayon, FindOpStrategy, FindVertexStrategy, NddrOneTreeForest,
+};
+
 pub fn main() {
+    setup_rayon();
     let (n, op, strategy, calls, times) = args();
     let size = run(n, op, strategy, calls, times);
     // take 100 samples to not clutter the graph
@@ -24,14 +31,15 @@ pub fn main() {
 }
 
 fn run(n: usize, op: Op, find_op: FindOpStrategy, calls: usize, times: usize) -> Vec<f32> {
+    // TODO: make it run in parallel
     let mut rng = rand::weak_rng();
     let mut size = vec![0; calls];
     for _ in progress(0..times) {
         let mut tree = new(n, find_op, &mut rng);
         for s in &mut size {
             match op {
-                Op::ChangeAny => tree.op1(&mut rng),
-                Op::ChangeParent => tree.op2(&mut rng),
+                Op::ChangePred => tree.op1(&mut rng),
+                Op::ChangeAny => tree.op2(&mut rng),
             };
             *s += tree.last_op_size();
         }
@@ -49,32 +57,35 @@ fn args() -> (usize, Op, FindOpStrategy, usize, usize) {
             (author: crate_authors!())
             (@arg strategy:
                 +required
-                possible_values(&["adj", "adj-smaller", "balanced", "edge"])
-                "strategy used to find the operands values for the operation"
-            )
+                possible_values(&[
+                    "adj",
+                    "adj-smaller",
+                    "balanced",
+                    "edge",
+                ])
+                "Strategy used to find the operands values for the operator")
             (@arg op:
                 +required
-                possible_values(&["change-parent", "change-any"])
-                "operation"
-            )
+                possible_values(&[
+                    "change-pred",
+                    "change-any",
+                ])
+                "Operator")
             (@arg n:
                 +required
-                "number of vertices"
-            )
+                "Number of vertices")
             (@arg calls:
                 +required
-                "number of calls to op in one execution"
-            )
+                "Number of calls to operator in one execution")
             (@arg times:
                 +required
-                "number of times to executed the experiment"
-            )
+                "Number of times to executed the experiment")
     );
 
     let matches = app.get_matches();
     let n = value_t_or_exit!(matches, "n", usize);
     let op = match matches.value_of("op").unwrap() {
-        "change-parent" => Op::ChangeParent,
+        "change-pred" => Op::ChangePred,
         "change-any" => Op::ChangeAny,
         _ => unreachable!(),
     };
@@ -98,6 +109,6 @@ fn new<R: Rng>(n: usize, find_op: FindOpStrategy, mut rng: R) -> NddrOneTreeFore
 
 #[derive(Copy, Clone)]
 enum Op {
-    ChangeParent,
+    ChangePred,
     ChangeAny,
 }

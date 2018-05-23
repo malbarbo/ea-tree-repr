@@ -537,10 +537,11 @@ where
         // v_p and v_a are vertices.
 
         // Step 1
-        let from = self.select_tree_if(&mut rng, |i| {
-            // Must have more than one node so we can choose a node != root
-            self[i].deg_in_g() > self[i].deg() && self[i].len() > 1
-        }).expect("The graph is a forest");
+        let from =
+            self.select_tree_if(&mut rng, |i| {
+                // Must have more than one node so we can choose a node != root
+                self[i].deg_in_g() > self[i].deg() && self[i].len() > 1
+            }).expect("The graph is a forest");
 
         // Step 2
         let p = self.select_tree_vertex_if(from, &mut rng, |i| {
