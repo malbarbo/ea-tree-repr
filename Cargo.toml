@@ -3,7 +3,7 @@ name = "ea-tree-repr"
 version = "0.1.0"
 authors = ["Marco A L Barbosa"]
 description = """Spanning tree representations for evolutionary algorithms
-https://github.com/malbarbo/ec-tree-repr
+https://github.com/malbarbo/ea-tree-repr
 """
 
 [dependencies]
