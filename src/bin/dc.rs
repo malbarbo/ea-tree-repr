@@ -142,7 +142,7 @@ where
     DefaultVertexPropMut<G, u32>: Clone,
 {
     fn new(g: Rc<G>, w: &DefaultEdgePropMut<G, u64>, dc: u32, edges: &[Edge<G>]) -> Self {
-        let deg = g.default_vertex_prop(0u32);
+        let deg = g.vertex_prop(0u32);
         let mut ind = Self {
             tree: PredecessorTree::from_iter(g, None),
             deg,
@@ -229,30 +229,30 @@ where
             if ind.tree.is_ancestor_of(u, v) {
                 if ind.deg[u] < self.dc {
                     ins = g.reverse(ins);
-                    rem = ind.tree.set_pred(v, ins);
+                    rem = ind.tree.set_pred_edge(v, u);
                     break;
                 }
             } else if ind.tree.is_ancestor_of(v, u) {
                 if ind.deg[v] < self.dc {
-                    rem = ind.tree.set_pred(u, ins);
+                    rem = ind.tree.set_pred_edge(u, v);
                     break;
                 }
             } else {
                 match (ind.deg[u] < self.dc, ind.deg[v] < self.dc) {
                     (false, false) => panic!(),
                     (false, true) => {
-                        rem = ind.tree.set_pred(u, ins);
+                        rem = ind.tree.set_pred_edge(u, v);
                     }
                     (true, false) => {
                         ins = g.reverse(ins);
-                        rem = ind.tree.set_pred(v, ins);
+                        rem = ind.tree.set_pred_edge(v, u);
                     }
                     (true, true) => {
                         if self.rng.gen() {
-                            rem = ind.tree.set_pred(u, ins);
+                            rem = ind.tree.set_pred_edge(u, v);
                         } else {
                             ins = g.reverse(ins);
-                            rem = ind.tree.set_pred(v, ins);
+                            rem = ind.tree.set_pred_edge(v, u);
                         }
                     }
                 }
@@ -277,8 +277,8 @@ where
                 match (deg[u] < dc, deg[v] < dc) {
                     (false, false) => panic!(),
                     (false, true) => 0,
-                    (true, false) => path.len() - 1,
-                    (true, true) => self.rng.gen_range(0, path.len()),
+                    (true, false) => path.len() - 2,
+                    (true, true) => self.rng.gen_range(0, path.len() - 1),
                 }
             })
         };

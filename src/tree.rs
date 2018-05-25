@@ -218,7 +218,7 @@ where
 impl<G, A> Tree<G> for PredecessorTree<G, A>
 where
     G: Graph + WithVertexIndexProp + Choose,
-    A: Clone + Array<OptionEdge<G>>,
+    A: Clone + Array<OptionVertex<G>>,
 {
     fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], _rng: R) -> Self {
         PredecessorTree::from_iter(g, edges.iter().cloned())
@@ -247,7 +247,7 @@ where
     fn edges(&self) -> Vec<Edge<G>> {
         self.graph()
             .vertices()
-            .filter_map(|v| self.pred(v))
+            .filter_map(|v| self.pred_edge(v))
             .collect()
     }
 }

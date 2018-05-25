@@ -8,25 +8,25 @@ use std::cell::RefCell;
 use std::mem;
 use std::rc::Rc;
 
-pub type PredecessorTree2<G> = PredecessorTree<G, CowNestedArray<OptionEdge<G>>>;
-pub type PredecessorTree3<G> = PredecessorTree<G, CowNestedNestedArray<OptionEdge<G>>>;
+pub type PredecessorTree2<G> = PredecessorTree<G, CowNestedArray<OptionVertex<G>>>;
+pub type PredecessorTree3<G> = PredecessorTree<G, CowNestedNestedArray<OptionVertex<G>>>;
 
 // This also works with forests, maybe we should change the name.
-pub struct PredecessorTree<G, A = VecArray<OptionEdge<G>>>
+pub struct PredecessorTree<G, A = VecArray<OptionVertex<G>>>
 where
     G: Graph + WithVertexIndexProp,
-    A: Array<OptionEdge<G>>,
+    A: Array<OptionVertex<G>>,
 {
     g: Rc<G>,
     index: VertexIndexProp<G>,
     pred: A,
-    buffer: Rc<RefCell<Vec<Edge<G>>>>,
+    buffer: Rc<RefCell<Vec<Vertex<G>>>>,
 }
 
 impl<G, A> PredecessorTree<G, A>
 where
     G: Graph + WithVertexIndexProp,
-    A: Array<OptionEdge<G>>,
+    A: Array<OptionVertex<G>>,
 {
     pub fn from_iter<I>(g: Rc<G>, edges: I) -> Self
     where
@@ -37,7 +37,7 @@ where
         let mut tree = PredecessorTree {
             g,
             index,
-            pred: A::with_value(G::edge_none(), n),
+            pred: A::with_value(G::vertex_none(), n),
             buffer: Rc::new(RefCell::new(vec![])),
         };
 
@@ -50,22 +50,27 @@ where
         I: IntoIterator<Item = Edge<G>>,
     {
         let g = &self.g;
-        let index = g.vertex_index();
+        let index = &self.index;
         let pred = &mut self.pred;
         for v in g.vertices() {
-            pred[index.get(v)] = G::edge_none();
+            pred[index.get(v)] = G::vertex_none();
         }
         let sub = g.spanning_subgraph(edges);
         let r = sub.edges().next().map(|e| g.source(e));
         sub.dfs(OnDiscoverTreeEdge(|e| {
-            pred[index.get(g.target(e))] = g.reverse(e).into();
+            let (u, v) = g.end_vertices(e);
+            pred[index.get(v)] = u.into();
         })).roots(r)
             .run();
     }
 
+    pub fn graph(&self) -> &Rc<G> {
+        &self.g
+    }
+
     pub fn contains(&self, e: Edge<G>) -> bool {
         let (u, v) = self.g.ends(e);
-        self.pred(u) == Some(e) || self.pred(v) == Some(e)
+        self.pred_vertex(u) == Some(v) || self.pred_vertex(v) == Some(u)
     }
 
     pub fn is_connected(&self, u: Vertex<G>, v: Vertex<G>) -> bool {
@@ -77,22 +82,21 @@ where
         if self.is_connected(u, v) {
             false
         } else if self.is_root(u) {
-            self.set_pred(u, e);
+            self.set_pred(u, v);
             true
         } else {
             self.make_root(v);
-            let e = self.g.reverse(e);
-            self.set_pred(v, e);
+            self.set_pred(v, u);
             true
         }
     }
 
     pub fn cut(&mut self, e: Edge<G>) -> bool {
         let (u, v) = self.g.ends(e);
-        if self.pred(u) == Some(e) {
+        if self.pred_vertex(u) == Some(v) {
             self.cut_pred(u);
             true
-        } else if self.pred(v) == Some(e) {
+        } else if self.pred_vertex(v) == Some(u) {
             self.cut_pred(v);
             true
         } else {
@@ -100,31 +104,45 @@ where
         }
     }
 
-    pub fn cut_pred(&mut self, v: Vertex<G>) -> Option<Edge<G>> {
-        mem::replace(&mut self.pred[self.index.get(v)], G::edge_none()).into_option()
+    pub fn cut_pred(&mut self, v: Vertex<G>) -> Option<Vertex<G>> {
+        mem::replace(&mut self.pred[self.index.get(v)], G::vertex_none()).into_option()
     }
 
-    pub fn pred(&self, v: Vertex<G>) -> Option<Edge<G>> {
+    fn set_pred(&mut self, v: Vertex<G>, p: Vertex<G>) -> Option<Vertex<G>> {
+        mem::replace(&mut self.pred[self.index.get(v)], p.into()).into_option()
+    }
+
+    // FIXME: should not be pub (used by dc.rs)
+    pub fn set_pred_edge(&mut self, v: Vertex<G>, p: Vertex<G>) -> Option<Edge<G>> {
+        self.set_pred(v, p).map(|u| self.g.edge_by_ends(v, u))
+    }
+
+    pub fn pred_edge(&self, v: Vertex<G>) -> Option<Edge<G>> {
+        self.pred_vertex(v).map(|u| self.g.edge_by_ends(v, u))
+    }
+
+    pub fn pred_vertex(&self, v: Vertex<G>) -> Option<Vertex<G>> {
         self.pred[self.index.get(v)].into_option()
     }
 
     pub fn find_root(&self, v: Vertex<G>) -> Vertex<G> {
-        self.path_to_root(v)
-            .last()
-            .map(|e| self.g.target(e))
-            .unwrap_or(v)
+        self.path_to_root(v).last().unwrap_or(v)
     }
 
     pub fn is_root(&self, u: Vertex<G>) -> bool {
-        self.pred(u).is_none()
+        self.pred_vertex(u).is_none()
+    }
+
+    pub fn is_ancestor_of(&self, ancestor: Vertex<G>, u: Vertex<G>) -> bool {
+        self.path_to_root(u).any(|p| p == ancestor)
     }
 
     pub fn make_root(&mut self, u: Vertex<G>) {
         let mut pred = self.cut_pred(u);
-        while let Some(e) = pred {
-            let t = self.g.target(e);
-            let e = self.g.reverse(e);
-            pred = self.set_pred(t, e);
+        let mut cur = u;
+        while let Some(p) = pred {
+            pred = self.set_pred(p, cur);
+            cur = p;
         }
     }
 
@@ -136,25 +154,27 @@ where
         &self,
         u: Vertex<G>,
         v: Vertex<G>,
-        buffer: &mut Vec<Edge<G>>,
+        buffer: &mut Vec<Vertex<G>>,
         mut rng: R,
-    ) -> Edge<G> {
+    ) -> Vertex<G> {
         assert_ne!(u, v);
         buffer.clear();
 
-        for e in self.path_to_root(u) {
-            buffer.push(e);
-            if self.g.target(e) == v {
+        buffer.push(u);
+        for p in self.path_to_root(u) {
+            if p == v {
                 return *rng.choose(buffer).unwrap();
             }
+            buffer.push(p);
         }
         let s = buffer.len();
 
-        for e in self.path_to_root(v) {
-            buffer.push(e);
-            if self.g.target(e) == u {
+        buffer.push(v);
+        for p in self.path_to_root(v) {
+            if p == u {
                 return *rng.choose(&buffer[s..]).unwrap();
             }
+            buffer.push(p);
         }
 
         let mut i = s - 1;
@@ -175,29 +195,28 @@ where
         }
     }
 
-    pub fn find_path(&self, u: Vertex<G>, v: Vertex<G>, path: &mut Vec<Edge<G>>) {
+    pub fn find_path(&self, u: Vertex<G>, v: Vertex<G>, path: &mut Vec<Vertex<G>>) {
         path.clear();
 
         if u == v {
             return;
         }
 
-        for e in self.path_to_root(u) {
-            path.push(e);
-            if self.g.target(e) == v {
+        path.push(u);
+        for p in self.path_to_root(u) {
+            path.push(p);
+            if p == v {
                 return;
             }
         }
         let s = path.len();
 
-        for e in self.path_to_root(v) {
-            path.push(e);
-            if self.g.target(e) == u {
+        path.push(v);
+        for p in self.path_to_root(v) {
+            path.push(p);
+            if p == u {
                 path.drain(..s);
                 path.reverse();
-                for e in &mut path[..] {
-                    *e = self.g.reverse(*e);
-                }
                 return;
             }
         }
@@ -208,35 +227,29 @@ where
             i -= 1;
             j -= 1;
         }
+
         // remove the common path
-        path.truncate(j + 1);
+        path.truncate(j + 2);
         path.drain((i + 1)..s);
 
         // reverse the path from v to the common predecessor
         path[(i + 1)..].reverse();
-        for e in &mut path[(i + 1)..] {
-            *e = self.g.reverse(*e);
-        }
-    }
-
-    pub fn graph(&self) -> &Rc<G> {
-        &self.g
-    }
-
-    pub fn is_ancestor_of(&self, ancestor: Vertex<G>, u: Vertex<G>) -> bool {
-        self.path_to_root(u).any(|e| self.g.target(e) == ancestor)
     }
 
     fn num_edges(&self) -> usize {
-        self.g.vertices().filter_map(|v| self.pred(v)).count()
+        self.g
+            .vertices()
+            .filter_map(|v| self.pred_vertex(v))
+            .count()
     }
 
-    pub fn set_pred(&mut self, v: Vertex<G>, e: Edge<G>) -> Option<Edge<G>> {
-        debug_assert_eq!(v, self.g.source(e));
-        let i = self.index.get(v);
-        let old = self.pred[i].into_option();
-        self.pred[i] = e.into();
-        old
+    #[cfg(test)]
+    fn edges_to_root(&self, v: Vertex<G>) -> Vec<Edge<G>> {
+        let mut path = vec![v];
+        path.extend(self.path_to_root(v));
+        path.windows(2)
+            .map(|s| self.g.edge_by_ends(s[0], s[1]))
+            .collect()
     }
 
     #[cfg(test)]
@@ -245,7 +258,7 @@ where
 
         assert!(
             self.g
-                .spanning_subgraph(self.g.vertices().filter_map(|v| self.pred(v)))
+                .spanning_subgraph(self.g.vertices().filter_map(|v| self.pred_edge(v)))
                 .is_tree()
         );
 
@@ -258,61 +271,64 @@ where
 impl<G, A> PredecessorTree<G, A>
 where
     G: Graph + Choose + WithVertexIndexProp,
-    A: Array<OptionEdge<G>>,
+    A: Array<OptionVertex<G>>,
 {
+    pub fn buffer(&self) -> Rc<RefCell<Vec<Vertex<G>>>> {
+        Rc::clone(&self.buffer)
+    }
+
     pub fn change_pred<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Option<Edge<G>>) {
         let ins = self.choose_nontree_edge(&mut rng);
         let (u, v) = self.g.ends(ins);
-        if self.is_ancestor_of(u, v) {
-            let ins = self.g.reverse(ins);
-            (ins, self.set_pred(v, ins))
+        let rem = if self.is_ancestor_of(u, v) {
+            self.set_pred_edge(v, u)
         } else if self.is_ancestor_of(v, u) {
-            (ins, self.set_pred(u, ins))
+            self.set_pred_edge(u, v)
         // u is not ancestor of v and v is not ancestor of u, so we randomly choose which
         // pred we change
         } else if rng.gen() {
-            let ins = self.g.reverse(ins);
-            (ins, self.set_pred(v, ins))
+            self.set_pred_edge(v, u)
         } else {
-            (ins, self.set_pred(u, ins))
-        }
+            self.set_pred_edge(u, v)
+        };
+        (ins, rem)
     }
 
     pub fn change_any<R: Rng>(
         &mut self,
-        buffer: &mut Vec<Edge<G>>,
+        buffer: &mut Vec<Vertex<G>>,
         mut rng: R,
     ) -> (Edge<G>, Edge<G>) {
         // TODO: make this works with forests
         let ins = self.choose_nontree_edge(&mut rng);
         let (u, v) = self.g.ends(ins);
         // using choose_path_edge is a bit faster than find_path
-        let rem = self.choose_path_edge(u, v, buffer, &mut rng);
+        let x = self.choose_path_edge(u, v, buffer, &mut rng);
+        let rem = self.pred_edge(x).unwrap();
         assert!(self.cut(rem));
         if self.is_root(u) {
-            self.set_pred(u, ins);
+            self.set_pred(u, v);
         } else {
             self.make_root(v);
-            let ins = self.g.reverse(ins);
-            self.set_pred(v, ins);
+            self.set_pred(v, u);
         }
         (ins, rem)
     }
 
-    pub fn insert_remove<F>(&mut self, buffer: &mut Vec<Edge<G>>, ins: Edge<G>, rem: F) -> Edge<G>
+    pub fn insert_remove<F>(&mut self, buffer: &mut Vec<Vertex<G>>, ins: Edge<G>, rem: F) -> Edge<G>
     where
-        F: FnOnce(&[Edge<G>]) -> usize,
+        F: FnOnce(&[Vertex<G>]) -> usize,
     {
         let (u, v) = self.g.ends(ins);
         self.find_path(u, v, buffer);
-        let rem = buffer[rem(buffer)];
+        let i = rem(&*buffer);
+        let rem = self.g.edge_by_ends(buffer[i], buffer[i + 1]);
         assert!(self.cut(rem));
         if self.is_root(u) {
-            self.set_pred(u, ins);
+            self.set_pred(u, v);
         } else {
             self.make_root(v);
-            let ins = self.g.reverse(ins);
-            self.set_pred(v, ins);
+            self.set_pred(v, u);
         }
         rem
     }
@@ -323,16 +339,12 @@ where
             .find(|e| !self.contains(*e))
             .unwrap()
     }
-
-    pub fn buffer(&self) -> Rc<RefCell<Vec<Edge<G>>>> {
-        Rc::clone(&self.buffer)
-    }
 }
 
 impl<G, A> Clone for PredecessorTree<G, A>
 where
     G: Graph + WithVertexIndexProp,
-    A: Array<OptionEdge<G>> + Clone,
+    A: Array<OptionVertex<G>> + Clone,
 {
     fn clone(&self) -> Self {
         Self {
@@ -354,14 +366,14 @@ where
 impl<G, A> PartialEq for PredecessorTree<G, A>
 where
     G: Graph + WithVertexIndexProp,
-    A: Array<OptionEdge<G>>,
+    A: Array<OptionVertex<G>>,
 {
     fn eq(&self, other: &Self) -> bool {
         self.num_edges() == other.num_edges()
             && self
                 .g
                 .vertices()
-                .filter_map(|v| self.pred(v))
+                .filter_map(|v| self.pred_edge(v))
                 .all(|e| other.contains(e))
     }
 }
@@ -369,7 +381,7 @@ where
 pub struct PathToRoot<'a, G, A>
 where
     G: 'a + Graph + WithVertexIndexProp,
-    A: 'a + Array<OptionEdge<G>>,
+    A: 'a + Array<OptionVertex<G>>,
 {
     tree: &'a PredecessorTree<G, A>,
     cur: Vertex<G>,
@@ -378,15 +390,15 @@ where
 impl<'a, G, A> Iterator for PathToRoot<'a, G, A>
 where
     G: Graph + WithVertexIndexProp,
-    A: Array<OptionEdge<G>>,
+    A: Array<OptionVertex<G>>,
 {
-    type Item = Edge<G>;
+    type Item = Vertex<G>;
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.tree.pred(self.cur).map(|e| {
-            self.cur = self.tree.g.target(e);
-            e
+        self.tree.pred_vertex(self.cur).map(|v| {
+            self.cur = v;
+            v
         })
     }
 }
@@ -453,7 +465,7 @@ mod tests {
         (Rc::new(g), tree)
     }
 
-    fn eq<A: Array<OptionEdge<CompleteGraph>>>() {
+    fn eq<A: Array<OptionVertex<CompleteGraph>>>() {
         let mut rng = rand::weak_rng();
         let n = 30;
         let (g, mut tree) = graph_tree(n);
@@ -468,7 +480,7 @@ mod tests {
         }
     }
 
-    fn change_pred<A: Clone + Array<OptionEdge<CompleteGraph>>>() {
+    fn change_pred<A: Clone + Array<OptionVertex<CompleteGraph>>>() {
         let mut rng = rand::weak_rng();
         let n = 30;
         let (g, tree) = graph_tree(n);
@@ -484,7 +496,7 @@ mod tests {
         }
     }
 
-    fn change_any<A: Clone + Array<OptionEdge<CompleteGraph>>>() {
+    fn change_any<A: Clone + Array<OptionVertex<CompleteGraph>>>() {
         let mut rng = rand::weak_rng();
         let mut buffer = vec![];
         let n = 30;
@@ -501,7 +513,7 @@ mod tests {
         }
     }
 
-    fn make_root<A: Clone + Array<OptionEdge<CompleteGraph>>>() {
+    fn make_root<A: Clone + Array<OptionVertex<CompleteGraph>>>() {
         let mut rng = rand::weak_rng();
         let n = 30;
         let (g, tree) = graph_tree(n);
@@ -517,7 +529,7 @@ mod tests {
         }
     }
 
-    fn find_root<A: Array<OptionEdge<CompleteGraph>>>() {
+    fn find_root<A: Array<OptionVertex<CompleteGraph>>>() {
         let n = 30;
         let (g, tree) = graph_tree(n);
         let r = g.source(tree[0]);
@@ -528,7 +540,7 @@ mod tests {
         }
     }
 
-    fn paths<A: Array<OptionEdge<CompleteGraph>>>() {
+    fn paths<A: Array<OptionVertex<CompleteGraph>>>() {
         //     0
         //    / \
         //   1   4
@@ -556,38 +568,38 @@ mod tests {
             ],
         );
 
-        assert_eq!(vec![e(1, 0)], vec(tree.path_to_root(1)));
-        assert_eq!(vec![e(2, 1), e(1, 0)], vec(tree.path_to_root(2)));
-        assert_eq!(vec![e(3, 1), e(1, 0)], vec(tree.path_to_root(3)));
-        assert_eq!(vec![e(4, 0)], vec(tree.path_to_root(4)));
-        assert_eq!(vec![e(5, 4), e(4, 0)], vec(tree.path_to_root(5)));
-        assert_eq!(vec![e(6, 2), e(2, 1), e(1, 0)], vec(tree.path_to_root(6)));
-        assert_eq!(vec![e(7, 3), e(3, 1), e(1, 0)], vec(tree.path_to_root(7)));
+        assert_eq!(vec![e(1, 0)], vec(tree.edges_to_root(1)));
+        assert_eq!(vec![e(2, 1), e(1, 0)], vec(tree.edges_to_root(2)));
+        assert_eq!(vec![e(3, 1), e(1, 0)], vec(tree.edges_to_root(3)));
+        assert_eq!(vec![e(4, 0)], vec(tree.edges_to_root(4)));
+        assert_eq!(vec![e(5, 4), e(4, 0)], vec(tree.edges_to_root(5)));
+        assert_eq!(vec![e(6, 2), e(2, 1), e(1, 0)], vec(tree.edges_to_root(6)));
+        assert_eq!(vec![e(7, 3), e(3, 1), e(1, 0)], vec(tree.edges_to_root(7)));
 
         let mut path = vec![];
         tree.find_path(1, 0, &mut path);
-        assert_eq!(vec![e(1, 0)], path);
+        assert_eq!(vec![1, 0], path);
 
         tree.find_path(0, 1, &mut path);
-        assert_eq!(vec![e(0, 1)], path);
+        assert_eq!(vec![0, 1], path);
 
         tree.find_path(6, 1, &mut path);
-        assert_eq!(vec![e(6, 2), e(2, 1)], path);
+        assert_eq!(vec![6, 2, 1], path);
 
         tree.find_path(1, 6, &mut path);
-        assert_eq!(vec![e(1, 2), e(2, 6)], path);
+        assert_eq!(vec![1, 2, 6], path);
 
         tree.find_path(1, 4, &mut path);
-        assert_eq!(vec![e(1, 0), e(0, 4)], path);
+        assert_eq!(vec![1, 0, 4], path);
 
         tree.find_path(4, 1, &mut path);
-        assert_eq!(vec![e(4, 0), e(0, 1)], path);
+        assert_eq!(vec![4, 0, 1], path);
 
         tree.find_path(6, 8, &mut path);
-        assert_eq!(vec![e(6, 2), e(2, 1), e(1, 3), e(3, 7), e(7, 8)], path);
+        assert_eq!(vec![6, 2, 1, 3, 7, 8], path);
 
         tree.find_path(7, 6, &mut path);
-        assert_eq!(vec![e(7, 3), e(3, 1), e(1, 2), e(2, 6)], path);
+        assert_eq!(vec![7, 3, 1, 2, 6], path);
 
         for u in 0..n {
             for v in 0..n {
@@ -596,14 +608,14 @@ mod tests {
                     assert!(path.is_empty());
                 } else {
                     assert!(
-                        g.is_path(&path),
+                        g.is_path(path.windows(2).map(|s| g.edge_by_ends(s[0], s[1]))),
                         "{:?} -> {:?} = {:?}",
                         u,
                         v,
-                        vec(g.ends(&path))
+                        path
                     );
-                    assert_eq!(u, g.source(*path.first().unwrap()));
-                    assert_eq!(v, g.target(*path.last().unwrap()));
+                    assert_eq!(u, *path.first().unwrap());
+                    assert_eq!(v, *path.last().unwrap());
                 }
             }
         }
