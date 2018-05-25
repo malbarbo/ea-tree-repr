@@ -104,7 +104,14 @@ fn args() -> (usize, Op, FindOpStrategy, usize, usize) {
 fn new<R: Rng>(n: usize, find_op: FindOpStrategy, mut rng: R) -> NddrOneTreeForest<CompleteGraph> {
     let g = CompleteGraph::new(n as u32);
     let tree = random_sp(&g, &mut rng);
-    NddrOneTreeForest::new_with_strategies(Rc::new(g), tree, find_op, FindVertexStrategy::Map, rng)
+    NddrOneTreeForest::new_with_strategies(
+        Rc::new(g),
+        None,
+        tree,
+        find_op,
+        FindVertexStrategy::Map,
+        rng,
+    )
 }
 
 #[derive(Copy, Clone)]

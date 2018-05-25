@@ -14,6 +14,15 @@ use {
 pub trait Tree<G: WithEdge>: Clone {
     fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], rng: R) -> Self;
 
+    fn new_with_fake_root<R: Rng>(
+        g: Rc<G>,
+        _root: Option<Vertex<G>>,
+        edges: &[Edge<G>],
+        rng: R,
+    ) -> Self {
+        Self::new(g, edges, rng)
+    }
+
     fn set_edges(&mut self, edges: &[Edge<G>]);
 
     fn change_pred<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>);
@@ -28,7 +37,7 @@ pub trait Tree<G: WithEdge>: Clone {
 #[derive(Clone)]
 pub struct NddrAdjTree<G>(NddrOneTreeForest<G>, XorShiftRng)
 where
-    G: AdjacencyGraph
+    G: IncidenceGraph
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>
         + Clone
@@ -37,7 +46,7 @@ where
 
 impl<G> PartialEq for NddrAdjTree<G>
 where
-    G: AdjacencyGraph
+    G: IncidenceGraph
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>
         + Clone
@@ -51,17 +60,27 @@ where
 
 impl<G> Tree<G> for NddrAdjTree<G>
 where
-    G: AdjacencyGraph
+    G: IncidenceGraph
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>
         + Clone
         + Choose,
     DefaultVertexPropMut<G, bool>: Clone,
 {
-    fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], mut rng: R) -> Self {
+    fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], rng: R) -> Self {
+        Self::new_with_fake_root(g, None, edges, rng)
+    }
+
+    fn new_with_fake_root<R: Rng>(
+        g: Rc<G>,
+        root: Option<Vertex<G>>,
+        edges: &[Edge<G>],
+        mut rng: R,
+    ) -> Self {
         let xrng = rng.gen();
         let nddr = NddrOneTreeForest::new_with_strategies(
             g,
+            root,
             edges.to_vec(),
             FindOpStrategy::Adj,
             FindVertexStrategy::FatNode,
@@ -94,7 +113,7 @@ where
 #[derive(Clone)]
 pub struct NddrBalancedTree<G>(NddrOneTreeForest<G>, XorShiftRng)
 where
-    G: AdjacencyGraph
+    G: IncidenceGraph
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>
         + Clone
@@ -103,7 +122,7 @@ where
 
 impl<G> PartialEq for NddrBalancedTree<G>
 where
-    G: AdjacencyGraph
+    G: IncidenceGraph
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>
         + Clone
@@ -117,17 +136,27 @@ where
 
 impl<G> Tree<G> for NddrBalancedTree<G>
 where
-    G: AdjacencyGraph
+    G: IncidenceGraph
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>
         + Clone
         + Choose,
     DefaultVertexPropMut<G, bool>: Clone,
 {
-    fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], mut rng: R) -> Self {
+    fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], rng: R) -> Self {
+        Self::new_with_fake_root(g, None, edges, rng)
+    }
+
+    fn new_with_fake_root<R: Rng>(
+        g: Rc<G>,
+        root: Option<Vertex<G>>,
+        edges: &[Edge<G>],
+        mut rng: R,
+    ) -> Self {
         let xrng = rng.gen();
         let nddr = NddrOneTreeForest::new_with_strategies(
             g,
+            root,
             edges.to_vec(),
             FindOpStrategy::Balanced,
             FindVertexStrategy::FatNode,
@@ -159,7 +188,7 @@ where
 
 impl<G> Tree<G> for NddrOneTree<G>
 where
-    G: AdjacencyGraph + Choose,
+    G: IncidenceGraph + Choose,
 {
     fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], _rng: R) -> Self {
         NddrOneTree::new(g, edges)

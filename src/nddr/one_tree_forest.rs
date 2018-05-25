@@ -1,6 +1,7 @@
 // external
 use fera::ext::VecExt;
 use fera::fun::vec;
+use fera::graph::algs::Trees;
 use fera::graph::choose::Choose;
 use fera::graph::prelude::*;
 use rand::Rng;
@@ -144,6 +145,8 @@ where
 
     last_op_size: usize,
 
+    root: Option<Vertex<G>>,
+
     // The star tree is kept in trees[0]. The star tree connects the roots of the trees.
     trees: Vec<Rc<NddTree<Vertex<G>>>>,
 
@@ -169,7 +172,7 @@ where
 
 impl<G> Clone for NddrOneTreeForest<G>
 where
-    G: AdjacencyGraph
+    G: IncidenceGraph
         + Choose
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
@@ -179,6 +182,7 @@ where
         self.reinit_if_needed();
         Self {
             g: Rc::clone(&self.g),
+            root: self.root.clone(),
             data: Rc::clone(&self.data),
             last_op_size: self.last_op_size,
             trees: self.trees.clone(),
@@ -205,7 +209,7 @@ where
 
 impl<G> PartialEq for NddrOneTreeForest<G>
 where
-    G: AdjacencyGraph
+    G: IncidenceGraph
         + Choose
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
@@ -228,7 +232,7 @@ where
 
 impl<G> NddrOneTreeForest<G>
 where
-    G: AdjacencyGraph
+    G: IncidenceGraph
         + Choose
         + WithVertexIndexProp
         + WithVertexProp<DefaultVertexPropMut<G, bool>>,
@@ -237,6 +241,7 @@ where
     pub fn new<R: Rng>(g: Rc<G>, edges: Vec<Edge<G>>, rng: R) -> Self {
         Self::new_with_strategies(
             g,
+            None,
             edges,
             // init with the default strategies described in the paper
             FindOpStrategy::Adj,
@@ -247,32 +252,52 @@ where
 
     pub fn new_with_strategies<R: Rng>(
         g: Rc<G>,
+        root: Option<Vertex<G>>,
         edges: Vec<Edge<G>>,
         find_op: FindOpStrategy,
         find_vertex: FindVertexStrategy,
         rng: R,
     ) -> Self {
         let data = Rc::new(RefCell::new(Data::new(&g, find_op, find_vertex)));
-        Self::new_with_data(g, data, edges, rng)
+        Self::new_with_data(g, root, data, edges, rng)
     }
 
     fn new_with_data<R: Rng>(
         g: Rc<G>,
+        root: Option<Vertex<G>>,
         data: Rc<RefCell<Data<G>>>,
         mut edges: Vec<Edge<G>>,
         rng: R,
     ) -> Self {
+        assert!(g.spanning_subgraph(&edges).is_tree());
         let data_ = data;
         // use a clone to make the borrow checker happy
         let data = Rc::clone(&data_);
         let mut data = data.borrow_mut();
         let nsqrt = data.nsqrt;
 
-        let star_tree = Rc::new(NddTree::new(find_star_tree(
-            &g.spanning_subgraph(&edges),
-            nsqrt,
-            rng,
-        )));
+        let star_tree = if let Some(root) = root {
+            for e in g.out_edges(root) {
+                assert!(
+                    edges.contains(&e),
+                    "All adjacent edges of the root {:?} should be in the tree, but {:?} is not",
+                    root,
+                    e
+                );
+            }
+            Rc::new(NddTree::new(
+                collect_ndds(&g.spanning_subgraph(g.out_edges(root)), &[root])
+                    .into_iter()
+                    .next()
+                    .unwrap(),
+            ))
+        } else {
+            Rc::new(NddTree::new(find_star_tree(
+                &g.spanning_subgraph(&edges),
+                nsqrt,
+                rng,
+            )))
+        };
 
         let roots = vec(star_tree.iter().map(|ndd| ndd.vertex()));
         let star_edges = {
@@ -330,6 +355,7 @@ where
 
         NddrOneTreeForest {
             g,
+            root,
             data: data_,
             last_op_size: 0,
             trees,
@@ -342,7 +368,13 @@ where
     }
 
     pub fn set_edges<R: Rng>(&mut self, edges: &[Edge<G>], rng: R) {
-        *self = Self::new_with_data(Rc::clone(&self.g), Rc::clone(&self.data), edges.into(), rng);
+        *self = Self::new_with_data(
+            Rc::clone(&self.g),
+            self.root,
+            Rc::clone(&self.data),
+            edges.into(),
+            rng,
+        );
     }
 
     pub fn graph(&self) -> &Rc<G> {
@@ -708,8 +740,8 @@ where
     }
 
     fn should_mutate_star_tree<R: Rng>(&self, rng: &mut R) -> bool {
-        // Do it with probability 1/nsqrt
-        rng.gen_range(0, self.data().nsqrt + 1) == 0
+        // do it with probability 1/nsqrt if there is no fake root
+        self.root.is_none() && rng.gen_range(0, self.data().nsqrt + 1) == 0
     }
 
     fn select_tree_if<R, F>(&self, rng: &mut R, mut f: F) -> Option<usize>
@@ -865,7 +897,7 @@ mod tests {
         let data = Rc::new(RefCell::new(data));
         let forests = vec((0..n).map(|_| {
             rng.shuffle(&mut tree);
-            NddrOneTreeForest::new_with_data(g.clone(), data.clone(), tree.clone(), &mut rng)
+            NddrOneTreeForest::new_with_data(g.clone(), None, data.clone(), tree.clone(), &mut rng)
         }));
 
         for i in 0..(n as usize) {
@@ -898,7 +930,7 @@ mod tests {
                 let mut rng = rand::weak_rng();
                 let (g, data, tree) = data(100, FindOpStrategy::$op, FindVertexStrategy::$vertex);
                 let data = Rc::new(RefCell::new(data));
-                let mut forest = NddrOneTreeForest::new_with_data(g, data, tree, &mut rng);
+                let mut forest = NddrOneTreeForest::new_with_data(g, None, data, tree, &mut rng);
                 for _ in 0..100 {
                     let mut rng = rand::weak_rng();
                     for &op in &[1, 2] {
