@@ -84,20 +84,17 @@ where
         self.segs = Rc::new(segs);
     }
 
+    fn tour_edges(&self) -> Vec<(usize, usize)> {
+        let segs = &self.segs;
+        (0..segs.len())
+            .flat_map(|i| (0..segs[i].len()).map(move |j| segs[i].get(j)))
+            .collect()
+    }
+
     pub fn edges(&self) -> Vec<Edge<G>> {
-        let mut stack = vec![];
-        (0..self.segs.len())
-            .flat_map(|i| (0..self.segs[i].len()).map(move |j| (i, j)))
-            .filter_map(|(i, j)| {
-                let (u, v) = self.segs[i].get(j);
-                if stack.last() == Some(&(v, u)) || stack.last() == Some(&(u, v)) {
-                    stack.pop();
-                    None
-                } else {
-                    stack.push((u, v));
-                    Some(self.get_edge((i, j)))
-                }
-            })
+        self.tour_edges()
+            .into_iter()
+            .map(|(a, b)| self.g.edge_by_ends(self.vertices[a], self.vertices[b]))
             .collect()
     }
 
@@ -253,13 +250,13 @@ where
             // 1
             last = self.extend(segs, last, self.seg_iter(self.first_pos(), to_next));
             // new
-            last = self.push_edge(segs, last, (u, v));
+            last = self.push_edge(segs, last, &u, &v);
             // 4
             last = self.extend(segs, last, self.seg_iter(root, end_next));
             // 3
             last = self.extend(segs, last, self.seg_iter(start, root));
             // new reversed
-            last = self.push_edge(segs, last, (v, u));
+            last = self.push_edge(segs, last, &v, &u);
             // 2
             last = self.extend(segs, last, self.seg_iter(to_next, start_prev));
             // 5
@@ -312,13 +309,13 @@ where
             // 4
             last = self.extend(segs, last, self.seg_iter(end_next_next, to_next));
             // new
-            last = self.push_edge(segs, last, (u, v));
+            last = self.push_edge(segs, last, &u, &v);
             // 3
             last = self.extend(segs, last, self.seg_iter(root, end_next));
             // 2
             last = self.extend(segs, last, self.seg_iter(start, root));
             // new reversed
-            last = self.push_edge(segs, last, (v, u));
+            last = self.push_edge(segs, last, &v, &u);
             // 5
             last = self.extend(segs, last, self.seg_iter(to_next, self.end_pos()));
             self.push_last(segs, last);
@@ -457,9 +454,10 @@ where
                         last = Seg::Partial(source, target);
                     }
                     Seg::Complete(x) => {
-                        if source.len() < self.min_seg_len() {
-                            source.extend(&*x.source);
-                            target.extend(&*x.target);
+                        let len: usize = source.iter().map(|s| s.len()).sum();
+                        if len < self.min_seg_len() {
+                            source.push(&x.source[..]);
+                            target.push(&x.target[..]);
                             last = Seg::Partial(source, target);
                         } else {
                             self.push_source_target(segs, source, target);
@@ -479,10 +477,12 @@ where
                 if source.is_empty() {
                     return;
                 }
-                if source.len() < self.min_seg_len() {
-                    let (mut ss, mut tt) = match Rc::try_unwrap(segs.pop().unwrap()) {
-                        Ok(seg) => seg.take_source_target(),
-                        Err(seg) => (seg.source.clone(), seg.target.clone()),
+                let len: usize = source.iter().map(|s| s.len()).sum();
+                if len < self.min_seg_len() {
+                    let seg = Rc::try_unwrap(segs.pop().unwrap());
+                    let (mut ss, mut tt) = match &seg {
+                        &Ok(ref seg) => (vec![&seg.source[..]], vec![&seg.target[..]]),
+                        &Err(ref seg) => (vec![&seg.source[..]], vec![&seg.target[..]]),
                     };
                     ss.extend(source);
                     tt.extend(target);
@@ -494,15 +494,51 @@ where
         }
     }
 
-    fn push_source_target(&self, segs: &mut Vec<Rc<Segment>>, source: Vec<u32>, target: Vec<u32>) {
-        if source.len() <= self.max_seg_len() {
-            segs.push(self.new_segment(source, target));
+    fn push_source_target(
+        &self,
+        segs: &mut Vec<Rc<Segment>>,
+        source: Vec<&[u32]>,
+        target: Vec<&[u32]>,
+    ) {
+        fn flatten(x: Vec<&[u32]>) -> Vec<u32> {
+            let len = x.iter().map(|s| s.len()).sum();
+            let mut vec = Vec::with_capacity(len);
+            for slice in x {
+                vec.extend_from_slice(slice);
+            }
+            vec
+        }
+        let len: usize = source.iter().map(|s| s.len()).sum();
+        if len <= self.max_seg_len() {
+            segs.push(self.new_segment(flatten(source), flatten(target)));
         } else {
-            let count = source.len() / self.nsqrt;
-            let step = source.len() as f64 / count as f64;
+            let count = len / self.nsqrt;
+            let step = len as f64 / count as f64;
+            let mut i = 0;
+            let mut j = 0;
             let mut s = 0;
             for t in Linspace::new(count, step) {
-                segs.push(self.new_segment(source[s..t].into(), target[s..t].into()));
+                let new_len = t - s;
+                let mut new_source = Vec::with_capacity(new_len);
+                let mut new_target = Vec::with_capacity(new_len);
+                loop {
+                    if source[i][j..].len() + new_source.len() <= new_len {
+                        new_source.extend_from_slice(&source[i][j..]);
+                        new_target.extend_from_slice(&target[i][j..]);
+                        i += 1;
+                        j = 0;
+                    } else {
+                        let k = j + new_len - new_source.len();
+                        new_source.extend_from_slice(&source[i][j..k]);
+                        new_target.extend_from_slice(&target[i][j..k]);
+                        assert_eq!(new_len, new_source.len());
+                        j = k;
+                    }
+                    if new_source.len() == new_len {
+                        break;
+                    }
+                }
+                segs.push(self.new_segment(new_source, new_target));
                 s = t;
             }
         }
@@ -512,16 +548,17 @@ where
         &self,
         segs: &mut Vec<Rc<Segment>>,
         last: Seg<'a>,
-        (s, t): (u32, u32),
+        s: &'a u32,
+        t: &'a u32,
     ) -> Seg<'a> {
         match last {
             Seg::Complete(seg) => {
                 segs.push(Rc::clone(seg));
-                Seg::Partial(vec![s], vec![t])
+                Seg::Partial(vec![ref_slice(s)], vec![ref_slice(t)])
             }
             Seg::Partial(mut source, mut target) => {
-                source.push(s);
-                target.push(t);
+                source.push(ref_slice(s));
+                target.push(ref_slice(t));
                 Seg::Partial(source, target)
             }
         }
@@ -622,6 +659,10 @@ where
     fn check(&self) {}
 }
 
+pub fn ref_slice<A>(s: &A) -> &[A] {
+    unsafe { ::std::slice::from_raw_parts(s, 1) }
+}
+
 #[derive(Copy, Clone, PartialEq, Debug)]
 struct Subtree {
     start: (usize, usize),
@@ -670,15 +711,6 @@ impl Segment {
             self.bitset.set(v as usize, false);
         }
     }
-
-    fn take_source_target(mut self) -> (Vec<u32>, Vec<u32>) {
-        use std::mem::replace;
-        self.reset_bitset();
-        (
-            replace(&mut self.source, vec![]),
-            replace(&mut self.target, vec![]),
-        )
-    }
 }
 
 impl Drop for Segment {
@@ -690,7 +722,7 @@ impl Drop for Segment {
 
 #[derive(Clone, Debug)]
 enum Seg<'a> {
-    Partial(Vec<u32>, Vec<u32>),
+    Partial(Vec<&'a [u32]>, Vec<&'a [u32]>),
     Complete(&'a Rc<Segment>),
 }
 
@@ -724,8 +756,8 @@ impl<'a> Iterator for SegIter<'a> {
                 Some(Seg::Complete(&self.segs[i]))
             } else {
                 Some(Seg::Partial(
-                    self.segs[i].source[j..].into(),
-                    self.segs[i].target[j..].into(),
+                    vec![&self.segs[i].source[j..]],
+                    vec![&self.segs[i].target[j..]],
                 ))
             }
         } else if self.cur.0 == self.end.0 {
@@ -739,8 +771,8 @@ impl<'a> Iterator for SegIter<'a> {
                 Some(Seg::Complete(&self.segs[i]))
             } else {
                 Some(Seg::Partial(
-                    self.segs[i].source[a..b].into(),
-                    self.segs[i].target[a..b].into(),
+                    vec![&self.segs[i].source[a..b]],
+                    vec![&self.segs[i].target[a..b]],
                 ))
             }
         } else {
@@ -764,15 +796,8 @@ where
         self.segs[i].get(j)
     }
 
-    pub fn tour_edges(&self) -> Vec<(usize, usize)> {
-        let segs = &self.segs;
-        (0..segs.len())
-            .flat_map(|i| (0..segs[i].len()).map(move |j| segs[i].get(j)))
-            .collect()
-    }
-
     pub fn check(&self) {
-        use fera::graph::algs::Trees;
+        use fera::graph::algs::{Paths, Trees};
         use std::collections::HashSet;
 
         // check seg lens
@@ -788,9 +813,11 @@ where
             last = edge.1;
         }
 
-        assert!(self.g.spanning_subgraph(self.edges()).is_tree());
+        let edges_set: HashSet<_> = self.edges().into_iter().collect();
+        assert!(self.g.spanning_subgraph(edges_set).is_tree());
 
         // check if the tour is an euler tour
+        assert!(self.g.is_walk(self.edges()));
         let mut stack = vec![];
         for (a, b) in self.tour_edges() {
             let last = stack.last().cloned();
