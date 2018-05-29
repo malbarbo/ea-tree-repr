@@ -1,6 +1,7 @@
 use fera::graph::choose::Choose;
 use fera::graph::prelude::*;
 use fera::graph::traverse::{Dfs, OnTraverseEvent, TraverseEvent};
+use fera::fun::vec;
 
 use rand::Rng;
 
@@ -12,11 +13,9 @@ use {bitset_acquire, bitset_release, Bitset};
 const MAX_TRIES_CHANGE_ANY: usize = 5;
 
 #[derive(Clone)]
-pub struct EulerTourTree<G: WithEdge> {
+pub struct EulerTourTree<G: WithEdge + WithVertexIndexProp> {
     g: Rc<G>,
-    // TODO: remove vertices field
-    vertices: Rc<[Vertex<G>]>,
-    segs: Rc<Vec<Rc<Segment>>>,
+    segs: Rc<Vec<Rc<Segment<G>>>>,
     nsqrt: usize,
     len: usize,
 }
@@ -26,19 +25,11 @@ where
     G: IncidenceGraph + WithVertexIndexProp + Choose,
 {
     pub fn new(g: Rc<G>, edges: &[Edge<G>]) -> Self {
-        let mut vertices = vec![g.vertices().next().unwrap(); g.num_vertices()];
-        let index = g.vertex_index();
-        for v in g.vertices() {
-            vertices[index.get(v)] = v;
-        }
-
         let len = 2 * (g.num_vertices() - 1);
         let nsqrt = ((len as f64).sqrt()).round() as usize;
-
         let mut tour = Self {
             g,
-            segs: Rc::new(vec![]),
-            vertices: vertices.into(),
+            segs: Rc::default(),
             nsqrt,
             len,
         };
@@ -47,7 +38,7 @@ where
         tour
     }
 
-    fn edges_to_tour(&self, edges: &[Edge<G>]) -> Vec<(u32, u32)> {
+    fn edges_to_tour(&self, edges: &[Edge<G>]) -> Vec<(Vertex<G>, Vertex<G>)> {
         let mut tour = Vec::with_capacity(2 * (self.g.num_vertices() - 1));
         let mut stack = vec![];
         self.g
@@ -72,19 +63,18 @@ where
         let edges = self.edges_to_tour(edges);
         let mut last = 0;
         let step = edges.len() as f64 / self.nsqrt as f64;
-        let segs = Linspace::new(self.nsqrt, step)
+        let segs = vec(Linspace::new(self.nsqrt, step)
             .map(|to| {
                 let seg = &edges[last..to];
                 let source = seg.iter().map(|t| t.0).collect();
                 let target = seg.iter().map(|t| t.1).collect();
                 last = to;
                 self.new_segment(source, target)
-            })
-            .collect();
-        self.segs = Rc::new(segs);
+            }));
+        self.segs = segs.into();
     }
 
-    fn tour_edges(&self) -> Vec<(usize, usize)> {
+    fn tour_edges(&self) -> Vec<(Vertex<G>, Vertex<G>)> {
         let segs = &self.segs;
         (0..segs.len())
             .flat_map(|i| (0..segs[i].len()).map(move |j| segs[i].get(j)))
@@ -94,7 +84,7 @@ where
     pub fn edges(&self) -> Vec<Edge<G>> {
         self.tour_edges()
             .into_iter()
-            .map(|(a, b)| self.g.edge_by_ends(self.vertices[a], self.vertices[b]))
+            .map(|(a, b)| self.g.edge_by_ends(a, b))
             .collect()
     }
 
@@ -161,13 +151,13 @@ where
                         continue;
                     }
                     let y = self.g.target(e);
-                    let yi = self.subtree_end(self.vertex_index(y));
+                    let yi = self.subtree_end(y);
                     if sub.contains_pos(yi) {
                         continue;
                     }
                     ins = self.g.reverse(e);
                     to = yi;
-                    sub_new_root = self.subtree_start(self.vertex_index(x));
+                    sub_new_root = self.subtree_start(x);
                     break 'out1;
                 }
                 return self.change_pred(rng);
@@ -185,12 +175,12 @@ where
                         continue;
                     }
                     let y = self.g.target(e);
-                    let yi = self.subtree_start(self.vertex_index(y));
+                    let yi = self.subtree_start(y);
                     if !sub.contains_pos(yi) {
                         continue;
                     }
                     ins = e;
-                    to = self.subtree_end(self.vertex_index(x));
+                    to = self.subtree_end(x);
                     sub_new_root = yi;
                     break 'out2;
                 }
@@ -263,7 +253,7 @@ where
             last = self.extend(segs, last, self.seg_iter(end_next_next, self.end_pos()));
             self.push_last(segs, last);
         }
-        self.segs = Rc::new(segs);
+        self.segs = segs.into();
     }
 
     fn move_after(
@@ -320,18 +310,18 @@ where
             last = self.extend(segs, last, self.seg_iter(to_next, self.end_pos()));
             self.push_last(segs, last);
         }
-        self.segs = Rc::new(segs);
+        self.segs = segs.into();
     }
 
     fn choose_non_tree_edge<R: Rng>(&self, rng: R) -> (Edge<G>, Subtree, Subtree) {
         for e in self.g.choose_edge_iter(rng) {
             let (a, b) = self.ends(e);
             let a_start = self.subtree_start(a);
-            if a_start != (0, 0) && self.get_edge(self.prev_pos(a_start)) == e {
+            if a_start != (0, 0) && self.source(self.prev_pos(a_start)) == b {
                 continue;
             }
             let b_start = self.subtree_start(b);
-            if b_start != (0, 0) && self.get_edge(self.prev_pos(b_start)) == e {
+            if b_start != (0, 0) && self.source(self.prev_pos(b_start)) == a {
                 continue;
             }
             let a_sub = Subtree::new(a_start, self.subtree_end(a));
@@ -392,11 +382,10 @@ where
     }
 
     fn subtree(&self, v: Vertex<G>) -> Subtree {
-        let v = self.vertex_index(v);
         Subtree::new(self.subtree_start(v), self.subtree_end(v))
     }
 
-    fn subtree_start(&self, v: u32) -> (usize, usize) {
+    fn subtree_start(&self, v: Vertex<G>) -> (usize, usize) {
         for (a, seg) in self.segs.iter().enumerate() {
             if let Some(b) = self.segment_position_source(seg, v) {
                 return (a, b);
@@ -405,7 +394,7 @@ where
         unreachable!()
     }
 
-    fn subtree_end(&self, v: u32) -> (usize, usize) {
+    fn subtree_end(&self, v: Vertex<G>) -> (usize, usize) {
         // special case for the root
         if self.segs[0].source[0] == v {
             return self.prev_pos(self.end_pos());
@@ -419,7 +408,7 @@ where
         unreachable!()
     }
 
-    fn segment_position_source(&self, seg: &Segment, v: u32) -> Option<usize> {
+    fn segment_position_source(&self, seg: &Segment<G>, v: Vertex<G>) -> Option<usize> {
         if seg.contains(v) {
             seg.source.iter().position(|x| *x == v)
         } else {
@@ -427,7 +416,7 @@ where
         }
     }
 
-    fn segment_rposition_source(&self, seg: &Segment, v: u32) -> Option<usize> {
+    fn segment_rposition_source(&self, seg: &Segment<G>, v: Vertex<G>) -> Option<usize> {
         if seg.contains(v) {
             seg.source.iter().rposition(|x| *x == v)
         } else {
@@ -437,10 +426,10 @@ where
 
     fn extend<'a>(
         &self,
-        segs: &mut Vec<Rc<Segment>>,
-        mut last: Seg<'a>,
-        iter: SegIter<'a>,
-    ) -> Seg<'a> {
+        segs: &mut Vec<Rc<Segment<G>>>,
+        mut last: Seg<'a, G>,
+        iter: SegIter<'a, G>,
+    ) -> Seg<'a, G> {
         for seg in iter {
             match last {
                 Seg::Complete(x) => {
@@ -470,7 +459,7 @@ where
         last
     }
 
-    fn push_last<'a>(&self, segs: &mut Vec<Rc<Segment>>, last: Seg<'a>) {
+    fn push_last<'a>(&self, segs: &mut Vec<Rc<Segment<G>>>, last: Seg<'a, G>) {
         match last {
             Seg::Complete(seg) => segs.push(Rc::clone(seg)),
             Seg::Partial(source, target) => {
@@ -496,11 +485,11 @@ where
 
     fn push_source_target(
         &self,
-        segs: &mut Vec<Rc<Segment>>,
-        source: Vec<&[u32]>,
-        target: Vec<&[u32]>,
+        segs: &mut Vec<Rc<Segment<G>>>,
+        source: Vec<&[Vertex<G>]>,
+        target: Vec<&[Vertex<G>]>,
     ) {
-        fn flatten(x: Vec<&[u32]>) -> Vec<u32> {
+        fn flatten<T: Copy>(x: Vec<&[T]>) -> Vec<T> {
             let len = x.iter().map(|s| s.len()).sum();
             let mut vec = Vec::with_capacity(len);
             for slice in x {
@@ -546,11 +535,11 @@ where
 
     fn push_edge<'a>(
         &self,
-        segs: &mut Vec<Rc<Segment>>,
-        last: Seg<'a>,
-        s: &'a u32,
-        t: &'a u32,
-    ) -> Seg<'a> {
+        segs: &mut Vec<Rc<Segment<G>>>,
+        last: Seg<'a, G>,
+        s: &'a Vertex<G>,
+        t: &'a Vertex<G>,
+    ) -> Seg<'a, G> {
         match last {
             Seg::Complete(seg) => {
                 segs.push(Rc::clone(seg));
@@ -564,18 +553,19 @@ where
         }
     }
 
-    fn seg_iter(&self, start: (usize, usize), end: (usize, usize)) -> SegIter {
+    fn seg_iter(&self, start: (usize, usize), end: (usize, usize)) -> SegIter<G> {
         SegIter::new(&self.segs, start, end)
     }
 
-    fn new_segment(&self, source: Vec<u32>, target: Vec<u32>) -> Rc<Segment> {
+    fn new_segment(&self, source: Vec<Vertex<G>>, target: Vec<Vertex<G>>) -> Rc<Segment<G>> {
         assert_ne!(0, source.len());
         assert_eq!(source.len(), target.len());
         let mut bitset = bitset_acquire(self.g.num_vertices() + 1);
         for &v in &source {
-            bitset.set(v as usize, true);
+            bitset.set(self.g.vertex_index().get(v), true);
         }
         Rc::new(Segment {
+            index: self.g.vertex_index(),
             source,
             target,
             bitset,
@@ -584,17 +574,11 @@ where
 
     fn get_edge(&self, (i, j): (usize, usize)) -> Edge<G> {
         let (a, b) = self.segs[i].get(j);
-        self.g.edge_by_ends(self.vertices[a], self.vertices[b])
+        self.g.edge_by_ends(a, b)
     }
 
-    fn vertex_index(&self, v: Vertex<G>) -> u32 {
-        self.g.vertex_index().get(v) as u32
-    }
-
-    fn ends(&self, e: Edge<G>) -> (u32, u32) {
-        let prop = self.g.vertex_index();
-        let (a, b) = self.g.ends(e);
-        (prop.get(a) as u32, prop.get(b) as u32)
+    fn ends(&self, e: Edge<G>) -> (Vertex<G>, Vertex<G>) {
+        self.g.ends(e)
     }
 
     fn pos_to_index(&self, (i, j): (usize, usize)) -> usize {
@@ -613,11 +597,11 @@ where
     }
 
     fn source(&self, (i, j): (usize, usize)) -> Vertex<G> {
-        self.vertices[self.segs[i].source[j] as usize]
+        self.segs[i].source[j]
     }
 
     fn target(&self, (i, j): (usize, usize)) -> Vertex<G> {
-        self.vertices[self.segs[i].target[j] as usize]
+        self.segs[i].target[j]
     }
 
     fn max_seg_len(&self) -> usize {
@@ -683,69 +667,69 @@ impl Subtree {
     }
 }
 
-#[derive(Clone, Debug)]
-struct Segment {
-    source: Vec<u32>,
-    target: Vec<u32>,
+struct Segment<G: WithVertexIndexProp> {
+    index: VertexIndexProp<G>,
+    source: Vec<Vertex<G>>,
+    target: Vec<Vertex<G>>,
     bitset: Bitset,
 }
 
-impl Segment {
+impl<G: WithVertexIndexProp> Segment<G> {
     #[inline]
     fn len(&self) -> usize {
         self.source.len()
     }
 
     #[inline]
-    fn get(&self, i: usize) -> (usize, usize) {
-        (self.source[i] as usize, self.target[i] as usize)
+    fn get(&self, i: usize) -> (Vertex<G>, Vertex<G>) {
+        (self.source[i], self.target[i])
     }
 
     #[inline]
-    fn contains(&self, v: u32) -> bool {
-        self.bitset[v as usize]
+    fn contains(&self, v: Vertex<G>) -> bool {
+        self.bitset[self.index.get(v)]
     }
 
     fn reset_bitset(&mut self) {
         for &v in &self.source {
-            self.bitset.set(v as usize, false);
+            self.bitset.set(self.index.get(v), false);
         }
     }
 }
 
-impl Drop for Segment {
+impl<G: WithVertexIndexProp> Drop for Segment<G> {
     fn drop(&mut self) {
         self.reset_bitset();
         bitset_release(::std::mem::replace(&mut self.bitset, Bitset::default()));
     }
 }
 
-#[derive(Clone, Debug)]
-enum Seg<'a> {
-    Partial(Vec<&'a [u32]>, Vec<&'a [u32]>),
-    Complete(&'a Rc<Segment>),
+#[derive(Clone)]
+enum Seg<'a, G: 'a + WithVertexIndexProp> {
+    Partial(Vec<&'a [Vertex<G>]>, Vec<&'a [Vertex<G>]>),
+    Complete(&'a Rc<Segment<G>>),
 }
 
-impl<'a> Default for Seg<'a> {
+impl<'a, G: 'a + WithVertexIndexProp> Default for Seg<'a, G> {
     fn default() -> Self {
         Seg::Partial(vec![], vec![])
     }
 }
 
-struct SegIter<'a> {
-    segs: &'a [Rc<Segment>],
+struct SegIter<'a, G: 'a + WithVertexIndexProp> {
+    segs: &'a [Rc<Segment<G>>],
     cur: (usize, usize),
     end: (usize, usize),
 }
 
-impl<'a> SegIter<'a> {
-    fn new(segs: &'a [Rc<Segment>], cur: (usize, usize), end: (usize, usize)) -> Self {
+impl<'a, G: 'a + WithVertexIndexProp> SegIter<'a, G> {
+    fn new(segs: &'a [Rc<Segment<G>>], cur: (usize, usize), end: (usize, usize)) -> Self {
         SegIter { segs, cur, end }
     }
 }
 
-impl<'a> Iterator for SegIter<'a> {
-    type Item = Seg<'a>;
+impl<'a, G: WithVertexIndexProp> Iterator for SegIter<'a, G> {
+    type Item = Seg<'a, G>;
 
     #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
@@ -781,6 +765,32 @@ impl<'a> Iterator for SegIter<'a> {
     }
 }
 
+pub struct Linspace {
+    last: usize,
+    cur: usize,
+    step: f64,
+}
+
+impl Linspace {
+    fn new(last: usize, step: f64) -> Self {
+        Self { last, cur: 0, step }
+    }
+}
+
+impl Iterator for Linspace {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.cur < self.last {
+            self.cur += 1;
+            let value = (self.cur as f64) * self.step;
+            Some(value.round() as usize)
+        } else {
+            None
+        }
+    }
+}
+
 // tests
 
 #[cfg(test)]
@@ -792,7 +802,7 @@ where
         self.len
     }
 
-    pub fn get(&self, (i, j): (usize, usize)) -> (usize, usize) {
+    pub fn get(&self, (i, j): (usize, usize)) -> (Vertex<G>, Vertex<G>) {
         self.segs[i].get(j)
     }
 
@@ -827,39 +837,13 @@ where
                 stack.push((a, b));
             }
         }
-        assert!(stack.is_empty(), "{:?}", self.segs);
+        assert!(stack.is_empty());
 
         // check that there is no repeated edge
         let set: HashSet<_> = self.tour_edges().into_iter().collect();
         assert_eq!((self.g.num_vertices() - 1) * 2, set.len());
 
         assert_eq!(self.segs.iter().map(|s| s.len()).sum::<usize>(), self.len());
-    }
-}
-
-pub struct Linspace {
-    last: usize,
-    cur: usize,
-    step: f64,
-}
-
-impl Linspace {
-    fn new(last: usize, step: f64) -> Self {
-        Self { last, cur: 0, step }
-    }
-}
-
-impl Iterator for Linspace {
-    type Item = usize;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.cur < self.last {
-            self.cur += 1;
-            let value = (self.cur as f64) * self.step;
-            Some(value.round() as usize)
-        } else {
-            None
-        }
     }
 }
 
