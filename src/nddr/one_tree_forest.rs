@@ -125,7 +125,7 @@ where
     fn is_marked(&self, u: Vertex<G>, v: Vertex<G>) -> bool {
         let u = self.vertex_index.get(u);
         let v = self.vertex_index.get(v);
-        self.m[u][v] || self.m[v][u]
+        self.m[u].contains(v) || self.m[v].contains(u)
     }
 
     fn set_m(&mut self, u: Vertex<G>, v: Vertex<G>, value: bool) {

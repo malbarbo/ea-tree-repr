@@ -1,19 +1,21 @@
+use fera::fun::vec;
 use fera::graph::choose::Choose;
 use fera::graph::prelude::*;
 use fera::graph::traverse::{Dfs, OnTraverseEvent, TraverseEvent};
-use fera::fun::vec;
 
 use rand::Rng;
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
-// TODO: use a shared pool, like we use buffer in ParentTree
-use {bitset_acquire, bitset_release, Bitset};
+use {Bitset, Pool};
 
 const MAX_TRIES_CHANGE_ANY: usize = 5;
 
 #[derive(Clone)]
 pub struct EulerTourTree<G: WithEdge + WithVertexIndexProp> {
+    pool_bitset: Rc<Pool<Bitset>>,
+    partial: Rc<RefCell<PartialSegments<'static, G>>>,
     g: Rc<G>,
     segs: Rc<Vec<Rc<Segment<G>>>>,
     nsqrt: usize,
@@ -28,6 +30,8 @@ where
         let len = 2 * (g.num_vertices() - 1);
         let nsqrt = ((len as f64).sqrt()).round() as usize;
         let mut tour = Self {
+            pool_bitset: Default::default(),
+            partial: Default::default(),
             g,
             segs: Rc::default(),
             nsqrt,
@@ -63,14 +67,13 @@ where
         let edges = self.edges_to_tour(edges);
         let mut last = 0;
         let step = edges.len() as f64 / self.nsqrt as f64;
-        let segs = vec(Linspace::new(self.nsqrt, step)
-            .map(|to| {
-                let seg = &edges[last..to];
-                let source = seg.iter().map(|t| t.0).collect();
-                let target = seg.iter().map(|t| t.1).collect();
-                last = to;
-                self.new_segment(source, target)
-            }));
+        let segs = vec(Linspace::new(self.nsqrt, step).map(|to| {
+            let seg = &edges[last..to];
+            let source = seg.iter().map(|t| t.0).collect();
+            let target = seg.iter().map(|t| t.1).collect();
+            last = to;
+            self.new_segment(source, target)
+        }));
         self.segs = segs.into();
     }
 
@@ -236,22 +239,26 @@ where
             let end_next = self.next_pos(end);
             let end_next_next = self.next_pos(end_next);
             let start_prev = self.prev_pos(start);
-            let mut last = Seg::default();
+            let mut partial = self.partial.borrow_mut();
+            // use unsafe a stricter lifetime than 'static. It is safe because partial is cleaned
+            let partial: &mut PartialSegments<G> = unsafe { ::std::mem::transmute(&mut *partial) };
             // 1
-            last = self.extend(segs, last, self.seg_iter(self.first_pos(), to_next));
+            self.extend(segs, partial, self.seg_iter(self.first_pos(), to_next));
             // new
-            last = self.push_edge(segs, last, &u, &v);
+            self.push_edge(partial, &u, &v);
             // 4
-            last = self.extend(segs, last, self.seg_iter(root, end_next));
+            self.extend(segs, partial, self.seg_iter(root, end_next));
             // 3
-            last = self.extend(segs, last, self.seg_iter(start, root));
+            self.extend(segs, partial, self.seg_iter(start, root));
             // new reversed
-            last = self.push_edge(segs, last, &v, &u);
+            self.push_edge(partial, &v, &u);
             // 2
-            last = self.extend(segs, last, self.seg_iter(to_next, start_prev));
+            self.extend(segs, partial, self.seg_iter(to_next, start_prev));
             // 5
-            last = self.extend(segs, last, self.seg_iter(end_next_next, self.end_pos()));
-            self.push_last(segs, last);
+            self.extend(segs, partial, self.seg_iter(end_next_next, self.end_pos()));
+            self.push_last(segs, partial);
+            assert!(partial.0.is_empty());
+            assert!(partial.0.is_empty());
         }
         self.segs = segs.into();
     }
@@ -293,22 +300,26 @@ where
             let end_next = self.next_pos(end);
             let end_next_next = self.next_pos(end_next);
             let start_prev = self.prev_pos(start);
-            let mut last = Seg::default();
+            let mut partial = self.partial.borrow_mut();
+            // use unsafe a stricter lifetime than 'static. It is safe because partial is cleaned
+            let partial: &mut PartialSegments<G> = unsafe { ::std::mem::transmute(&mut *partial) };
             // 1
-            last = self.extend(segs, last, self.seg_iter(self.first_pos(), start_prev));
+            self.extend(segs, partial, self.seg_iter(self.first_pos(), start_prev));
             // 4
-            last = self.extend(segs, last, self.seg_iter(end_next_next, to_next));
+            self.extend(segs, partial, self.seg_iter(end_next_next, to_next));
             // new
-            last = self.push_edge(segs, last, &u, &v);
+            self.push_edge(partial, &u, &v);
             // 3
-            last = self.extend(segs, last, self.seg_iter(root, end_next));
+            self.extend(segs, partial, self.seg_iter(root, end_next));
             // 2
-            last = self.extend(segs, last, self.seg_iter(start, root));
+            self.extend(segs, partial, self.seg_iter(start, root));
             // new reversed
-            last = self.push_edge(segs, last, &v, &u);
+            self.push_edge(partial, &v, &u);
             // 5
-            last = self.extend(segs, last, self.seg_iter(to_next, self.end_pos()));
-            self.push_last(segs, last);
+            self.extend(segs, partial, self.seg_iter(to_next, self.end_pos()));
+            self.push_last(segs, partial);
+            assert!(partial.0.is_empty());
+            assert!(partial.0.is_empty());
         }
         self.segs = segs.into();
     }
@@ -427,69 +438,63 @@ where
     fn extend<'a>(
         &self,
         segs: &mut Vec<Rc<Segment<G>>>,
-        mut last: Seg<'a, G>,
+        &mut (ref mut source, ref mut target): &mut PartialSegments<'a, G>,
         iter: SegIter<'a, G>,
-    ) -> Seg<'a, G> {
+    ) {
         for seg in iter {
-            match last {
-                Seg::Complete(x) => {
-                    segs.push(Rc::clone(x));
-                    last = seg;
+            match seg {
+                Seg::Partial(s, t) => {
+                    source.push(s);
+                    target.push(t);
                 }
-                Seg::Partial(mut source, mut target) => match seg {
-                    Seg::Partial(n_source, n_target) => {
-                        source.extend(n_source);
-                        target.extend(n_target);
-                        last = Seg::Partial(source, target);
-                    }
-                    Seg::Complete(x) => {
+                Seg::Complete(seg) => {
+                    if source.is_empty() {
+                        segs.push(Rc::clone(seg));
+                    } else {
                         let len: usize = source.iter().map(|s| s.len()).sum();
                         if len < self.min_seg_len() {
-                            source.push(&x.source[..]);
-                            target.push(&x.target[..]);
-                            last = Seg::Partial(source, target);
+                            source.push(&seg.source[..]);
+                            target.push(&seg.target[..]);
                         } else {
                             self.push_source_target(segs, source, target);
-                            last = Seg::Complete(x);
+                            segs.push(Rc::clone(seg));
                         }
                     }
-                },
+                }
             }
         }
-        last
     }
 
-    fn push_last<'a>(&self, segs: &mut Vec<Rc<Segment<G>>>, last: Seg<'a, G>) {
-        match last {
-            Seg::Complete(seg) => segs.push(Rc::clone(seg)),
-            Seg::Partial(source, target) => {
-                if source.is_empty() {
-                    return;
-                }
-                let len: usize = source.iter().map(|s| s.len()).sum();
-                if len < self.min_seg_len() {
-                    let seg = Rc::try_unwrap(segs.pop().unwrap());
-                    let (mut ss, mut tt) = match &seg {
-                        &Ok(ref seg) => (vec![&seg.source[..]], vec![&seg.target[..]]),
-                        &Err(ref seg) => (vec![&seg.source[..]], vec![&seg.target[..]]),
-                    };
-                    ss.extend(source);
-                    tt.extend(target);
-                    self.push_source_target(segs, ss, tt);
-                } else {
-                    self.push_source_target(segs, source, target);
-                }
-            }
+    fn push_last(
+        &self,
+        segs: &mut Vec<Rc<Segment<G>>>,
+        &mut (ref mut source, ref mut target): &mut PartialSegments<G>,
+    ) {
+        if source.is_empty() {
+            return;
+        }
+        let len: usize = source.iter().map(|s| s.len()).sum();
+        if len < self.min_seg_len() {
+            // join with the last seg
+            let seg = segs.pop().unwrap();
+            // extend the lifetime of &seg to 'a, we are safe because source and target are cleaned
+            source.insert(0, unsafe { transmute_lifetime(&seg.source[..]) });
+            target.insert(0, unsafe { transmute_lifetime(&seg.target[..]) });
+            self.push_source_target(segs, source, target);
+            assert!(source.is_empty());
+            assert!(target.is_empty());
+        } else {
+            self.push_source_target(segs, source, target);
         }
     }
 
     fn push_source_target(
         &self,
         segs: &mut Vec<Rc<Segment<G>>>,
-        source: Vec<&[Vertex<G>]>,
-        target: Vec<&[Vertex<G>]>,
+        source: &mut Vec<&[Vertex<G>]>,
+        target: &mut Vec<&[Vertex<G>]>,
     ) {
-        fn flatten<T: Copy>(x: Vec<&[T]>) -> Vec<T> {
+        fn flatten<T: Copy>(x: &[&[T]]) -> Vec<T> {
             let len = x.iter().map(|s| s.len()).sum();
             let mut vec = Vec::with_capacity(len);
             for slice in x {
@@ -501,6 +506,7 @@ where
         if len <= self.max_seg_len() {
             segs.push(self.new_segment(flatten(source), flatten(target)));
         } else {
+            // create new segments evenly divided
             let count = len / self.nsqrt;
             let step = len as f64 / count as f64;
             let mut i = 0;
@@ -531,26 +537,18 @@ where
                 s = t;
             }
         }
+        source.clear();
+        target.clear();
     }
 
     fn push_edge<'a>(
         &self,
-        segs: &mut Vec<Rc<Segment<G>>>,
-        last: Seg<'a, G>,
+        &mut (ref mut source, ref mut target): &mut PartialSegments<'a, G>,
         s: &'a Vertex<G>,
         t: &'a Vertex<G>,
-    ) -> Seg<'a, G> {
-        match last {
-            Seg::Complete(seg) => {
-                segs.push(Rc::clone(seg));
-                Seg::Partial(vec![ref_slice(s)], vec![ref_slice(t)])
-            }
-            Seg::Partial(mut source, mut target) => {
-                source.push(ref_slice(s));
-                target.push(ref_slice(t));
-                Seg::Partial(source, target)
-            }
-        }
+    ) {
+        source.push(ref_slice(s));
+        target.push(ref_slice(t));
     }
 
     fn seg_iter(&self, start: (usize, usize), end: (usize, usize)) -> SegIter<G> {
@@ -560,12 +558,14 @@ where
     fn new_segment(&self, source: Vec<Vertex<G>>, target: Vec<Vertex<G>>) -> Rc<Segment<G>> {
         assert_ne!(0, source.len());
         assert_eq!(source.len(), target.len());
-        let mut bitset = bitset_acquire(self.g.num_vertices() + 1);
+        let index = self.g.vertex_index();
+        let mut bitset = self.pool_bitset.acquite_bitset(self.g.num_vertices());
         for &v in &source {
-            bitset.set(self.g.vertex_index().get(v), true);
+            bitset.unchecked_set(index.get(v));
         }
         Rc::new(Segment {
-            index: self.g.vertex_index(),
+            pool: self.pool_bitset.clone(),
+            index,
             source,
             target,
             bitset,
@@ -643,7 +643,11 @@ where
     fn check(&self) {}
 }
 
-pub fn ref_slice<A>(s: &A) -> &[A] {
+unsafe fn transmute_lifetime<'a, 'b, T: ?Sized>(value: &'a T) -> &'b T {
+    ::std::mem::transmute(value)
+}
+
+fn ref_slice<A>(s: &A) -> &[A] {
     unsafe { ::std::slice::from_raw_parts(s, 1) }
 }
 
@@ -668,31 +672,31 @@ impl Subtree {
 }
 
 struct Segment<G: WithVertexIndexProp> {
+    pool: Rc<Pool<Bitset>>,
     index: VertexIndexProp<G>,
     source: Vec<Vertex<G>>,
     target: Vec<Vertex<G>>,
     bitset: Bitset,
 }
 
+type PartialSegments<'a, G> = (Vec<&'a [Vertex<G>]>, Vec<&'a [Vertex<G>]>);
+
 impl<G: WithVertexIndexProp> Segment<G> {
-    #[inline]
     fn len(&self) -> usize {
         self.source.len()
     }
 
-    #[inline]
     fn get(&self, i: usize) -> (Vertex<G>, Vertex<G>) {
         (self.source[i], self.target[i])
     }
 
-    #[inline]
     fn contains(&self, v: Vertex<G>) -> bool {
-        self.bitset[self.index.get(v)]
+        self.bitset.unchecked_get(self.index.get(v))
     }
 
     fn reset_bitset(&mut self) {
         for &v in &self.source {
-            self.bitset.set(self.index.get(v), false);
+            self.bitset.unchecked_clear_block(self.index.get(v));
         }
     }
 }
@@ -700,20 +704,15 @@ impl<G: WithVertexIndexProp> Segment<G> {
 impl<G: WithVertexIndexProp> Drop for Segment<G> {
     fn drop(&mut self) {
         self.reset_bitset();
-        bitset_release(::std::mem::replace(&mut self.bitset, Bitset::default()));
+        self.pool
+            .release(::std::mem::replace(&mut self.bitset, Bitset::default()));
     }
 }
 
 #[derive(Clone)]
 enum Seg<'a, G: 'a + WithVertexIndexProp> {
-    Partial(Vec<&'a [Vertex<G>]>, Vec<&'a [Vertex<G>]>),
+    Partial(&'a [Vertex<G>], &'a [Vertex<G>]),
     Complete(&'a Rc<Segment<G>>),
-}
-
-impl<'a, G: 'a + WithVertexIndexProp> Default for Seg<'a, G> {
-    fn default() -> Self {
-        Seg::Partial(vec![], vec![])
-    }
 }
 
 struct SegIter<'a, G: 'a + WithVertexIndexProp> {
@@ -731,7 +730,6 @@ impl<'a, G: 'a + WithVertexIndexProp> SegIter<'a, G> {
 impl<'a, G: WithVertexIndexProp> Iterator for SegIter<'a, G> {
     type Item = Seg<'a, G>;
 
-    #[inline(always)]
     fn next(&mut self) -> Option<Self::Item> {
         if self.cur.0 < self.end.0 {
             let (i, j) = self.cur;
@@ -740,8 +738,8 @@ impl<'a, G: WithVertexIndexProp> Iterator for SegIter<'a, G> {
                 Some(Seg::Complete(&self.segs[i]))
             } else {
                 Some(Seg::Partial(
-                    vec![&self.segs[i].source[j..]],
-                    vec![&self.segs[i].target[j..]],
+                    &self.segs[i].source[j..],
+                    &self.segs[i].target[j..],
                 ))
             }
         } else if self.cur.0 == self.end.0 {
@@ -755,8 +753,8 @@ impl<'a, G: WithVertexIndexProp> Iterator for SegIter<'a, G> {
                 Some(Seg::Complete(&self.segs[i]))
             } else {
                 Some(Seg::Partial(
-                    vec![&self.segs[i].source[a..b]],
-                    vec![&self.segs[i].target[a..b]],
+                    &self.segs[i].source[a..b],
+                    &self.segs[i].target[a..b],
                 ))
             }
         } else {
