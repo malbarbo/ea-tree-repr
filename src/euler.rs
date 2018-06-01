@@ -77,17 +77,20 @@ where
         self.segs = segs.into();
     }
 
-    fn tour_edges(&self) -> Vec<(Vertex<G>, Vertex<G>)> {
+    pub fn edges(&self) -> Vec<Edge<G>> {
+        let mut stack = vec![];
         let segs = &self.segs;
         (0..segs.len())
             .flat_map(|i| (0..segs[i].len()).map(move |j| segs[i].get(j)))
-            .collect()
-    }
-
-    pub fn edges(&self) -> Vec<Edge<G>> {
-        self.tour_edges()
-            .into_iter()
-            .map(|(a, b)| self.g.edge_by_ends(a, b))
+            .filter_map(|(u, v)| {
+                if stack.last() == Some(&v) {
+                    stack.pop();
+                    None
+                } else {
+                    stack.push(u);
+                    Some(self.g.edge_by_ends(u, v))
+                }
+            })
             .collect()
     }
 
@@ -796,16 +799,23 @@ impl<G> EulerTourTree<G>
 where
     G: IncidenceGraph + WithVertexIndexProp + Choose,
 {
-    pub fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.len
     }
 
-    pub fn get(&self, (i, j): (usize, usize)) -> (Vertex<G>, Vertex<G>) {
+    fn get(&self, (i, j): (usize, usize)) -> (Vertex<G>, Vertex<G>) {
         self.segs[i].get(j)
     }
 
-    pub fn check(&self) {
-        use fera::graph::algs::{Paths, Trees};
+    fn tour_edges(&self) -> Vec<(Vertex<G>, Vertex<G>)> {
+        let segs = &self.segs;
+        (0..segs.len())
+            .flat_map(|i| (0..segs[i].len()).map(move |j| segs[i].get(j)))
+            .collect()
+    }
+
+    fn check(&self) {
+        use fera::graph::algs::Trees;
         use std::collections::HashSet;
 
         // check seg lens
@@ -822,14 +832,13 @@ where
         }
 
         let edges_set: HashSet<_> = self.edges().into_iter().collect();
+        assert_eq!(self.edges().len(), edges_set.len());
         assert!(self.g.spanning_subgraph(edges_set).is_tree());
 
         // check if the tour is an euler tour
-        assert!(self.g.is_walk(self.edges()));
         let mut stack = vec![];
         for (a, b) in self.tour_edges() {
-            let last = stack.last().cloned();
-            if Some((a, b)) == last || Some((b, a)) == last {
+            if stack.last() == Some(&(b, a)) {
                 stack.pop();
             } else {
                 stack.push((a, b));
@@ -928,6 +937,8 @@ mod tests {
                 let old = tour.clone();
                 let (ins, rem) = tour.change_pred(&mut rng);
                 assert_ne!(ins, rem);
+                assert!(tour.contains(ins));
+                assert!(!tour.contains(rem));
                 tour.check();
                 assert_ne!(old.tour_edges(), tour.tour_edges());
                 let edges = tour.edges();
