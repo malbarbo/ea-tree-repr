@@ -5,7 +5,7 @@ use fera::graph::traverse::{Dfs, OnTraverseEvent, TraverseEvent};
 
 use rand::Rng;
 
-use std::cell::RefCell;
+use std::cell::UnsafeCell;
 use std::rc::Rc;
 
 use {Bitset, Pool};
@@ -15,7 +15,7 @@ const MAX_TRIES_CHANGE_ANY: usize = 5;
 #[derive(Clone)]
 pub struct EulerTourTree<G: WithEdge + WithVertexIndexProp> {
     pool_bitset: Rc<Pool<Bitset>>,
-    partial: Rc<RefCell<PartialSegments<'static, G>>>,
+    partial: Rc<UnsafeCell<PartialSegments<'static, G>>>,
     g: Rc<G>,
     segs: Rc<Vec<Rc<Segment<G>>>>,
     nsqrt: usize,
@@ -101,9 +101,9 @@ where
     pub fn contains(&self, e: Edge<G>) -> bool {
         let (a, b) = self.ends(e);
         let start = self.subtree_start(a);
-        start != (0, 0) && self.get_edge(self.prev_pos(start)) == e || {
+        start != (0, 0) && self.source(self.prev_pos(start)) == b || {
             let start = self.subtree_start(b);
-            start != (0, 0) && self.get_edge(self.prev_pos(start)) == e
+            start != (0, 0) && self.source(self.prev_pos(start)) == a
         }
     }
 
@@ -205,6 +205,10 @@ where
         (ins, rem)
     }
 
+    unsafe fn partial<'a>(&self) -> &mut PartialSegments<'a, G> {
+        ::std::mem::transmute(&mut *self.partial.get())
+    }
+
     fn move_before(
         &mut self,
         new: Edge<G>,
@@ -242,9 +246,9 @@ where
             let end_next = self.next_pos(end);
             let end_next_next = self.next_pos(end_next);
             let start_prev = self.prev_pos(start);
-            let mut partial = self.partial.borrow_mut();
-            // use unsafe a stricter lifetime than 'static. It is safe because partial is cleaned
-            let partial: &mut PartialSegments<G> = unsafe { ::std::mem::transmute(&mut *partial) };
+            // Get partial with a lcoal lifetime instead of 'static. It is safe because partial is
+            // cleaned
+            let partial = unsafe { self.partial() };
             // 1
             self.extend(segs, partial, self.seg_iter(self.first_pos(), to_next));
             // new
@@ -303,9 +307,9 @@ where
             let end_next = self.next_pos(end);
             let end_next_next = self.next_pos(end_next);
             let start_prev = self.prev_pos(start);
-            let mut partial = self.partial.borrow_mut();
-            // use unsafe a stricter lifetime than 'static. It is safe because partial is cleaned
-            let partial: &mut PartialSegments<G> = unsafe { ::std::mem::transmute(&mut *partial) };
+            // Get partial with a lcoal lifetime instead of 'static. It is safe because partial is
+            // cleaned
+            let partial = unsafe { self.partial() };
             // 1
             self.extend(segs, partial, self.seg_iter(self.first_pos(), start_prev));
             // 4
