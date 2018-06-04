@@ -30,6 +30,7 @@ pub use self::progress::*;
 pub use self::random::*;
 pub use self::tree::*;
 
+use std::cell::RefCell;
 use std::time::{Duration, Instant};
 
 pub fn time_it<T, F: FnOnce() -> T>(fun: F) -> (Duration, T) {
@@ -53,5 +54,71 @@ pub fn milli_secs(t: Duration) -> f64 {
 pub fn setup_rayon() {
     if ::std::env::var("RAYON_NUM_THREADS").is_err() {
         ::std::env::set_var("RAYON_NUM_THREADS", "1");
+    }
+}
+
+pub unsafe fn transmute_lifetime<'a, 'b, T: ?Sized>(value: &'a T) -> &'b T {
+    ::std::mem::transmute(value)
+}
+
+pub struct Linspace {
+    last: usize,
+    cur: usize,
+    step: f64,
+}
+
+impl Linspace {
+    fn new(last: usize, step: f64) -> Self {
+        Self { last, cur: 0, step }
+    }
+}
+
+impl Iterator for Linspace {
+    type Item = usize;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.cur < self.last {
+            self.cur += 1;
+            let value = (self.cur as f64) * self.step;
+            Some(value.round() as usize)
+        } else {
+            None
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct Pool<T>(RefCell<Vec<T>>);
+
+impl<T> Default for Pool<T> {
+    fn default() -> Self {
+        Pool(RefCell::new(vec![]))
+    }
+}
+
+impl<T> Pool<T> {
+    pub fn new() -> Self {
+        Pool::default()
+    }
+
+    pub fn acquire(&self) -> Option<T> {
+        self.0.borrow_mut().pop()
+    }
+
+    pub fn release(&self, value: T) {
+        self.0.borrow_mut().push(value);
+    }
+}
+
+impl Pool<Bitset> {
+    pub fn acquite_bitset(&self, n: usize) -> Bitset {
+        if let Some(mut bitset) = self.acquire() {
+            if bitset.len() < n {
+                bitset.grow(n)
+            }
+            bitset
+        } else {
+            Bitset::with_capacity(n)
+        }
     }
 }

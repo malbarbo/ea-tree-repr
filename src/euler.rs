@@ -8,7 +8,7 @@ use rand::Rng;
 use std::cell::UnsafeCell;
 use std::rc::Rc;
 
-use {Bitset, Pool};
+use {transmute_lifetime, Bitset, Linspace, Pool};
 
 const MAX_TRIES_CHANGE_ANY: usize = 5;
 
@@ -650,10 +650,6 @@ where
     fn check(&self) {}
 }
 
-unsafe fn transmute_lifetime<'a, 'b, T: ?Sized>(value: &'a T) -> &'b T {
-    ::std::mem::transmute(value)
-}
-
 fn ref_slice<A>(s: &A) -> &[A] {
     unsafe { ::std::slice::from_raw_parts(s, 1) }
 }
@@ -764,32 +760,6 @@ impl<'a, G: WithVertexIndexProp> Iterator for SegIter<'a, G> {
                     &self.segs[i].target[a..b],
                 ))
             }
-        } else {
-            None
-        }
-    }
-}
-
-pub struct Linspace {
-    last: usize,
-    cur: usize,
-    step: f64,
-}
-
-impl Linspace {
-    fn new(last: usize, step: f64) -> Self {
-        Self { last, cur: 0, step }
-    }
-}
-
-impl Iterator for Linspace {
-    type Item = usize;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.cur < self.last {
-            self.cur += 1;
-            let value = (self.cur as f64) * self.step;
-            Some(value.round() as usize)
         } else {
             None
         }
