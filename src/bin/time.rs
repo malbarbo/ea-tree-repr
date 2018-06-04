@@ -7,8 +7,11 @@ extern crate rayon;
 extern crate clap;
 
 // external
+use fera::ext::VecExt;
+use fera::fun::vec;
+use fera::graph::algs::Kruskal;
 use fera::graph::prelude::*;
-use rand::Rng;
+use rand::{Rng, XorShiftRng};
 use rayon::prelude::*;
 
 // system
@@ -23,18 +26,29 @@ use ea_tree_repr::{
 
 pub fn main() {
     setup_rayon();
-    let (sizes, diameter, ds, op, times) = args();
+    let args = args();
 
-    let time = match ds {
-        Ds::EulerTour => run::<EulerTourTree<_>>(&*sizes, diameter, op, times),
-        Ds::NddrAdj => run::<NddrAdjTree<_>>(&*sizes, diameter, op, times),
-        Ds::NddrBalanced => run::<NddrBalancedTree<_>>(&*sizes, diameter, op, times),
-        Ds::Predecessor => run::<PredecessorTree<_>>(&*sizes, diameter, op, times),
-        Ds::Predecessor2 => run::<PredecessorTree2<_>>(&*sizes, diameter, op, times),
+    let time = if args.nddr_adj_good {
+        let case = case_nddr_adj_good;
+        match args.ds {
+            Ds::EulerTour => run::<_, EulerTourTree<_>, _>(&args, case),
+            Ds::NddrAdj => run::<_, NddrAdjTree<_>, _>(&args, case),
+            Ds::NddrBalanced => run::<_, NddrBalancedTree<_>, _>(&args, case),
+            Ds::Predecessor => run::<_, PredecessorTree<_>, _>(&args, case),
+            Ds::Predecessor2 => run::<_, PredecessorTree2<_>, _>(&args, case),
+        }
+    } else {
+        match args.ds {
+            Ds::EulerTour => run::<_, EulerTourTree<_>, _>(&args, case),
+            Ds::NddrAdj => run::<_, NddrAdjTree<_>, _>(&args, case),
+            Ds::NddrBalanced => run::<_, NddrBalancedTree<_>, _>(&args, case),
+            Ds::Predecessor => run::<_, PredecessorTree<_>, _>(&args, case),
+            Ds::Predecessor2 => run::<_, PredecessorTree2<_>, _>(&args, case),
+        }
     };
 
     println!("size time clone change");
-    for (s, t) in sizes.into_iter().zip(time) {
+    for (s, t) in args.sizes.into_iter().zip(time) {
         println!(
             "{} {:.03} {:.03} {:.03}",
             s,
@@ -45,20 +59,25 @@ pub fn main() {
     }
 }
 
-fn run<T: Tree<CompleteGraph>>(
-    sizes: &[usize],
-    diameter: Option<f32>,
-    op: Op,
-    times: usize,
-) -> Vec<(Duration, Duration)> {
+fn run<G, T, F>(args: &Args, new: F) -> Vec<(Duration, Duration)>
+where
+    G: Graph,
+    T: Tree<G>,
+    F: Sync + Fn(&Args, usize, &mut XorShiftRng) -> (G, Vec<Edge<G>>),
+{
     const TIMES: usize = 10_000;
-    let mut time = vec![(Duration::default(), Duration::default()); sizes.len()];
-    for _ in progress(0..times) {
-        time.par_iter_mut().zip(sizes).for_each(|(t, &n)| {
+    let mut time = vec![(Duration::default(), Duration::default()); args.sizes.len()];
+    for _ in progress(0..args.times) {
+        time.par_iter_mut().zip(&args.sizes).for_each(|(t, &n)| {
             let mut rng = rand::weak_rng();
-            let (g, tree) = graph_tree(n, diameter, &mut rng);
-            let mut tree = T::new(Rc::new(g), &*tree, &mut rng);
-            match op {
+            let (g, tree) = new(args, n, &mut rng);
+            let mut tree = if args.nddr_adj_good {
+                let r = g.vertices().next().unwrap();
+                T::new_with_fake_root(Rc::new(g), Some(r), &*tree, &mut rng)
+            } else {
+                T::new(Rc::new(g), &*tree, &mut rng)
+            };
+            match args.op {
                 Op::ChangePred => for _ in 0..TIMES {
                     let (t0, mut tt) = time_it(|| tree.clone());
                     let (t1, _) = time_it(|| tt.change_pred(&mut rng));
@@ -77,13 +96,75 @@ fn run<T: Tree<CompleteGraph>>(
         })
     }
     for t in &mut time {
-        t.0 /= (TIMES * times) as u32;
-        t.1 /= (TIMES * times) as u32;
+        t.0 /= (TIMES * args.times) as u32;
+        t.1 /= (TIMES * args.times) as u32;
     }
     time
 }
 
-fn args() -> (Vec<usize>, Option<f32>, Ds, Op, usize) {
+fn case(args: &Args, n: usize, rng: &mut XorShiftRng) -> (CompleteGraph, Vec<Edge<CompleteGraph>>) {
+    let g = CompleteGraph::new(n as u32);
+    let tree = if let Some(d) = args.diameter {
+        let d = 2 + (d * (n - 3) as f32) as usize;
+        random_sp_with_diameter(&g, d, rng)
+    } else {
+        random_sp(&g, rng)
+    };
+    (g, tree)
+}
+
+fn case_nddr_adj_good(
+    _args: &Args,
+    n: usize,
+    rng: &mut XorShiftRng,
+) -> (StaticGraph, Vec<Edge<StaticGraph>>) {
+    let nsqrt = (n as f64).sqrt();
+    let mut sub_vertices = vec![vec![]; nsqrt.ceil() as usize - 1];
+    let r = 0;
+    for (i, v) in vec(1..n).shuffled_with(&mut *rng).into_iter().enumerate() {
+        let i = i % sub_vertices.len();
+        sub_vertices[i].push(v);
+    }
+    rng.shuffle(&mut sub_vertices);
+
+    let m: usize = sub_vertices
+        .iter()
+        .map(|sub| (sub.len() * (sub.len() - 1)) / 2)
+        .sum();
+    let mut b = StaticGraph::builder(n as usize, m + sub_vertices.len());
+
+    // create each target subtree
+    for sub in &sub_vertices {
+        for i in 0..sub.len() {
+            for j in (i + 1)..sub.len() {
+                b.add_edge(sub[i] as usize, sub[j] as usize)
+            }
+        }
+    }
+
+    // add the root edges
+    for sub in &sub_vertices {
+        let v = sub[0];
+        b.add_edge(r as usize, v as usize);
+    }
+
+    let g = b.finalize();
+    let edges = vec(g.edges()).shuffled_with(rng);
+    let tree = vec(g.kruskal().edges(g.out_edges(r).chain(edges)));
+
+    (g, tree)
+}
+
+struct Args {
+    sizes: Vec<usize>,
+    diameter: Option<f32>,
+    nddr_adj_good: bool,
+    ds: Ds,
+    op: Op,
+    times: usize,
+}
+
+fn args() -> Args {
     let app = clap_app!(
         ("time") =>
             (version: crate_version!())
@@ -106,6 +187,9 @@ fn args() -> (Vec<usize>, Option<f32>, Ds, Op, usize) {
                     "change-any"
                 ])
                 "Operator")
+            (@arg nddr:
+                --nddr_adj_good
+                "Test graph that are good for nddr-adj")
             (@arg diameter:
                 -d
                 --diameter
@@ -121,50 +205,37 @@ fn args() -> (Vec<usize>, Option<f32>, Ds, Op, usize) {
     );
 
     let matches = app.get_matches();
-    let ds = match matches.value_of("ds").unwrap() {
-        "euler-tour" => Ds::EulerTour,
-        "nddr-adj" => Ds::NddrAdj,
-        "nddr-balanced" => Ds::NddrBalanced,
-        "pred" => Ds::Predecessor,
-        "pred2" => Ds::Predecessor2,
-        _ => unreachable!(),
-    };
-    let op = match matches.value_of("op").unwrap() {
-        "change-pred" => Op::ChangePred,
-        "change-any" => Op::ChangeAny,
-        _ => unreachable!(),
-    };
-    let diameter = if matches.is_present("diameter") {
-        let d = value_t_or_exit!(matches, "diameter", f32);
-        if d < 0.0 || d > 1.0 {
-            panic!("Invalid value for diameter: {}", d)
-        }
-        Some(d)
-    } else {
-        None
-    };
-    let times = value_t_or_exit!(matches, "times", usize);
-    let sizes = matches
-        .values_of("sizes")
-        .unwrap()
-        .map(|x| x.parse::<usize>().unwrap())
-        .collect();
-    (sizes, diameter, ds, op, times)
-}
-
-fn graph_tree<R: Rng>(
-    n: usize,
-    diameter: Option<f32>,
-    rng: R,
-) -> (CompleteGraph, Vec<Edge<CompleteGraph>>) {
-    let g = CompleteGraph::new(n as u32);
-    let tree = if let Some(d) = diameter {
-        let d = 2 + (d * (n - 3) as f32) as usize;
-        random_sp_with_diameter(&g, d, rng)
-    } else {
-        random_sp(&g, rng)
-    };
-    (g, tree)
+    Args {
+        ds: match matches.value_of("ds").unwrap() {
+            "euler-tour" => Ds::EulerTour,
+            "nddr-adj" => Ds::NddrAdj,
+            "nddr-balanced" => Ds::NddrBalanced,
+            "pred" => Ds::Predecessor,
+            "pred2" => Ds::Predecessor2,
+            _ => unreachable!(),
+        },
+        op: match matches.value_of("op").unwrap() {
+            "change-pred" => Op::ChangePred,
+            "change-any" => Op::ChangeAny,
+            _ => unreachable!(),
+        },
+        nddr_adj_good: matches.is_present("nddr"),
+        diameter: if matches.is_present("diameter") {
+            let d = value_t_or_exit!(matches, "diameter", f32);
+            if d < 0.0 || d > 1.0 {
+                panic!("Invalid value for diameter: {}", d)
+            }
+            Some(d)
+        } else {
+            None
+        },
+        times: value_t_or_exit!(matches, "times", usize),
+        sizes: matches
+            .values_of("sizes")
+            .unwrap()
+            .map(|x| x.parse::<usize>().unwrap())
+            .collect(),
+    }
 }
 
 #[derive(Copy, Clone)]
