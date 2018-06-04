@@ -12,7 +12,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 // internal
-use {collect_ndds, find_star_tree, one_tree_op1, one_tree_op2, op1, op2, Bitset, NddTree};
+use {collect_ndds, find_star_tree, one_tree_op1, one_tree_op2, op1, op2, NddTree};
 
 // pg 836 5) Step 5 - the value of the k constant is not specified, we use the default value of 1
 const DEFAULT_K: usize = 1;
@@ -70,7 +70,10 @@ where
     // replacement in select_tree_if. This does the role of the L_O array described in the paper.
     tree_indices: Vec<usize>,
     // Used to mark edges in a tree (M_E_T in the paper)
-    m: Vec<Bitset>,
+    // We use a vector instead of a matrix. The vector is used to mark the adjacent vertex of the
+    // vertex p, so only the p line of the matrix need to be marked, so only on active line is
+    // needed.
+    m: Vec<bool>,
 
     // The next fields are use if find_vertex_strategy = FatNode. In forest version h, the vertex
     // x is in position pi[x][h].pos of the tree with index pi[x][h].tree
@@ -91,10 +94,7 @@ where
         let nsqrt = (g.num_vertices() as f64).sqrt().ceil() as usize;
         // Only allocate m and tree_indices if they will be used
         let m = match find_op {
-            FindOpStrategy::Adj | FindOpStrategy::AdjSmaller => {
-                let n = g.num_vertices();
-                vec![Bitset::with_capacity(n); n]
-            }
+            FindOpStrategy::Adj | FindOpStrategy::AdjSmaller => vec![false; g.num_vertices()],
             _ => vec![],
         };
         let tree_indices = match find_op {
@@ -122,16 +122,12 @@ where
         }
     }
 
-    fn is_marked(&self, u: Vertex<G>, v: Vertex<G>) -> bool {
-        let u = self.vertex_index.get(u);
-        let v = self.vertex_index.get(v);
-        self.m[u].contains(v) || self.m[v].contains(u)
+    fn is_marked(&self, v: Vertex<G>) -> bool {
+        self.m[self.vertex_index.get(v)]
     }
 
-    fn set_m(&mut self, u: Vertex<G>, v: Vertex<G>, value: bool) {
-        let u = self.vertex_index.get(u);
-        let v = self.vertex_index.get(v);
-        self.m[u].set(v, value);
+    fn set_m(&mut self, v: Vertex<G>, value: bool) {
+        self.m[self.vertex_index.get(v)] = value;
     }
 }
 
@@ -580,14 +576,14 @@ where
             // i is not root and have an edge tha is not in this forest
             i != 0 && self[from][i].deg() < self.graph().out_degree(self[from][i].vertex()) as u32
         });
+        let v_p = self[from][p].vertex();
 
         // Step 3
-        self.mark_edges(from);
+        self.mark_edges(from, v_p);
 
         let v_a = {
             let data = self.data();
             // Choose an edge (v_p, v_a) not in trees[from], that is, not marked
-            let v_p = self[from][p].vertex();
             // TODO: in a complete graph the chance of choosing a vertex v_a such that (v_p, v_a)
             // is in self[from] is too small, so marking edges is not necessary and is too
             // expensive. Use self[from].contains_edge instead.
@@ -598,11 +594,11 @@ where
             //
             self.graph()
                 .choose_out_neighbor_iter(v_p, rng)
-                .find(|&v_a| !data.is_marked(v_p, v_a))
+                .find(|&v_a| !data.is_marked(v_a))
                 .unwrap()
         };
 
-        self.unmark_edges(from);
+        self.unmark_edges(from, v_p);
 
         // Step 4
         let (to, a) = self.find_index(v_a);
@@ -807,17 +803,21 @@ where
         }
     }
 
-    fn mark_edges(&self, t: usize) {
-        self.set_edges_on_m(t, true);
+    fn mark_edges(&self, t: usize, v: Vertex<G>) {
+        self.set_edges_on_m(t, v, true);
     }
 
-    fn unmark_edges(&self, t: usize) {
-        self.set_edges_on_m(t, false);
+    fn unmark_edges(&self, t: usize, v: Vertex<G>) {
+        self.set_edges_on_m(t, v, false);
     }
 
-    fn set_edges_on_m(&self, t: usize, value: bool) {
+    fn set_edges_on_m(&self, t: usize, x: Vertex<G>, value: bool) {
         let mut data = self.data_mut();
-        self[t].for_each_edge(|u, v| data.set_m(u, v, value));
+        for &(u, v) in self[t].edges() {
+            if u == x {
+                data.set_m(v, value);
+            }
+        }
     }
 
     fn new_version(&mut self) {
@@ -830,7 +830,7 @@ where
     pub fn edges(&self) -> Vec<Edge<G>> {
         self.iter()
             .flat_map(|t| t.edges())
-            .map(|(u, v)| self.edge_by_ends(u, v))
+            .map(|&(u, v)| self.edge_by_ends(u, v))
             .collect()
     }
 

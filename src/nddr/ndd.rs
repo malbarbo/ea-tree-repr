@@ -3,6 +3,8 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::Deref;
 
+use transmute_lifetime;
+
 // See nddr module documentation for references.
 // TODO: make op1 and op2 receive &mut ?
 
@@ -31,9 +33,8 @@ impl<V: Copy + Eq + PartialEq + Debug> Ndd<V> {
 #[derive(Clone, Debug)]
 pub struct NddTree<V: Copy + Hash + Eq + PartialEq + Debug> {
     ndds: Vec<Ndd<V>>,
-    // parents is used to cache the parent of each node.
-    // parent[i] is the parent of ndds[i-1].vertex
-    parents: RefCell<Vec<V>>,
+    // cache the edges in this Ndd
+    edges: RefCell<Vec<(V, V)>>,
     deg: u32,
     deg_in_g: u32,
 }
@@ -139,7 +140,7 @@ where
         // TODO: Validade input or make private
         NddTree {
             ndds,
-            parents: RefCell::new(vec![]),
+            edges: RefCell::new(vec![]),
             deg: 0,
             deg_in_g: 0,
         }
@@ -261,20 +262,21 @@ where
         self[0..i].iter().rposition(|ndd| ndd.dep < self[i].dep)
     }
 
-    pub fn edges(&self) -> Vec<(V, V)> {
-        let mut edges = Vec::with_capacity(self.len() - 1);
-        self.for_each_edge(|u, v| edges.push((u, v)));
-        edges
+    #[inline]
+    pub fn edges(&self) -> &[(V, V)] {
+        self.cache_edges();
+        let edges = self.edges.borrow();
+        // once the edges are cached, they are not write any more, so we can create and return a
+        // reference to the edges
+        unsafe { transmute_lifetime(edges.as_slice()) }
     }
 
-    pub fn for_each_edge<F>(&self, mut fun: F)
-    where
-        F: FnMut(V, V),
-    {
-        if self.parents.borrow().is_empty() {
-            // Its not clear on page 836 - a) Traverse F_from ...
-            // how this can be done.
-            let mut parents = self.parents.borrow_mut();
+    fn cache_edges(&self) {
+        let mut edges = self.edges.borrow_mut();
+        let edges = &mut *edges;
+        if edges.is_empty() {
+            edges.reserve(self.len());
+            // TODO: use a buffer for this stack?
             let mut s = vec![&self[0]];
             for ndd in &self[1..] {
                 let mut p = *s.last().unwrap();
@@ -282,13 +284,9 @@ where
                     s.pop();
                     p = *s.last().unwrap();
                 }
-                parents.push(p.vertex);
+                edges.push((ndd.vertex, p.vertex));
                 s.push(ndd);
             }
-        }
-        let parents = self.parents.borrow();
-        for i in 0..self.len() - 1 {
-            fun(self[i + 1].vertex, parents[i]);
         }
     }
 }
@@ -298,7 +296,12 @@ where
     V: Copy + Hash + Eq + PartialEq + Debug,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.len() == other.len() && self.edges().iter().all(|e| other.contains_edge(e.0, e.1))
+        self.len() == other.len()
+            && self
+                .edges()
+                .iter()
+                .cloned()
+                .all(|e| other.contains_edge(e.0, e.1))
     }
 }
 
@@ -399,7 +402,7 @@ mod tests {
             (0, 7),
         ]);
         let t = t1();
-        assert_eq!(exp, set(t.edges().iter()));
+        assert_eq!(exp, set(t.edges()));
     }
 
     #[test]
