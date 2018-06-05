@@ -566,7 +566,10 @@ where
         assert_ne!(0, source.len());
         assert_eq!(source.len(), target.len());
         let index = self.g.vertex_index();
-        let mut bitset = self.pool_bitset.acquite_bitset(self.g.num_vertices());
+        let mut bitset = self
+            .pool_bitset
+            .acquire()
+            .unwrap_or_else(|| Bitset::with_capacity(self.g.num_vertices()));
         for &v in &source {
             bitset.unchecked_set(index.get(v));
         }

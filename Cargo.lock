@@ -65,7 +65,6 @@ dependencies = [
  "clap 2.31.2 (registry+https://github.com/rust-lang/crates.io-index)",
  "fera 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)",
  "fera-array 0.1.0",
- "fixedbitset 0.1.9 (registry+https://github.com/rust-lang/crates.io-index)",
  "log 0.4.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "pbr 1.0.1 (registry+https://github.com/rust-lang/crates.io-index)",
  "rand 0.4.2 (registry+https://github.com/rust-lang/crates.io-index)",
@@ -131,11 +130,6 @@ dependencies = [
 [[package]]
 name = "fera-unionfind"
 version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-
-[[package]]
-name = "fixedbitset"
-version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 
 [[package]]
@@ -374,7 +368,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 "checksum fera-graph 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "cb445838976363b8aaacc06c2bd1a1c1e4f34a0749a4955107ff6326439ddf26"
 "checksum fera-optional 0.1.1 (registry+https://github.com/rust-lang/crates.io-index)" = "547603eacae613301c933bc6cc68462ec242b1b885f18a29ac1fbe6829e919b7"
 "checksum fera-unionfind 0.1.0 (registry+https://github.com/rust-lang/crates.io-index)" = "fb527d832c7734080975cf39cb6840b17dbfda7dbda13a5fab76bc3f7cde3d3e"
-"checksum fixedbitset 0.1.9 (registry+https://github.com/rust-lang/crates.io-index)" = "86d4de0081402f5e88cdac65c8dcdcc73118c1a7a465e2a05f0da05843a8ea33"
 "checksum fuchsia-zircon 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)" = "2e9763c69ebaae630ba35f74888db465e49e259ba1bc0eda7d06f4a067615d82"
 "checksum fuchsia-zircon-sys 0.3.3 (registry+https://github.com/rust-lang/crates.io-index)" = "3dcaa9ae7725d12cdb85b3ad99a434db70b468c09ded17e012d86b5c1010f7a7"
 "checksum kernel32-sys 0.2.2 (registry+https://github.com/rust-lang/crates.io-index)" = "7507624b29483431c0ba2d82aece8ca6cdba9382bff4ddd0f7490560c056098d"

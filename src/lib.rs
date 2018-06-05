@@ -2,7 +2,6 @@
 
 extern crate fera;
 extern crate fera_array;
-extern crate fixedbitset;
 #[macro_use]
 extern crate log;
 extern crate pbr;
@@ -107,18 +106,5 @@ impl<T> Pool<T> {
 
     pub fn release(&self, value: T) {
         self.0.borrow_mut().push(value);
-    }
-}
-
-impl Pool<Bitset> {
-    pub fn acquite_bitset(&self, n: usize) -> Bitset {
-        if let Some(mut bitset) = self.acquire() {
-            if bitset.len() < n {
-                bitset.grow(n)
-            }
-            bitset
-        } else {
-            Bitset::with_capacity(n)
-        }
     }
 }
