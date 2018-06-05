@@ -12,7 +12,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 // internal
-use {collect_ndds, find_star_tree, one_tree_op1, one_tree_op2, op1, op2, NddTree};
+use {collect_ndds, find_star_tree, one_tree_op1, one_tree_op2, op1, op2, NddTree, Ranges};
 
 // pg 836 5) Step 5 - the value of the k constant is not specified, we use the default value of 1
 const DEFAULT_K: usize = 1;
@@ -55,7 +55,7 @@ impl PiValue {
 // One instance of Data is shared between many NddrOneTreeForest instances.
 struct Data<G>
 where
-    G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
+    G: Graph + WithVertexIndexProp,
 {
     nsqrt: usize,
     find_op_strategy: FindOpStrategy,
@@ -66,12 +66,13 @@ where
     vertex_index: VertexIndexProp<G>,
 
     // See section VI-B - 3
-    // The next two field are used if find_op_strategy = Adj or AdjSmaller used in sample without
-    // replacement in select_tree_if. This does the role of the L_O array described in the paper.
-    tree_indices: Vec<usize>,
-    // Used to mark edges in a tree (M_E_T in the paper)
+    // The next two field are used if find_op_strategy = Adj or AdjSmaller.
+    // ranges is used do to sample without replacement in find_op_adj
+    // It does the role of the L_O array described in the paper.
+    ranges: Ranges,
+    // m is used to mark edges in a tree (M_E_T in the paper)
     // We use a vector instead of a matrix. The vector is used to mark the adjacent vertex of the
-    // vertex p, so only the p line of the matrix need to be marked, so only on active line is
+    // vertex p, so only the p row of the matrix need to be marked, so only on active row is
     // needed.
     m: Vec<bool>,
 
@@ -87,19 +88,13 @@ where
 
 impl<G> Data<G>
 where
-    G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    DefaultVertexPropMut<G, bool>: Clone,
+    G: Graph + WithVertexIndexProp,
 {
     pub fn new(g: &Rc<G>, find_op: FindOpStrategy, find_vertex: FindVertexStrategy) -> Self {
         let nsqrt = (g.num_vertices() as f64).sqrt().ceil() as usize;
-        // Only allocate m and tree_indices if they will be used
+        // Only allocate m if they will be used
         let m = match find_op {
             FindOpStrategy::Adj | FindOpStrategy::AdjSmaller => vec![false; g.num_vertices()],
-            _ => vec![],
-        };
-        let tree_indices = match find_op {
-            // 0 is the index of the star tree, so it's kept out
-            FindOpStrategy::Adj | FindOpStrategy::AdjSmaller => vec(1..nsqrt + 1),
             _ => vec![],
         };
         let pi = if find_vertex == FindVertexStrategy::FatNode {
@@ -113,7 +108,7 @@ where
             find_op_strategy: find_op,
             find_vertex_strategy: find_vertex,
             vertex_index,
-            tree_indices,
+            ranges: Ranges::default(),
             m,
             version: 0,
             k: DEFAULT_K,
@@ -122,7 +117,7 @@ where
         }
     }
 
-    fn is_marked(&self, v: Vertex<G>) -> bool {
+    fn _is_marked(&self, v: Vertex<G>) -> bool {
         self.m[self.vertex_index.get(v)]
     }
 
@@ -133,7 +128,7 @@ where
 
 pub struct NddrOneTreeForest<G>
 where
-    G: Graph + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
+    G: Graph + WithVertexIndexProp,
 {
     g: Rc<G>,
 
@@ -147,9 +142,8 @@ where
     trees: Vec<Rc<NddTree<Vertex<G>>>>,
 
     // Edges (u, v) such that u and v are star tree vertices (that is, tree roots)
-    // The set of star edges does not change after initialized, but it can be shufflet in the
-    // mutation process
-    star_edges: Rc<RefCell<Vec<Edge<G>>>>,
+    // The set of star edges does not change after initialized, so it cab be shared
+    star_edges: Rc<Vec<Edge<G>>>,
 
     // Used if find_vertex_strategy == Map. Does not allocate if find_vertex_strategy != Map.
     //
@@ -168,17 +162,13 @@ where
 
 impl<G> Clone for NddrOneTreeForest<G>
 where
-    G: IncidenceGraph
-        + Choose
-        + WithVertexIndexProp
-        + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    DefaultVertexPropMut<G, bool>: Clone,
+    G: IncidenceGraph + Choose + WithVertexIndexProp,
 {
     fn clone(&self) -> Self {
         self.reinit_if_needed();
         Self {
             g: Rc::clone(&self.g),
-            root: self.root.clone(),
+            root: self.root,
             data: Rc::clone(&self.data),
             last_op_size: self.last_op_size,
             trees: self.trees.clone(),
@@ -194,7 +184,7 @@ where
 
 impl<G> Deref for NddrOneTreeForest<G>
 where
-    G: Graph + Choose + WithVertexIndexProp + WithVertexProp<DefaultVertexPropMut<G, bool>>,
+    G: Graph + Choose + WithVertexIndexProp,
 {
     type Target = Vec<Rc<NddTree<Vertex<G>>>>;
 
@@ -205,11 +195,7 @@ where
 
 impl<G> PartialEq for NddrOneTreeForest<G>
 where
-    G: IncidenceGraph
-        + Choose
-        + WithVertexIndexProp
-        + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    DefaultVertexPropMut<G, bool>: Clone,
+    G: IncidenceGraph + Choose + WithVertexIndexProp,
 {
     fn eq(&self, other: &Self) -> bool {
         if (self as *const _) == (other as *const _) {
@@ -228,11 +214,7 @@ where
 
 impl<G> NddrOneTreeForest<G>
 where
-    G: IncidenceGraph
-        + Choose
-        + WithVertexIndexProp
-        + WithVertexProp<DefaultVertexPropMut<G, bool>>,
-    DefaultVertexPropMut<G, bool>: Clone,
+    G: IncidenceGraph + Choose + WithVertexIndexProp,
 {
     pub fn new<R: Rng>(g: Rc<G>, edges: Vec<Edge<G>>, rng: R) -> Self {
         Self::new_with_strategies(
@@ -359,7 +341,7 @@ where
             version: Cell::new(version),
             reinit: Cell::new(reinit),
             history: RefCell::new(vec![version as _]),
-            star_edges: Rc::new(RefCell::new(star_edges)),
+            star_edges: Rc::new(star_edges),
         }
     }
 
@@ -567,8 +549,17 @@ where
         // Step 1
         let from =
             self.select_tree_if(&mut rng, |i| {
-                // Must have more than one node so we can choose a node != root
-                self[i].deg_in_g() > self[i].deg() && self[i].len() > 1
+                // Must have more than one vertex so we can choose a vertex != root
+                self[i].len() > 1 && {
+                    let free = self[i].deg_in_g() - self[i].deg();
+                    // Must have vertex with out_edges not in the tree
+                    free > 0 && {
+                        // And the vertex must be different from the root
+                        let root = &self[i][0];
+                        let root_free = self.graph().out_degree(root.vertex()) as u32 - root.deg();
+                        root_free != free
+                    }
+                }
             }).expect("The graph is a forest");
 
         // Step 2
@@ -582,20 +573,24 @@ where
         self.mark_edges(from, v_p);
 
         let v_a = {
-            let data = self.data();
             // Choose an edge (v_p, v_a) not in trees[from], that is, not marked
             // TODO: in a complete graph the chance of choosing a vertex v_a such that (v_p, v_a)
             // is in self[from] is too small, so marking edges is not necessary and is too
             // expensive. Use self[from].contains_edge instead.
-            //
-            // self.g().choose_neighbor_if(&mut *self.rng(),
-            //                             v_p,
-            //                             &mut |v_a| !self[from].contains_edge(v_p, v_a))
-            //
-            self.graph()
-                .choose_out_neighbor_iter(v_p, rng)
-                .find(|&v_a| !data.is_marked(v_a))
-                .unwrap()
+            let g = self.graph();
+            let mut data = &mut *self.data_mut();
+            let mut v_a = v_p; // can be initialized with any value
+            for i in data
+                .ranges
+                .sample_without_replacement(g.out_degree(v_p), rng)
+            {
+                v_a = g.out_neighbors(v_p).nth(i as usize).unwrap();
+                // cannot call data.is_marked because data.ranges is mut borrowed
+                if !data.m[data.vertex_index.get(v_a)] {
+                    break;
+                }
+            }
+            v_a
         };
 
         self.unmark_edges(from, v_p);
@@ -618,7 +613,7 @@ where
 
     fn find_op_edge<R: Rng>(&self, mut rng: R) -> (usize, usize, usize, usize) {
         let g = self.graph();
-        // TODO: use tournament without replacement
+        // TODO: use sample without replacement
         let mut e = g.choose_edge(&mut rng).unwrap();
         // The order of the vertices is important, so trying (u, v) is different from (v, u),
         // as only (u, v) or (v, u) can be returned from choose_edge, we try the reverse with 50%
@@ -650,13 +645,21 @@ where
 
     fn find_op_star_edge<R: Rng>(&self, rng: &mut R) -> Option<(usize, usize, usize, usize)> {
         let e = {
-            if let Some(&e) =
-                sample_without_replacement(&mut *self.star_edges.borrow_mut(), rng, |e| {
-                    self.can_insert_star_edge(*e)
-                }) {
+            let mut data = self.data_mut();
+            let mut e = None;
+            for i in data
+                .ranges
+                .sample_without_replacement(self.star_edges.len(), rng)
+            {
+                let f = self.star_edges[i as usize];
+                if self.can_insert_star_edge(f) {
+                    e = Some(f);
+                    break;
+                }
+            }
+            if let Some(e) = e {
                 e
             } else {
-                // No edge can be inserted
                 return None;
             }
         };
@@ -745,7 +748,15 @@ where
         R: Rng,
         F: FnMut(usize) -> bool,
     {
-        sample_without_replacement(&mut *self.data_mut().tree_indices, rng, |&i| f(i)).cloned()
+        let mut data = self.data_mut();
+        let nsqrt = data.nsqrt;
+        for i in data.ranges.sample_without_replacement(nsqrt, rng) {
+            let i = i as usize + 1;
+            if f(i) {
+                return Some(i);
+            }
+        }
+        None
     }
 
     fn select_tree<R: Rng>(&self, rng: &mut R) -> usize {
@@ -760,8 +771,9 @@ where
     where
         F: FnMut(usize) -> bool,
     {
-        for _ in 0..10 * self[i].len() {
-            let i = rng.gen_range(0, self[i].len());
+        let mut data = self.data_mut();
+        for i in data.ranges.sample_without_replacement(self[i].len(), rng) {
+            let i = i as usize;
             if f(i) {
                 return i;
             }
@@ -863,22 +875,6 @@ where
     fn data_mut(&self) -> RefMut<Data<G>> {
         self.data.borrow_mut()
     }
-}
-
-fn sample_without_replacement<T, R, F>(data: &mut [T], mut rng: R, mut accept: F) -> Option<&T>
-where
-    R: Rng,
-    F: FnMut(&T) -> bool,
-{
-    let n = data.len();
-    for i in 0..n {
-        let j = rng.gen_range(i, n);
-        if accept(&data[j]) {
-            return Some(&data[j]);
-        }
-        data.swap(i, j);
-    }
-    None
 }
 
 // Tests

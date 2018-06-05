@@ -37,21 +37,11 @@ pub trait Tree<G: WithEdge>: Clone {
 #[derive(Clone)]
 pub struct NddrAdjTree<G>(NddrOneTreeForest<G>, XorShiftRng)
 where
-    G: IncidenceGraph
-        + WithVertexIndexProp
-        + WithVertexProp<DefaultVertexPropMut<G, bool>>
-        + Clone
-        + Choose,
-    DefaultVertexPropMut<G, bool>: Clone;
+    G: IncidenceGraph + WithVertexIndexProp + Clone + Choose;
 
 impl<G> PartialEq for NddrAdjTree<G>
 where
-    G: IncidenceGraph
-        + WithVertexIndexProp
-        + WithVertexProp<DefaultVertexPropMut<G, bool>>
-        + Clone
-        + Choose,
-    DefaultVertexPropMut<G, bool>: Clone,
+    G: IncidenceGraph + WithVertexIndexProp + Clone + Choose,
 {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
@@ -60,12 +50,7 @@ where
 
 impl<G> Tree<G> for NddrAdjTree<G>
 where
-    G: IncidenceGraph
-        + WithVertexIndexProp
-        + WithVertexProp<DefaultVertexPropMut<G, bool>>
-        + Clone
-        + Choose,
-    DefaultVertexPropMut<G, bool>: Clone,
+    G: IncidenceGraph + WithVertexIndexProp + Clone + Choose,
 {
     fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], rng: R) -> Self {
         Self::new_with_fake_root(g, None, edges, rng)
@@ -113,21 +98,11 @@ where
 #[derive(Clone)]
 pub struct NddrBalancedTree<G>(NddrOneTreeForest<G>, XorShiftRng)
 where
-    G: IncidenceGraph
-        + WithVertexIndexProp
-        + WithVertexProp<DefaultVertexPropMut<G, bool>>
-        + Clone
-        + Choose,
-    DefaultVertexPropMut<G, bool>: Clone;
+    G: IncidenceGraph + WithVertexIndexProp + Clone + Choose;
 
 impl<G> PartialEq for NddrBalancedTree<G>
 where
-    G: IncidenceGraph
-        + WithVertexIndexProp
-        + WithVertexProp<DefaultVertexPropMut<G, bool>>
-        + Clone
-        + Choose,
-    DefaultVertexPropMut<G, bool>: Clone,
+    G: IncidenceGraph + WithVertexIndexProp + Clone + Choose,
 {
     fn eq(&self, other: &Self) -> bool {
         self.0 == other.0
@@ -136,12 +111,7 @@ where
 
 impl<G> Tree<G> for NddrBalancedTree<G>
 where
-    G: IncidenceGraph
-        + WithVertexIndexProp
-        + WithVertexProp<DefaultVertexPropMut<G, bool>>
-        + Clone
-        + Choose,
-    DefaultVertexPropMut<G, bool>: Clone,
+    G: IncidenceGraph + WithVertexIndexProp + Clone + Choose,
 {
     fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], rng: R) -> Self {
         Self::new_with_fake_root(g, None, edges, rng)
