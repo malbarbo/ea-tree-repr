@@ -21,7 +21,7 @@ use rand::Rng;
 
 // local
 use ea_tree_repr::{
-    init_logger, new_rng, CowNestedArrayVertexProp, EulerTourTree, NddrAdjTree, NddrBalancedTree,
+    init_logger, new_rng, CowNestedArrayVertexProp, EulerTourTree, NddrAdjTree, NddrEdgeTree,
     PredecessorTree, PredecessorTree2, Tree,
 };
 
@@ -78,10 +78,11 @@ pub fn main() {
             run::<EulerTourTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, &args)
         }
         Ds::NddrAdj => run::<NddrAdjTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, &args),
-        Ds::NddrBalanced => {
-            run::<NddrBalancedTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, &args)
+        Ds::NddrEdge => {
+            run::<NddrEdgeTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, &args)
         }
         Ds::Predecessor => {
+            // TODO: use CowArray and benchmark
             run::<PredecessorTree<_>, DefaultVertexPropMut<StaticGraph, u32>>(g, &args)
         }
         Ds::Predecessor2 => {
@@ -438,7 +439,7 @@ fn args() -> Args {
                 possible_values(&[
                     "euler-tour",
                     "nddr-adj",
-                    "nddr-balanced",
+                    "nddr-edge",
                     "pred",
                     "pred2",
                 ])
@@ -484,7 +485,7 @@ fn args() -> Args {
         ds: match matches.value_of("ds").unwrap() {
             "euler-tour" => Ds::EulerTour,
             "nddr-adj" => Ds::NddrAdj,
-            "nddr-balanced" => Ds::NddrBalanced,
+            "nddr-edge" => Ds::NddrEdge,
             "pred" => Ds::Predecessor,
             "pred2" => Ds::Predecessor2,
             _ => unreachable!(),
@@ -502,7 +503,7 @@ fn args() -> Args {
 enum Ds {
     EulerTour,
     NddrAdj,
-    NddrBalanced,
+    NddrEdge,
     Predecessor,
     Predecessor2,
 }

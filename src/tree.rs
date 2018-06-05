@@ -156,6 +156,67 @@ where
     }
 }
 
+#[derive(Clone)]
+pub struct NddrEdgeTree<G>(NddrOneTreeForest<G>, XorShiftRng)
+where
+    G: IncidenceGraph + WithVertexIndexProp + Clone + Choose;
+
+impl<G> PartialEq for NddrEdgeTree<G>
+where
+    G: IncidenceGraph + WithVertexIndexProp + Clone + Choose,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.0 == other.0
+    }
+}
+
+impl<G> Tree<G> for NddrEdgeTree<G>
+where
+    G: IncidenceGraph + WithVertexIndexProp + Clone + Choose,
+{
+    fn new<R: Rng>(g: Rc<G>, edges: &[Edge<G>], rng: R) -> Self {
+        Self::new_with_fake_root(g, None, edges, rng)
+    }
+
+    fn new_with_fake_root<R: Rng>(
+        g: Rc<G>,
+        root: Option<Vertex<G>>,
+        edges: &[Edge<G>],
+        mut rng: R,
+    ) -> Self {
+        let xrng = rng.gen();
+        let nddr = NddrOneTreeForest::new_with_strategies(
+            g,
+            root,
+            edges.to_vec(),
+            FindOpStrategy::Edge,
+            FindVertexStrategy::FatNode,
+            rng,
+        );
+        NddrEdgeTree(nddr, xrng)
+    }
+
+    fn set_edges(&mut self, edges: &[Edge<G>]) {
+        self.0.set_edges(edges, &mut self.1);
+    }
+
+    fn change_pred<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
+        self.0.op1(rng)
+    }
+
+    fn change_any<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
+        self.0.op2(rng)
+    }
+
+    fn graph(&self) -> &Rc<G> {
+        self.0.graph()
+    }
+
+    fn edges(&self) -> Vec<Edge<G>> {
+        self.0.edges()
+    }
+}
+
 impl<G> Tree<G> for NddrOneTree<G>
 where
     G: IncidenceGraph + Choose,

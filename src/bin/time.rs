@@ -21,7 +21,7 @@ use std::time::Duration;
 // local
 use ea_tree_repr::{
     micro_secs, progress, random_sp, random_sp_with_diameter, setup_rayon, time_it, EulerTourTree,
-    NddrAdjTree, NddrBalancedTree, PredecessorTree, PredecessorTree2, Tree,
+    NddrAdjTree, NddrBalancedTree, NddrEdgeTree, PredecessorTree, PredecessorTree2, Tree,
 };
 
 pub fn main() {
@@ -33,7 +33,11 @@ pub fn main() {
         match args.ds {
             Ds::EulerTour => run::<_, EulerTourTree<_>, _>(&args, case),
             Ds::NddrAdj => run::<_, NddrAdjTree<_>, _>(&args, case),
-            Ds::NddrBalanced => run::<_, NddrBalancedTree<_>, _>(&args, case),
+            Ds::NddrBalanced => {
+                eprintln!("nddr-balanced cannot be used in non complete graphs");
+                ::std::process::exit(1);
+            }
+            Ds::NddrEdge => run::<_, NddrEdgeTree<_>, _>(&args, case),
             Ds::Predecessor => run::<_, PredecessorTree<_>, _>(&args, case),
             Ds::Predecessor2 => run::<_, PredecessorTree2<_>, _>(&args, case),
         }
@@ -42,6 +46,7 @@ pub fn main() {
             Ds::EulerTour => run::<_, EulerTourTree<_>, _>(&args, case),
             Ds::NddrAdj => run::<_, NddrAdjTree<_>, _>(&args, case),
             Ds::NddrBalanced => run::<_, NddrBalancedTree<_>, _>(&args, case),
+            Ds::NddrEdge => run::<_, NddrEdgeTree<_>, _>(&args, case),
             Ds::Predecessor => run::<_, PredecessorTree<_>, _>(&args, case),
             Ds::Predecessor2 => run::<_, PredecessorTree2<_>, _>(&args, case),
         }
@@ -176,6 +181,7 @@ fn args() -> Args {
                     "euler-tour",
                     "nddr-adj",
                     "nddr-balanced",
+                    "nddr-edge",
                     "pred",
                     "pred2",
                 ])
@@ -210,6 +216,7 @@ fn args() -> Args {
             "euler-tour" => Ds::EulerTour,
             "nddr-adj" => Ds::NddrAdj,
             "nddr-balanced" => Ds::NddrBalanced,
+            "nddr-edge" => Ds::NddrEdge,
             "pred" => Ds::Predecessor,
             "pred2" => Ds::Predecessor2,
             _ => unreachable!(),
@@ -243,6 +250,7 @@ enum Ds {
     EulerTour,
     NddrAdj,
     NddrBalanced,
+    NddrEdge,
     Predecessor,
     Predecessor2,
 }
