@@ -305,7 +305,7 @@ where
         // using choose_path_edge is a bit faster than find_path
         let x = self.choose_path_edge(u, v, buffer, &mut rng);
         let rem = self.pred_edge(x).unwrap();
-        assert!(self.cut(rem));
+        self.cut_pred(x);
         if self.is_root(u) {
             self.set_pred(u, v);
         } else {
@@ -394,7 +394,6 @@ where
 {
     type Item = Vertex<G>;
 
-    #[inline]
     fn next(&mut self) -> Option<Self::Item> {
         self.tree.pred_vertex(self.cur).map(|v| {
             self.cur = v;

@@ -28,8 +28,8 @@ pub fn main() {
     setup_rayon();
     let args = args();
 
-    let time = if args.nddr_adj_good {
-        let case = case_nddr_adj_good;
+    let time = if args.forest {
+        let case = case_forest;
         match args.ds {
             Ds::EulerTour => run::<_, EulerTourTree<_>, _>(&args, case),
             Ds::NddrAdj => run::<_, NddrAdjTree<_>, _>(&args, case),
@@ -76,7 +76,7 @@ where
         time.par_iter_mut().zip(&args.sizes).for_each(|(t, &n)| {
             let mut rng = rand::weak_rng();
             let (g, tree) = new(args, n, &mut rng);
-            let mut tree = if args.nddr_adj_good {
+            let mut tree = if args.forest {
                 let r = g.vertices().next().unwrap();
                 T::new_with_fake_root(Rc::new(g), Some(r), &*tree, &mut rng)
             } else {
@@ -118,7 +118,7 @@ fn case(args: &Args, n: usize, rng: &mut XorShiftRng) -> (CompleteGraph, Vec<Edg
     (g, tree)
 }
 
-fn case_nddr_adj_good(
+fn case_forest(
     _args: &Args,
     n: usize,
     rng: &mut XorShiftRng,
@@ -163,7 +163,7 @@ fn case_nddr_adj_good(
 struct Args {
     sizes: Vec<usize>,
     diameter: Option<f32>,
-    nddr_adj_good: bool,
+    forest: bool,
     ds: Ds,
     op: Op,
     times: usize,
@@ -193,9 +193,9 @@ fn args() -> Args {
                     "change-any"
                 ])
                 "Operator")
-            (@arg nddr:
-                --nddr_adj_good
-                "Test graph that are good for nddr-adj")
+            (@arg forest:
+                --forest
+                "Test graphs that are forests (good for nddr)")
             (@arg diameter:
                 -d
                 --diameter
@@ -226,7 +226,7 @@ fn args() -> Args {
             "change-any" => Op::ChangeAny,
             _ => unreachable!(),
         },
-        nddr_adj_good: matches.is_present("nddr"),
+        forest: matches.is_present("forest"),
         diameter: if matches.is_present("diameter") {
             let d = value_t_or_exit!(matches, "diameter", f32);
             if d < 0.0 || d > 1.0 {

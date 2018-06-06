@@ -1,0 +1,24 @@
+\documentclass[tikz]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.13}
+\usepackage{siunitx}
+
+\begin{document}
+  \begin{tikzpicture}
+    \begin{axis}[
+        legend pos = north west,
+        scaled x ticks = false,
+        scaled y ticks = false,
+        xlabel=Number of vertices,
+        ylabel=Time (\si{\us}),
+      ]
+      \addplot+ [mark=none] table {../results/time-change-pred-0};
+      \addplot+ [mark=none] table {../results/time-change-pred-1};
+      \addplot+ [mark=none] table {../results/time-change-pred-2};
+      \addplot+ [mark=none] table {../results/time-change-pred-3};
+      \addplot+ [mark=none] table {../results/time-change-pred-4};
+      \legend{EulerTour, NddrAdj, NddrEdge, Predecessor, Predecessor2}
+    \end{axis}
+  \end{tikzpicture}
+\end{document}
