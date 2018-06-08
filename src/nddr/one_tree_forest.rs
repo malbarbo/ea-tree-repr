@@ -12,7 +12,7 @@ use std::ops::Deref;
 use std::rc::Rc;
 
 // internal
-use {collect_ndds, find_star_tree, one_tree_op1, one_tree_op2, op1, op2, NddTree, Ranges};
+use {collect_ndds, find_star_tree, one_tree_op1, one_tree_op2, op1, op2, Bitset, NddTree, Ranges};
 
 // pg 836 5) Step 5 - the value of the k constant is not specified, we use the default value of 1
 const DEFAULT_K: usize = 1;
@@ -74,7 +74,7 @@ where
     // We use a vector instead of a matrix. The vector is used to mark the adjacent vertex of the
     // vertex p, so only the p row of the matrix need to be marked, so only on active row is
     // needed.
-    m: Vec<bool>,
+    m: Bitset,
 
     // The next fields are use if find_vertex_strategy = FatNode. In forest version h, the vertex
     // x is in position pi[x][h].pos of the tree with index pi[x][h].tree
@@ -94,8 +94,8 @@ where
         let nsqrt = (g.num_vertices() as f64).sqrt().ceil() as usize;
         // Only allocate m if they will be used
         let m = match find_op {
-            FindOpStrategy::Adj | FindOpStrategy::AdjSmaller => vec![false; g.num_vertices()],
-            _ => vec![],
+            FindOpStrategy::Adj | FindOpStrategy::AdjSmaller => Bitset::with_capacity(g.num_vertices()),
+            _ => Bitset::with_capacity(0),
         };
         let pi = if find_vertex == FindVertexStrategy::FatNode {
             vec![vec![]; g.num_vertices()]
@@ -118,11 +118,15 @@ where
     }
 
     fn _is_marked(&self, v: Vertex<G>) -> bool {
-        self.m[self.vertex_index.get(v)]
+        self.m.unchecked_get(self.vertex_index.get(v))
     }
 
     fn set_m(&mut self, v: Vertex<G>, value: bool) {
-        self.m[self.vertex_index.get(v)] = value;
+        if value {
+            self.m.unchecked_set(self.vertex_index.get(v));
+        } else {
+            self.m.unchecked_clear(self.vertex_index.get(v));
+        }
     }
 }
 
@@ -142,7 +146,7 @@ where
     trees: Vec<Rc<NddTree<Vertex<G>>>>,
 
     // Edges (u, v) such that u and v are star tree vertices (that is, tree roots)
-    // The set of star edges does not change after initialized, so it cab be shared
+    // The set of star edges does not change after initialized, so it can be shared
     star_edges: Rc<Vec<Edge<G>>>,
 
     // Used if find_vertex_strategy == Map. Does not allocate if find_vertex_strategy != Map.
@@ -586,7 +590,7 @@ where
             {
                 v_a = g.out_neighbors(v_p).nth(i as usize).unwrap();
                 // cannot call data.is_marked because data.ranges is mut borrowed
-                if !data.m[data.vertex_index.get(v_a)] {
+                if !data.m.unchecked_get(data.vertex_index.get(v_a)) {
                     break;
                 }
             }

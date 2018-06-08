@@ -25,6 +25,12 @@ impl Bitset {
     }
 
     #[inline]
+    pub fn unchecked_clear(&mut self, i: usize) {
+        let (b, i) = div_rem(i);
+        unsafe { *self.blocks.get_unchecked_mut(b) &= !(1 << i) };
+    }
+
+    #[inline]
     pub fn unchecked_get(&self, i: usize) -> bool {
         let (b, i) = div_rem(i);
         unsafe { self.blocks.get_unchecked(b) & (1 << i) != 0 }
