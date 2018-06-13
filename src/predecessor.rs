@@ -4,7 +4,6 @@ use fera::graph::traverse::{Dfs, OnDiscoverTreeEdge};
 use fera_array::{Array, CowNestedArray, CowNestedNestedArray, VecArray};
 use rand::Rng;
 
-use std::cell::RefCell;
 use std::mem;
 use std::rc::Rc;
 
@@ -20,7 +19,6 @@ where
     g: Rc<G>,
     index: VertexIndexProp<G>,
     pred: A,
-    buffer: Rc<RefCell<Vec<Vertex<G>>>>,
 }
 
 impl<G, A> PredecessorTree<G, A>
@@ -38,7 +36,6 @@ where
             g,
             index,
             pred: A::with_value(G::vertex_none(), n),
-            buffer: Rc::new(RefCell::new(vec![])),
         };
 
         tree.set_edges(edges);
@@ -150,51 +147,6 @@ where
         PathToRoot { tree: self, cur: v }
     }
 
-    pub fn choose_path_edge<R: Rng>(
-        &self,
-        u: Vertex<G>,
-        v: Vertex<G>,
-        buffer: &mut Vec<Vertex<G>>,
-        mut rng: R,
-    ) -> Vertex<G> {
-        assert_ne!(u, v);
-        buffer.clear();
-
-        buffer.push(u);
-        for p in self.path_to_root(u) {
-            if p == v {
-                return *rng.choose(buffer).unwrap();
-            }
-            buffer.push(p);
-        }
-        let s = buffer.len();
-
-        buffer.push(v);
-        for p in self.path_to_root(v) {
-            if p == u {
-                return *rng.choose(&buffer[s..]).unwrap();
-            }
-            buffer.push(p);
-        }
-
-        let mut i = s - 1;
-        let mut j = buffer.len() - 1;
-        while buffer[i] == buffer[j] {
-            i -= 1;
-            j -= 1;
-        }
-        i += 1;
-        j += 1;
-
-        let total = (0..i).len() + (s..j).len();
-        let x = rng.gen_range(0, total);
-        if x < i {
-            buffer[x]
-        } else {
-            buffer[s..j][x - i]
-        }
-    }
-
     pub fn find_path(&self, u: Vertex<G>, v: Vertex<G>, path: &mut Vec<Vertex<G>>) {
         path.clear();
 
@@ -273,10 +225,6 @@ where
     G: Graph + Choose + WithVertexIndexProp,
     A: Array<OptionVertex<G>>,
 {
-    pub fn buffer(&self) -> Rc<RefCell<Vec<Vertex<G>>>> {
-        Rc::clone(&self.buffer)
-    }
-
     pub fn change_pred<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Option<Edge<G>>) {
         let ins = self.choose_nontree_edge(&mut rng);
         let (u, v) = self.g.ends(ins);
@@ -294,43 +242,42 @@ where
         (ins, rem)
     }
 
-    pub fn change_any<R: Rng>(
-        &mut self,
-        buffer: &mut Vec<Vertex<G>>,
-        mut rng: R,
-    ) -> (Edge<G>, Edge<G>) {
-        // TODO: make this works with forests
+    pub fn change_any<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Edge<G>) {
         let ins = self.choose_nontree_edge(&mut rng);
-        let (u, v) = self.g.ends(ins);
-        // using choose_path_edge is a bit faster than find_path
-        let x = self.choose_path_edge(u, v, buffer, &mut rng);
-        let rem = self.pred_edge(x).unwrap();
-        self.cut_pred(x);
-        if self.is_root(u) {
-            self.set_pred(u, v);
-        } else {
-            self.make_root(v);
-            self.set_pred(v, u);
-        }
+        let rem = self.insert_remove(ins, TargetEdge::Any, rng);
         (ins, rem)
     }
 
-    pub fn insert_remove<F>(&mut self, buffer: &mut Vec<Vertex<G>>, ins: Edge<G>, rem: F) -> Edge<G>
-    where
-        F: FnOnce(&[Vertex<G>]) -> usize,
-    {
+    pub fn insert_remove<R: Rng>(&mut self, ins: Edge<G>, e: TargetEdge, rng: R) -> Edge<G> {
         let (u, v) = self.g.ends(ins);
-        self.find_path(u, v, buffer);
-        let i = rem(&*buffer);
-        let rem = self.g.edge_by_ends(buffer[i], buffer[i + 1]);
-        assert!(self.cut(rem));
-        if self.is_root(u) {
-            self.set_pred(u, v);
-        } else {
-            self.make_root(v);
-            self.set_pred(v, u);
-        }
+        self.make_root(u);
+        let x = match e {
+            TargetEdge::First => v,
+            TargetEdge::Last => {
+                let mut x = v;
+                let mut last = x;
+                for w in self.path_to_root(v) {
+                    x = last;
+                    last = w;
+                }
+                x
+            }
+            TargetEdge::Any => self.choose_path_to_root(v, rng),
+        };
+        let rem = self.pred_edge(x).unwrap();
+        self.set_pred(u, v);
+        self.cut_pred(x);
         rem
+    }
+
+    fn choose_path_to_root<R: Rng>(&self, v: Vertex<G>, mut rng: R) -> Vertex<G> {
+        let len = self.path_to_root(v).count();
+        let i = rng.gen_range(0, len);
+        if i == len - 1 {
+            v
+        } else {
+            self.path_to_root(v).nth(i).unwrap()
+        }
     }
 
     fn choose_nontree_edge<R: Rng>(&self, mut rng: R) -> Edge<G> {
@@ -351,7 +298,6 @@ where
             g: Rc::clone(&self.g),
             index: self.g.vertex_index(),
             pred: self.pred.clone(),
-            buffer: Rc::clone(&self.buffer),
         }
     }
 
@@ -359,7 +305,6 @@ where
         self.g.clone_from(&other.g);
         self.index = other.g.vertex_index();
         self.pred.clone_from(&other.pred);
-        self.buffer.clone_from(&other.buffer);
     }
 }
 
@@ -400,6 +345,13 @@ where
             v
         })
     }
+}
+
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+pub enum TargetEdge {
+    First,
+    Last,
+    Any,
 }
 
 #[cfg(test)]
@@ -497,13 +449,12 @@ mod tests {
 
     fn change_any<A: Clone + Array<OptionVertex<CompleteGraph>>>() {
         let mut rng = rand::weak_rng();
-        let mut buffer = vec![];
         let n = 30;
         let (g, tree) = graph_tree(n);
         let mut tree: PredecessorTree<CompleteGraph, A> = PredecessorTree::from_iter(g, tree);
         for _ in 0..1000 {
             let mut new = tree.clone();
-            let (ins, rem) = new.change_any(&mut buffer, &mut rng);
+            let (ins, rem) = new.change_any(&mut rng);
             assert!(new.contains(ins));
             assert!(!new.contains(rem));
             new.check();

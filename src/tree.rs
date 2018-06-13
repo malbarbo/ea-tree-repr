@@ -266,9 +266,7 @@ where
     }
 
     fn change_any<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
-        let buffer = self.buffer();
-        let mut buffer = buffer.borrow_mut();
-        PredecessorTree::change_any(self, &mut *buffer, rng)
+        PredecessorTree::change_any(self, rng)
     }
 
     fn graph(&self) -> &Rc<G> {

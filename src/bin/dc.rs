@@ -19,7 +19,7 @@ use rand::Rng;
 use std::rc::Rc;
 
 // local
-use ea_tree_repr::{init_logger, new_rng, PredecessorTree, Tree};
+use ea_tree_repr::{init_logger, new_rng, PredecessorTree, TargetEdge, Tree};
 
 const SCALE: f64 = 10_000_000_000.0;
 
@@ -266,23 +266,16 @@ where
     pub fn change_any(&mut self, w: &DefaultEdgePropMut<G, u64>, ind: &mut Ind<G>) {
         let g = ind.tree.graph().clone();
         let ins = self.choose_edge(&ind.deg, &ind.tree);
-
         let rem = {
             let (u, v) = g.ends(ins);
-            let buffer = ind.tree.buffer();
-            let mut buffer = buffer.borrow_mut();
-            let deg = &ind.deg;
-            ind.tree.insert_remove(&mut *buffer, ins, |path| {
-                let dc = self.dc;
-                match (deg[u] < dc, deg[v] < dc) {
-                    (false, false) => panic!(),
-                    (false, true) => 0,
-                    (true, false) => path.len() - 2,
-                    (true, true) => self.rng.gen_range(0, path.len() - 1),
-                }
-            })
+            let e = match (ind.deg[u] < self.dc, ind.deg[v] < self.dc) {
+                (false, false) => panic!(),
+                (false, true) => TargetEdge::Last,
+                (true, false) => TargetEdge::First,
+                (true, true) => TargetEdge::Any,
+            };
+            ind.tree.insert_remove(ins, e, &mut self.rng)
         };
-
         ind.update_deg_weight(ins, rem, w);
     }
 
