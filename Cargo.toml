@@ -16,6 +16,9 @@ rand = "0.4"
 rayon = "1.0"
 tsplib = "0.1"
 
+[features]
+system_allocator = []
+
 [profile.release]
 debug = true
 # debug-assertions = true
