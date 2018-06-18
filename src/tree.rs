@@ -1,13 +1,14 @@
+use fera::array::Array;
 use fera::graph::choose::Choose;
 use fera::graph::prelude::*;
-use fera_array::Array;
-use rand::{Rng, XorShiftRng};
+use rand::prelude::*;
+use rand::XorShiftRng;
 
 use std::rc::Rc;
 
 use {
     EulerTourTree, FindOpStrategy, FindVertexStrategy, NddrOneTree, NddrOneTreeForest,
-    PredecessorTree,
+    PredecessorTree, new_rng_with_seed
 };
 
 // This trait creates a uniform interface to make it easy to run the experiments
@@ -62,7 +63,7 @@ where
         edges: &[Edge<G>],
         mut rng: R,
     ) -> Self {
-        let xrng = rng.gen();
+        let xrng = new_rng_with_seed(rng.gen());
         let nddr = NddrOneTreeForest::new_with_strategies(
             g,
             root,
@@ -123,7 +124,7 @@ where
         edges: &[Edge<G>],
         mut rng: R,
     ) -> Self {
-        let xrng = rng.gen();
+        let xrng = new_rng_with_seed(rng.gen());
         let nddr = NddrOneTreeForest::new_with_strategies(
             g,
             root,
@@ -184,7 +185,7 @@ where
         edges: &[Edge<G>],
         mut rng: R,
     ) -> Self {
-        let xrng = rng.gen();
+        let xrng = new_rng_with_seed(rng.gen());
         let nddr = NddrOneTreeForest::new_with_strategies(
             g,
             root,

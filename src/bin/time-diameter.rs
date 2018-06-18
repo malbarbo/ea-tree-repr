@@ -17,8 +17,8 @@ use std::time::{Duration, Instant};
 
 // local
 use ea_tree_repr::{
-    micro_secs, progress, random_sp_with_diameter, setup_rayon, EulerTourTree, NddrAdjTree,
-    NddrBalancedTree, PredecessorTree, PredecessorTree2, Tree,
+    micro_secs, new_rng, progress, random_sp_with_diameter, setup_rayon, EulerTourTree,
+    NddrAdjTree, NddrBalancedTree, PredecessorTree, PredecessorTree2, Tree,
 };
 
 fn main() {
@@ -50,7 +50,7 @@ fn run<T: Tree<CompleteGraph>>(
     let mut time = vec![Duration::default(); samples];
     for _ in progress(0..times) {
         ds.par_iter().zip(&mut time).for_each(|(&d, t)| {
-            let mut rng = rand::weak_rng();
+            let mut rng = new_rng();
             let (g, tree) = graph_tree(n, d);
             let tree = T::new(Rc::new(g), &*tree, &mut rng);
             let start = Instant::now();
@@ -127,7 +127,7 @@ fn args() -> (usize, Ds, Op, usize, usize) {
 
 fn graph_tree(n: usize, d: usize) -> (CompleteGraph, Vec<Edge<CompleteGraph>>) {
     let g = CompleteGraph::new(n as u32);
-    let tree = random_sp_with_diameter(&g, d, rand::weak_rng());
+    let tree = random_sp_with_diameter(&g, d, new_rng());
     (g, tree)
 }
 

@@ -220,7 +220,7 @@ where
         // Input:
         //    1     2       3     4       5
         // +---------------------------------+
-        // |     |     |a|     |     |b|     |
+        // |     |     |x|     |     |y|     |
         // +---------------------------------+
         //       ^       ^     ^     ^
         //      to      start root  end
@@ -834,8 +834,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand;
-    use random::random_sp;
+    use new_rng;
+    use random_sp;
 
     #[test]
     fn subtree() {
@@ -905,7 +905,7 @@ mod tests {
 
     #[test]
     fn change_pred() {
-        let mut rng = rand::XorShiftRng::new_unseeded();
+        let mut rng = new_rng();
         for n in 5..30 {
             let g = Rc::new(CompleteGraph::new(n));
             let mut tour = EulerTourTree::new(g.clone(), &*random_sp(&*g, &mut rng));
@@ -928,7 +928,7 @@ mod tests {
 
     #[test]
     fn change_any() {
-        let mut rng = rand::XorShiftRng::new_unseeded();
+        let mut rng = new_rng();
         for n in 5..30 {
             let g = Rc::new(CompleteGraph::new(n));
             let mut tour = EulerTourTree::new(g.clone(), &*random_sp(&*g, &mut rng));

@@ -1,14 +1,13 @@
+use fera::array::{Array, CowNestedArray, VecArray};
 use fera::graph::choose::Choose;
 use fera::graph::prelude::*;
 use fera::graph::traverse::{Dfs, OnDiscoverTreeEdge};
-use fera_array::{Array, CowNestedArray, CowNestedNestedArray, VecArray};
 use rand::Rng;
 
 use std::mem;
 use std::rc::Rc;
 
 pub type PredecessorTree2<G> = PredecessorTree<G, CowNestedArray<OptionVertex<G>>>;
-pub type PredecessorTree3<G> = PredecessorTree<G, CowNestedNestedArray<OptionVertex<G>>>;
 
 // This also works with forests, maybe we should change the name.
 pub struct PredecessorTree<G, A = VecArray<OptionVertex<G>>>
@@ -357,16 +356,15 @@ pub enum TargetEdge {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fera::array::Array;
     use fera::fun::vec;
     use fera::graph::algs::Paths;
-    use fera_array::Array;
-    use rand::{self, Rng};
-    use random_sp;
+    use {new_rng, random_sp};
 
     macro_rules! def_tests {
         ($m:ident, $t:ty, $($name:ident),+) => (
             mod $m {
-                use fera_array::*;
+                use fera::array::*;
                 $(
                     #[test]
                     fn $name() {
@@ -399,25 +397,14 @@ mod tests {
         paths
     );
 
-    def_tests!(
-        pred3,
-        CowNestedNestedArray<_>,
-        eq,
-        change_pred,
-        change_any,
-        make_root,
-        find_root,
-        paths
-    );
-
     fn graph_tree(n: u32) -> (Rc<CompleteGraph>, Vec<Edge<CompleteGraph>>) {
         let g = CompleteGraph::new(n);
-        let tree = random_sp(&g, rand::weak_rng());
+        let tree = random_sp(&g, new_rng());
         (Rc::new(g), tree)
     }
 
     fn eq<A: Array<OptionVertex<CompleteGraph>>>() {
-        let mut rng = rand::weak_rng();
+        let mut rng = new_rng();
         let n = 30;
         let (g, mut tree) = graph_tree(n);
         let trees: Vec<PredecessorTree<CompleteGraph, A>> = vec((0..n).map(|_| {
@@ -432,7 +419,7 @@ mod tests {
     }
 
     fn change_pred<A: Clone + Array<OptionVertex<CompleteGraph>>>() {
-        let mut rng = rand::weak_rng();
+        let mut rng = new_rng();
         let n = 30;
         let (g, tree) = graph_tree(n);
         let mut tree: PredecessorTree<CompleteGraph, A> = PredecessorTree::from_iter(g, tree);
@@ -448,7 +435,7 @@ mod tests {
     }
 
     fn change_any<A: Clone + Array<OptionVertex<CompleteGraph>>>() {
-        let mut rng = rand::weak_rng();
+        let mut rng = new_rng();
         let n = 30;
         let (g, tree) = graph_tree(n);
         let mut tree: PredecessorTree<CompleteGraph, A> = PredecessorTree::from_iter(g, tree);
@@ -464,7 +451,7 @@ mod tests {
     }
 
     fn make_root<A: Clone + Array<OptionVertex<CompleteGraph>>>() {
-        let mut rng = rand::weak_rng();
+        let mut rng = new_rng();
         let n = 30;
         let (g, tree) = graph_tree(n);
         let mut tree: PredecessorTree<CompleteGraph, A> =

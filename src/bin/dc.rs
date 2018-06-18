@@ -12,14 +12,14 @@ use fera::fun::{position_max_by_key, position_min_by_key, vec};
 use fera::graph::algs::Kruskal;
 use fera::graph::choose::Choose;
 use fera::graph::prelude::*;
-use rand::distributions::{IndependentSample, Normal};
-use rand::Rng;
+use rand::prelude::*;
+use rand::distributions::Normal;
 
 // system
 use std::rc::Rc;
 
 // local
-use ea_tree_repr::{init_logger, new_rng, PredecessorTree, TargetEdge, Tree};
+use ea_tree_repr::{init_logger, new_rng_with_seed, PredecessorTree, TargetEdge, Tree};
 
 const SCALE: f64 = 10_000_000_000.0;
 
@@ -45,7 +45,7 @@ fn run(
     w: &DefaultEdgePropMut<CompleteGraph, u64>,
     args: &Args,
 ) -> (u64, u64, Vec<Edge<CompleteGraph>>) {
-    let mut rng = new_rng(args.seed);
+    let mut rng = new_rng_with_seed(args.seed);
     let mut edges = vec(g.edges());
 
     // Initialize the population
@@ -296,7 +296,7 @@ where
     fn _choose_edge(&mut self) -> Edge<G> {
         if let Some(ref normal) = self.normal {
             let m = self.edges.len();
-            let i = (normal.ind_sample(&mut self.rng).abs() as usize) % m;
+            let i = (normal.sample(&mut self.rng).abs() as usize) % m;
             self.edges[i]
         } else {
             *self.rng.choose(&self.edges).unwrap()

@@ -14,7 +14,8 @@ use std::rc::Rc;
 
 // local
 use ea_tree_repr::{
-    progress, random_sp, setup_rayon, FindOpStrategy, FindVertexStrategy, NddrOneTreeForest,
+    new_rng, progress, random_sp, setup_rayon, FindOpStrategy, FindVertexStrategy,
+    NddrOneTreeForest,
 };
 
 pub fn main() {
@@ -32,7 +33,7 @@ pub fn main() {
 
 fn run(n: usize, op: Op, find_op: FindOpStrategy, calls: usize, times: usize) -> Vec<f32> {
     // TODO: make it run in parallel
-    let mut rng = rand::weak_rng();
+    let mut rng = new_rng();
     let mut size = vec![0; calls];
     for _ in progress(0..times) {
         let mut tree = new(n, find_op, &mut rng);

@@ -20,8 +20,9 @@ use std::time::Duration;
 
 // local
 use ea_tree_repr::{
-    micro_secs, progress, random_sp, random_sp_with_diameter, setup_rayon, time_it, EulerTourTree,
-    NddrAdjTree, NddrBalancedTree, NddrEdgeTree, PredecessorTree, PredecessorTree2, Tree,
+    micro_secs, new_rng, progress, random_sp, random_sp_with_diameter, setup_rayon, time_it,
+    EulerTourTree, NddrAdjTree, NddrBalancedTree, NddrEdgeTree, PredecessorTree, PredecessorTree2,
+    Tree,
 };
 
 pub fn main() {
@@ -74,7 +75,7 @@ where
     let mut time = vec![(Duration::default(), Duration::default()); args.sizes.len()];
     for _ in progress(0..args.times) {
         time.par_iter_mut().zip(&args.sizes).for_each(|(t, &n)| {
-            let mut rng = rand::weak_rng();
+            let mut rng = new_rng();
             let (g, tree) = new(args, n, &mut rng);
             let mut tree = if args.forest {
                 let r = g.vertices().next().unwrap();

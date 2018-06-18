@@ -1,8 +1,19 @@
 use fera::graph::prelude::*;
-use rand::{Rng, SeedableRng, XorShiftRng};
+use rand::prelude::*;
+use rand::XorShiftRng;
 
-pub fn new_rng(seed: u32) -> XorShiftRng {
-    XorShiftRng::from_seed([seed, seed, seed, seed]).gen()
+pub fn new_rng_with_seed(x: u32) -> XorShiftRng {
+    let b1: u8 = ((x >> 24) & 0xff) as u8;
+    let b2: u8 = ((x >> 16) & 0xff) as u8;
+    let b3: u8 = ((x >> 8) & 0xff) as u8;
+    let b4: u8 = (x & 0xff) as u8;
+    XorShiftRng::from_seed([
+        b1, b2, b3, b4, b1, b2, b3, b4, b1, b2, b3, b4, b1, b2, b3, b4,
+    ])
+}
+
+pub fn new_rng() -> XorShiftRng {
+    new_rng_with_seed(random())
 }
 
 pub fn random_sp<R: Rng>(g: &CompleteGraph, rng: R) -> Vec<Edge<CompleteGraph>> {
@@ -79,7 +90,6 @@ impl<'a, R: Rng> Iterator for SampleIter<'a, R> {
 mod tests {
     use super::*;
     use fera::fun::vec;
-    use rand;
 
     fn assert_perm(n: usize, mut values: Vec<usize>) {
         values.sort();
@@ -90,7 +100,7 @@ mod tests {
 
     #[test]
     fn sample() {
-        let mut rng = rand::weak_rng();
+        let mut rng = new_rng();
         let mut ranges = Ranges::default();
         assert_eq!(vec![0], vec(ranges.sample_without_replacement(1, &mut rng)));
         for n in 1..10 {

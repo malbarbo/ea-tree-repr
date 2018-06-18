@@ -21,8 +21,8 @@ use rand::Rng;
 
 // local
 use ea_tree_repr::{
-    init_logger, new_rng, CowNestedArrayVertexProp, EulerTourTree, NddrAdjTree, NddrEdgeTree,
-    PredecessorTree, PredecessorTree2, Tree,
+    init_logger, new_rng_with_seed, CowNestedArrayVertexProp, EulerTourTree, NddrAdjTree,
+    NddrEdgeTree, PredecessorTree, PredecessorTree2, Tree,
 };
 
 pub fn main() {
@@ -119,7 +119,7 @@ where
     D: VertexPropMutNew<StaticGraph, u32>,
     Ind<T, D>: Clone,
 {
-    let mut rng = new_rng(args.seed);
+    let mut rng = new_rng_with_seed(args.seed);
     let mut edges = vec(g.edges());
     let mut tree = vec![];
     let mut pop = vec![];

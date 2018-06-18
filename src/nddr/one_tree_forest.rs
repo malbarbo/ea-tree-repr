@@ -94,7 +94,9 @@ where
         let nsqrt = (g.num_vertices() as f64).sqrt().ceil() as usize;
         // Only allocate m if they will be used
         let m = match find_op {
-            FindOpStrategy::Adj | FindOpStrategy::AdjSmaller => Bitset::with_capacity(g.num_vertices()),
+            FindOpStrategy::Adj | FindOpStrategy::AdjSmaller => {
+                Bitset::with_capacity(g.num_vertices())
+            }
             _ => Bitset::with_capacity(0),
         };
         let pi = if find_vertex == FindVertexStrategy::FatNode {
@@ -886,13 +888,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand;
+    use new_rng;
     use random_sp;
 
     #[test]
     fn test_eq() {
         let n = 30;
-        let mut rng = rand::weak_rng();
+        let mut rng = new_rng();
         let (g, data, mut tree) = data(n, FindOpStrategy::Adj, FindVertexStrategy::FatNode);
         let data = Rc::new(RefCell::new(data));
         let forests = vec((0..n).map(|_| {
@@ -916,7 +918,7 @@ mod tests {
         Data<CompleteGraph>,
         Vec<Edge<CompleteGraph>>,
     ) {
-        let mut rng = rand::weak_rng();
+        let mut rng = new_rng();
         let g = Rc::new(CompleteGraph::new(n));
         let tree = random_sp(&g, &mut rng);
         let data = Data::new(&g, find_op, find_vertex);
@@ -927,12 +929,12 @@ mod tests {
         ($name:ident, $op:ident, $vertex:ident) => {
             #[test]
             fn $name() {
-                let mut rng = rand::weak_rng();
+                let mut rng = new_rng();
                 let (g, data, tree) = data(100, FindOpStrategy::$op, FindVertexStrategy::$vertex);
                 let data = Rc::new(RefCell::new(data));
                 let mut forest = NddrOneTreeForest::new_with_data(g, None, data, tree, &mut rng);
                 for _ in 0..100 {
-                    let mut rng = rand::weak_rng();
+                    let mut rng = new_rng();
                     for &op in &[1, 2] {
                         let mut f = forest.clone();
                         assert!(forest == f);

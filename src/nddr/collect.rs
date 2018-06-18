@@ -1,4 +1,3 @@
-use fera::graph::algs::Degrees;
 use fera::graph::choose::Choose;
 use fera::graph::prelude::*;
 use fera::graph::traverse::{continue_if, Control, Dfs, OnDiscoverTreeEdge, Visitor};
@@ -6,7 +5,7 @@ use fera::graph::traverse::{continue_if, Control, Dfs, OnDiscoverTreeEdge, Visit
 use rand::Rng;
 
 use std::cmp::Ordering;
-use std::collections::{BinaryHeap, VecDeque};
+use std::collections::BinaryHeap;
 
 use Ndd;
 
@@ -204,6 +203,8 @@ where
 }
 
 fn tree_center<G: AdjacencyGraph>(g: &G) -> Vertex<G> {
+    use fera::graph::algs::Degrees;
+    use std::collections::VecDeque;
     let mut deg = g.degree_spanning_subgraph(g.edges());
     let mut q: VecDeque<_> = g.vertices().filter(|&v| deg[v] == 1).collect();
     for _ in 0..g.num_vertices() - 1 {

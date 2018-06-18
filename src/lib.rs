@@ -1,10 +1,10 @@
 #![cfg_attr(feature = "cargo-clippy", warn(clone_on_ref_ptr))]
 
 #[cfg(feature = "system_allocator")]
-#[global_allocator] static A: std::alloc::System = std::alloc::System;
+#[global_allocator]
+static A: std::alloc::System = std::alloc::System;
 
 extern crate fera;
-extern crate fera_array;
 #[macro_use]
 extern crate log;
 extern crate pbr;

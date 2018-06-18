@@ -8,11 +8,10 @@ https://github.com/malbarbo/ea-tree-repr
 
 [dependencies]
 clap = { version = "2.29", default-features = false, features = ["wrap_help"] }
-fera = { version = "0.1", features = ["ext", "fun", "graph"] }
-fera-array = { path = "../fera/array" }
+fera = { version = "0.2", features = ["array", "ext", "fun", "graph"], path = "../fera" }
 log = { version = "0.4", features = ["std"] }
 pbr = "1.0"
-rand = "0.4"
+rand = "0.5"
 rayon = "1.0"
 tsplib = "0.1"
 

@@ -127,11 +127,11 @@ impl<G: AdjacencyGraph + Choose> NddrOneTree<G> {
 mod tests {
     use super::*;
     use fera::graph::algs::Trees;
-    use rand;
+    use new_rng;
     use random_sp;
 
     fn new(n: u32) -> NddrOneTree<CompleteGraph> {
-        let mut rng = rand::weak_rng();
+        let mut rng = new_rng();
         let g = Rc::new(CompleteGraph::new(n));
         let edges = random_sp(&g, &mut rng);
         NddrOneTree::new(g, &*edges)
@@ -139,7 +139,7 @@ mod tests {
 
     #[test]
     fn op1() {
-        let mut rng = rand::weak_rng();
+        let mut rng = new_rng();
         let mut tree = new(100);
         for _ in 0..100 {
             let (ins, rem) = tree.op1(&mut rng);
@@ -151,7 +151,7 @@ mod tests {
 
     #[test]
     fn op2() {
-        let mut rng = rand::weak_rng();
+        let mut rng = new_rng();
         let mut tree = new(100);
         for _ in 0..100 {
             let (ins, rem) = tree.op2(&mut rng);

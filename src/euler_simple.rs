@@ -79,11 +79,11 @@ impl<T: PartialEq + Debug> EulerTourSimple<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand;
+    use new_rng;
 
     #[test]
     fn check_simple() {
-        let mut rng = rand::weak_rng();
+        let mut rng = new_rng();
         for n in 5..30 {
             let mut tree = EulerTourSimple::new((0..n).chain((0..n).rev()).collect());
             tree.check();
