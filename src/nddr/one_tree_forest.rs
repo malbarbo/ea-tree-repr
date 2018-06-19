@@ -369,7 +369,6 @@ where
         self.last_op_size
     }
 
-    // TODO: create a version of op1 and op2 that takes degree constraint parameter
     pub fn op1<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
         self.reinit_if_needed();
         let (from, p, to, a) = self.find_vertices_op1(rng);
@@ -585,11 +584,12 @@ where
             // expensive. Use self[from].contains_edge instead.
             let g = self.graph();
             let mut data = &mut *self.data_mut();
-            let mut v_a = v_p; // can be initialized with any value
+            let mut v_a = v_p; // v_a can be initialized with any value
             for i in data
                 .ranges
                 .sample_without_replacement(g.out_degree(v_p), rng)
             {
+                // for Complete and Static graphs, nth have constant execution time
                 v_a = g.out_neighbors(v_p).nth(i as usize).unwrap();
                 // cannot call data.is_marked because data.ranges is mut borrowed
                 if !data.m.unchecked_get(data.vertex_index.get(v_a)) {
@@ -619,15 +619,7 @@ where
 
     fn find_op_edge<R: Rng>(&self, mut rng: R) -> (usize, usize, usize, usize) {
         let g = self.graph();
-        // TODO: use sample without replacement
-        let mut e = g.choose_edge(&mut rng).unwrap();
-        // The order of the vertices is important, so trying (u, v) is different from (v, u),
-        // as only (u, v) or (v, u) can be returned from choose_edge, we try the reverse with 50%
-        // of change.
-        // This is not necessary in the other methods because (u, v) and (v, u) can be choosed.
-        if rng.gen() {
-            e = self.graph().reverse(e);
-        }
+        let e = g.choose_edge(&mut rng).unwrap();
         let (u, v) = g.ends(e);
         let (from, p) = self.find_index(u);
         let (to, a) = self.find_index(v);
