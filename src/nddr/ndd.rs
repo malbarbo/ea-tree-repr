@@ -228,11 +228,15 @@ where
         self.iter().position(|ndd| ndd.vertex == v)
     }
 
-    pub fn contains_edge(&self, u: V, v: V) -> bool {
-        match (self.find_vertex(u), self.find_vertex(v)) {
-            (Some(pu), Some(pv)) => self.parent(pu) == Some(pv) || self.parent(pv) == Some(pu),
-            _ => false,
-        }
+    pub fn contains_edge_by_vertex(&self, u: V, v: V) -> bool {
+        self.edges()
+            .iter()
+            .find(|e| (e.0, e.1) == (u, v) || (e.1, e.0) == (u, v))
+            .is_some()
+    }
+
+    pub fn contains_edge(&self, u: usize, v: usize) -> bool {
+        self.parent(u) == Some(v) || self.parent(v) == Some(u)
     }
 
     // TODO: remove OptionVertex and V bounds
@@ -307,7 +311,7 @@ where
                 .edges()
                 .iter()
                 .cloned()
-                .all(|e| other.contains_edge(e.0, e.1))
+                .all(|e| other.contains_edge_by_vertex(e.0, e.1))
     }
 }
 

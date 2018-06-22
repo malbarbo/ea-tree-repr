@@ -301,7 +301,7 @@ where
 
         edges.retain(|&e| {
             let (u, v) = g.ends(e);
-            !star_tree.contains_edge(u, v)
+            !star_tree.contains_edge_by_vertex(u, v)
         });
 
         let mut trees = vec![star_tree];
@@ -385,9 +385,9 @@ where
     fn contains(&self, e: Edge<G>) -> bool {
         self.reinit_if_needed();
         let (u, v) = self.graph().ends(e);
-        self.trees[0].contains_edge(u, v) || {
+        self.trees[0].contains_edge_by_vertex(u, v) || {
             let (i, _) = self.find_index(u);
-            self.trees[i].contains_edge(u, v)
+            self.trees[i].contains_edge_by_vertex(u, v)
         }
     }
 
@@ -490,9 +490,7 @@ where
         // p cannot be ancestor of a in one_tree_op1
         !(p == 0
             || from == to
-                && (p == a
-                    || self[from].contains_edge(self[from][p].vertex(), self[from][a].vertex())
-                    || self[from].is_ancestor(p, a)))
+                && (p == a || self[from].contains_edge(p, a) || self[from].is_ancestor(p, a)))
     }
 
     fn find_vertices_op1<R: Rng>(&self, mut rng: R) -> (usize, usize, usize, usize) {
@@ -634,7 +632,7 @@ where
 
     fn can_insert_star_edge(&self, ins: Edge<G>) -> bool {
         let (u, v) = self.graph().ends(ins);
-        self[0][0].vertex() != u && !self[0].contains_edge(u, v)
+        self[0][0].vertex() != u && !self[0].contains_edge_by_vertex(u, v)
     }
 
     fn find_op_star_edge<R: Rng>(&self, rng: &mut R) -> Option<(usize, usize, usize, usize)> {

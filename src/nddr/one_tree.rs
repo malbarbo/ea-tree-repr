@@ -48,7 +48,7 @@ impl<G: AdjacencyGraph + Choose> NddrOneTree<G> {
 
     pub fn contains(&self, e: Edge<G>) -> bool {
         let (u, v) = self.g.ends(e);
-        self.tree.contains_edge(u, v)
+        self.tree.contains_edge_by_vertex(u, v)
     }
 
     pub fn edges(&self) -> Vec<Edge<G>> {
@@ -80,7 +80,6 @@ impl<G: AdjacencyGraph + Choose> NddrOneTree<G> {
 
     fn find_op1<R: Rng>(&self, mut rng: R) -> (Edge<G>, usize, usize) {
         for ins in self.g.choose_edge_iter(&mut rng) {
-            // TODO: Can we avoid this check?
             if self.contains(ins) {
                 continue;
             }
