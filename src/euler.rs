@@ -136,73 +136,76 @@ where
         (ins, rem)
     }
 
-    #[cfg_attr(feature = "cargo-clippy", allow(never_loop))]
     pub fn change_any<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Edge<G>) {
         let sub = self.choose_subtree(&mut rng);
         assert_ne!((0, 0), sub.start);
         let rem = self.get_edge(self.prev_pos(sub.start));
-        let ins;
-        let to;
-        let sub_new_root;
-        if self.subtree_len(sub) <= self.len / 2 {
-            // TODO: extract to a function
-            'out1: loop {
-                let x = self.choose_subtree_vertex(sub, &mut rng);
-                for e in self
-                    .g
-                    .choose_out_edge_iter(x, &mut rng)
-                    .take(MAX_TRIES_CHANGE_ANY)
-                {
-                    if e == rem {
-                        continue;
-                    }
-                    let y = self.g.target(e);
-                    let yi = self.subtree_end(y);
-                    if sub.contains_pos(yi) {
-                        continue;
-                    }
-                    ins = self.g.reverse(e);
-                    to = yi;
-                    sub_new_root = self.subtree_start(x);
-                    break 'out1;
-                }
-                return self.change_pred(rng);
-            }
+        let ins = if self.subtree_len(sub) <= self.len / 2 {
+            self.choose_ins_edge_subtree(sub, rem, &mut rng)
         } else {
-            // TODO: extract to a function
-            'out2: loop {
-                let x = self.choose_non_subtree_vertex(sub, &mut rng);
-                for e in self
-                    .g
-                    .choose_out_edge_iter(x, &mut rng)
-                    .take(MAX_TRIES_CHANGE_ANY)
-                {
-                    if e == rem || x == self.source(sub.start) {
-                        continue;
-                    }
-                    let y = self.g.target(e);
-                    let yi = self.subtree_start(y);
-                    if !sub.contains_pos(yi) {
-                        continue;
-                    }
-                    ins = e;
-                    to = self.subtree_end(x);
-                    sub_new_root = yi;
-                    break 'out2;
-                }
-                return self.change_pred(rng);
+            self.choose_ins_edge_non_subtree(sub, rem, &mut rng)
+        };
+        if let Some((ins, to, sub_new_root)) = ins {
+            if to <= sub.start {
+                self.move_before(ins, to, sub.start, sub_new_root, sub.end);
+            } else {
+                self.move_after(ins, to, sub.start, sub_new_root, sub.end);
             }
-        }
-
-        if to <= sub.start {
-            self.move_before(ins, to, sub.start, sub_new_root, sub.end);
+            self.check();
+            (ins, rem)
         } else {
-            self.move_after(ins, to, sub.start, sub_new_root, sub.end);
+            self.change_pred(rng)
         }
+    }
 
-        self.check();
+    fn choose_ins_edge_subtree<R: Rng>(
+        &self,
+        sub: Subtree,
+        rem: Edge<G>,
+        mut rng: R,
+    ) -> Option<(Edge<G>, (usize, usize), (usize, usize))> {
+        let x = self.choose_subtree_vertex(sub, &mut rng);
+        for e in self
+            .g
+            .choose_out_edge_iter(x, &mut rng)
+            .take(MAX_TRIES_CHANGE_ANY)
+        {
+            if e == rem {
+                continue;
+            }
+            let y = self.g.target(e);
+            let yi = self.subtree_end(y);
+            if sub.contains_pos(yi) {
+                continue;
+            }
+            return Some((self.g.reverse(e), yi, self.subtree_start(x)));
+        }
+        None
+    }
 
-        (ins, rem)
+    fn choose_ins_edge_non_subtree<R: Rng>(
+        &self,
+        sub: Subtree,
+        rem: Edge<G>,
+        mut rng: R,
+    ) -> Option<(Edge<G>, (usize, usize), (usize, usize))> {
+        let x = self.choose_non_subtree_vertex(sub, &mut rng);
+        for e in self
+            .g
+            .choose_out_edge_iter(x, &mut rng)
+            .take(MAX_TRIES_CHANGE_ANY)
+        {
+            if e == rem || x == self.source(sub.start) {
+                continue;
+            }
+            let y = self.g.target(e);
+            let yi = self.subtree_start(y);
+            if !sub.contains_pos(yi) {
+                continue;
+            }
+            return Some((e, self.subtree_end(x), yi));
+        }
+        None
     }
 
     unsafe fn partial<'a>(&self) -> &mut PartialSegments<'a, G> {
