@@ -36,8 +36,7 @@ impl<G: AdjacencyGraph + Choose> NddrOneTree<G> {
             let mut ndds = collect_ndds(&sub, &[r]);
             assert_eq!(1, ndds.len());
             let mut t = NddTree::new(ndds.pop().unwrap());
-            // TODO: find an away to not pass this closure
-            t.calc_degs(|v| g.out_degree(v) as u32);
+            t.comp_degs(&*g);
             t
         };
         Self { g, tree }
@@ -81,7 +80,7 @@ impl<G: AdjacencyGraph + Choose> NddrOneTree<G> {
 
     fn find_op1<R: Rng>(&self, mut rng: R) -> (Edge<G>, usize, usize) {
         for ins in self.g.choose_edge_iter(&mut rng) {
-            // TODO: how to avoid this check?
+            // TODO: Can we avoid this check?
             if self.contains(ins) {
                 continue;
             }

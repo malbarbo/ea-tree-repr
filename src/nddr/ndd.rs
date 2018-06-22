@@ -3,6 +3,8 @@ use std::fmt::Debug;
 use std::hash::Hash;
 use std::ops::Deref;
 
+use fera::graph::prelude::*;
+
 use transmute_lifetime;
 
 // See nddr module documentation for references.
@@ -29,7 +31,6 @@ impl<V: Copy + Eq + PartialEq + Debug> Ndd<V> {
     }
 }
 
-// TODO: implement Clone::clone_from
 #[derive(Clone, Debug)]
 pub struct NddTree<V: Copy + Hash + Eq + PartialEq + Debug> {
     ndds: Vec<Ndd<V>>,
@@ -67,10 +68,11 @@ where
     assert!(t.is_ancestor(p, r));
     assert!(!t.is_ancestor(r, a));
     // It is not clear in page 833 - C) Operations on One-Tree Forests - how op2 can be executed in
-    // one tree if p is ancestor of a, so for now we do not accept such case. Restricting the
-    // selection does not change the running time for complete graphs (and for general graphs?), see
-    // Forest::find_vertices_op2.
-    // I confirmed with the author that p cannot be an ancestor of a.
+    // one tree if p is ancestor of a, so for now we do not accept such case. (I confirmed with the
+    // paper author that p cannot be an ancestor of a. Its not clear how this affects the running
+    // time)
+    //
+    // See NddrOneTreeForest::find_vertices_op2.
     assert!(!t.is_ancestor(p, a));
     let new = t.without_subtree(p);
     // TODO: avoid allocations
@@ -233,15 +235,19 @@ where
         }
     }
 
-    pub fn calc_degs<F>(&mut self, degree: F)
+    // TODO: remove OptionVertex and V bounds
+    // when https://github.com/rust-lang/rust/issues/24159 get fixed
+    pub fn comp_degs<G>(&mut self, g: &G)
     where
-        F: Fn(V) -> u32,
+        G: AdjacencyGraph<Vertex = V>,
+        G::OptionVertex: Optional<V> + From<Option<V>>,
+        V: 'static,
     {
         self.deg = 0;
         self.deg_in_g = 0;
         for ndd in &self.ndds {
             self.deg += ndd.deg;
-            self.deg_in_g += degree(ndd.vertex);
+            self.deg_in_g += g.out_degree(ndd.vertex) as u32;
         }
     }
 

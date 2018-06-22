@@ -310,8 +310,7 @@ where
             let s = g.spanning_subgraph(edges);
             collect_ndds(&s, &roots).into_iter().map(|t| {
                 let mut t = NddTree::new(t);
-                // TODO: find an away to not pass this closure
-                t.calc_degs(|v| g.out_degree(v) as u32);
+                t.comp_degs(&*g);
                 Rc::new(t)
             })
         });
@@ -579,9 +578,6 @@ where
 
         let v_a = {
             // Choose an edge (v_p, v_a) not in trees[from], that is, not marked
-            // TODO: in a complete graph the chance of choosing a vertex v_a such that (v_p, v_a)
-            // is in self[from] is too small, so marking edges is not necessary and is too
-            // expensive. Use self[from].contains_edge instead.
             let g = self.graph();
             let mut data = &mut *self.data_mut();
             let mut v_a = v_p; // v_a can be initialized with any value
@@ -701,10 +697,9 @@ where
             }
         }
 
-        // TODO: call only when its needed
-        ti.calc_degs(|v| self.graph().out_degree(v) as u32);
+        ti.comp_degs(&**self.graph());
         if let Some(ref mut tj) = tj {
-            tj.calc_degs(|v| self.graph().out_degree(v) as u32);
+            tj.comp_degs(&**self.graph());
         }
 
         self.trees[i] = Rc::new(ti);

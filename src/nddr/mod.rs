@@ -2,9 +2,6 @@
 // Structure for Evolutionary Algorithms Applied to Network Design", Alexandre C. B. Delbem, Telma
 // W. de Lima and Guilherme P. Telles.
 //
-// There is some TODOs in the nddr implementation, some of them are aesthetics, others are small
-// optimizations. I don't know if its worth to implement that...
-//
 // FIXME: Cannot find optimal solution for OTMP using NddrOneTreeForest...
 
 mod collect;
