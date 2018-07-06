@@ -7,8 +7,8 @@ use rand::XorShiftRng;
 use std::rc::Rc;
 
 use {
-    EulerTourTree, FindOpStrategy, FindVertexStrategy, NddrOneTree, NddrOneTreeForest,
-    PredecessorTree, new_rng_with_seed
+    new_rng_with_seed, EulerTourTree, FindOpStrategy, FindVertexStrategy, NddrOneTree,
+    NddrOneTreeForest, PredecessorTree,
 };
 
 // This trait creates a uniform interface to make it easy to run the experiments
@@ -262,7 +262,6 @@ where
 
     fn change_pred<R: Rng>(&mut self, rng: R) -> (Edge<G>, Edge<G>) {
         let (ins, rem) = PredecessorTree::change_pred(self, rng);
-        // FIXME: change Tree::pred signature
         (ins, rem.unwrap())
     }
 

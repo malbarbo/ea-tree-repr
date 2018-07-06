@@ -12,8 +12,8 @@ use fera::fun::{position_max_by_key, position_min_by_key, vec};
 use fera::graph::algs::Kruskal;
 use fera::graph::choose::Choose;
 use fera::graph::prelude::*;
-use rand::prelude::*;
 use rand::distributions::Normal;
+use rand::prelude::*;
 
 // system
 use std::rc::Rc;

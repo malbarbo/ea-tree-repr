@@ -82,7 +82,6 @@ pub fn main() {
             run::<NddrEdgeTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, &args)
         }
         Ds::Predecessor => {
-            // TODO: use CowArray and benchmark
             run::<PredecessorTree<_>, DefaultVertexPropMut<StaticGraph, u32>>(g, &args)
         }
         Ds::Predecessor2 => {
