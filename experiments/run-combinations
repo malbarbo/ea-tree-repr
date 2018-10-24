@@ -1,0 +1,23 @@
+#!/usr/bin/python3
+
+import sys
+import itertools
+import subprocess
+from datetime import datetime
+
+assert len(sys.argv) == 4
+
+prog = sys.argv[1]
+out = sys.argv[2]
+args = list(map(lambda s: s.split('|'), sys.argv[3].split()))
+
+for (i, args) in enumerate(itertools.product(*args)):
+    cmd = [prog]
+    cmd.extend(args)
+    cmd.append('>')
+    cmd.append("{}-{}".format(out, i))
+    print("Running", " ".join(cmd))
+    start = datetime.now()
+    subprocess.run(" ".join(cmd), shell=True)
+    print()
+    print(datetime.now() - start)
