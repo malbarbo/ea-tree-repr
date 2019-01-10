@@ -1,3 +1,5 @@
+use fera::graph::algs::Kruskal;
+use fera::graph::choose::Choose;
 use fera::graph::prelude::*;
 use rand::prelude::*;
 use rand::XorShiftRng;
@@ -16,11 +18,8 @@ pub fn new_rng() -> XorShiftRng {
     new_rng_with_seed(random())
 }
 
-pub fn random_sp<R: Rng>(g: &CompleteGraph, rng: R) -> Vec<Edge<CompleteGraph>> {
-    StaticGraph::new_random_tree(g.num_vertices(), rng)
-        .edges_ends()
-        .map(|(u, v)| g.edge_by_ends(u, v))
-        .collect()
+pub fn random_sp<G: Graph + Choose, R: Rng>(g: &G, rng: R) -> Vec<Edge<G>> {
+    g.kruskal().edges(g.random_walk(rng)).into_iter().collect()
 }
 
 pub fn random_sp_with_diameter<R: Rng>(

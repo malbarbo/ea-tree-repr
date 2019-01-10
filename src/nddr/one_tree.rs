@@ -131,7 +131,7 @@ mod tests {
     fn new(n: u32) -> NddrOneTree<CompleteGraph> {
         let mut rng = new_rng();
         let g = Rc::new(CompleteGraph::new(n));
-        let edges = random_sp(&g, &mut rng);
+        let edges = random_sp(&*g, &mut rng);
         NddrOneTree::new(g, &*edges)
     }
 

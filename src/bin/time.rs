@@ -31,8 +31,16 @@ pub fn main() {
 
     ea_tree_repr::set_default_k(args.k);
 
-    let time = if args.forest {
-        let case = case_forest;
+    let time = if args.forest || args.regular.is_some() {
+        if args.diameter.is_some() {
+            eprintln!("The diameter can only be specified for complete graphs");
+            ::std::process::exit(1);
+        }
+        let case = if args.forest {
+            case_forest
+        } else {
+            case_regular
+        };
         match args.ds {
             Ds::EulerTour => run::<_, EulerTourTree<_>, _>(&args, case),
             Ds::NddrAdj => run::<_, NddrAdjTree<_>, _>(&args, case),
@@ -45,6 +53,7 @@ pub fn main() {
             Ds::Predecessor2 => run::<_, PredecessorTree2<_>, _>(&args, case),
         }
     } else {
+        let case = case_complete;
         match args.ds {
             Ds::EulerTour => run::<_, EulerTourTree<_>, _>(&args, case),
             Ds::NddrAdj => run::<_, NddrAdjTree<_>, _>(&args, case),
@@ -113,7 +122,7 @@ where
     time
 }
 
-fn case(
+fn case_complete(
     args: &Args,
     n: u32,
     rng: &mut XorShiftRng,
@@ -128,11 +137,23 @@ fn case(
     (g, tree)
 }
 
-fn case_forest(
-    _args: &Args,
+fn case_regular(
+    args: &Args,
     n: u32,
     rng: &mut XorShiftRng,
 ) -> (StaticGraph, Vec<Edge<StaticGraph>>) {
+    let g =
+        StaticGraph::new_regular(args.regular.unwrap() as _, n as _, &mut *rng).expect("a graph");
+    let tree = random_sp(&g, rng);
+    (g, tree)
+}
+
+fn case_forest(
+    args: &Args,
+    n: u32,
+    rng: &mut XorShiftRng,
+) -> (StaticGraph, Vec<Edge<StaticGraph>>) {
+    // partition the vertices in sqrt(n) components
     let nsqrt = (n as f64).sqrt();
     let mut sub_vertices = vec![vec![]; nsqrt.ceil() as usize - 1];
     let r = 0;
@@ -148,22 +169,38 @@ fn case_forest(
         .sum();
     let mut b = StaticGraph::builder(n as usize, m + sub_vertices.len());
 
-    // create each target subtree
-    for sub in &sub_vertices {
-        for i in 0..sub.len() {
-            for j in (i + 1)..sub.len() {
-                b.add_edge(sub[i] as usize, sub[j] as usize)
+    // create edges for each component
+    if let Some(r) = args.regular {
+        for sub in &sub_vertices {
+            let t = StaticGraph::new_regular(r as _, sub.len(), &mut *rng).expect(&format!(
+                "Cannot create an regular graph for r = {} and n = {}. Note that n * r must be even.",
+                r,
+                sub.len()
+            ));
+            for (i, j) in t.edges_ends() {
+                b.add_edge(sub[i as usize] as usize, sub[j as usize] as usize)
+            }
+        }
+    } else {
+        for sub in &sub_vertices {
+            for i in 0..sub.len() {
+                for j in (i + 1)..sub.len() {
+                    b.add_edge(sub[i] as usize, sub[j] as usize)
+                }
             }
         }
     }
 
-    // add the root edges
+    // join the root of each component with r
     for sub in &sub_vertices {
         let v = sub[0];
         b.add_edge(r as usize, v as usize);
     }
 
+    // create the graph
     let g = b.finalize();
+
+    // generates a random tree in g
     let edges = vec(g.edges()).shuffled_with(rng);
     let tree = vec(g.kruskal().edges(g.out_edges(r).chain(edges)));
 
@@ -175,6 +212,7 @@ struct Args {
     sizes: Vec<u32>,
     diameter: Option<f32>,
     forest: bool,
+    regular: Option<u32>,
     ds: Ds,
     op: Op,
     times: u32,
@@ -219,11 +257,16 @@ fn args() -> Args {
             (@arg forest:
                 --forest
                 "Test graphs that are forests (good for nddr)")
+            (@arg regular:
+                -r
+                --regular
+                +takes_value
+                "Create r-regular graphs. Default is to generate complete (n-regular) graphs.")
             (@arg diameter:
                 -d
                 --diameter
                 +takes_value
-                "Diameter of the random trees [0, 1] - (0.0 = diameter 2, 1.0 = diamenter n - 1). Default is to generate trees with random diameter.")
+                "Diameter of the random trees [0, 1] - (0.0 = diameter 2, 1.0 = diamenter n - 1). Default is to generate trees with random diameter. Only valid for complete graphs.")
             (@arg times:
                 +required
                 "Number of times to executed the experiment")
@@ -250,6 +293,15 @@ fn args() -> Args {
             _ => unreachable!(),
         },
         forest: matches.is_present("forest"),
+        regular: if matches.is_present("regular") {
+            let r = value_t_or_exit!(matches, "regular", u32);
+            if r < 3 {
+                panic!("Invalid value for regular: {}", r)
+            }
+            Some(r)
+        } else {
+            None
+        },
         diameter: if matches.is_present("diameter") {
             let d = value_t_or_exit!(matches, "diameter", f32);
             if d < 0.0 || d > 1.0 {

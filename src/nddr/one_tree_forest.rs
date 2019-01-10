@@ -912,7 +912,7 @@ mod tests {
     ) {
         let mut rng = new_rng();
         let g = Rc::new(CompleteGraph::new(n));
-        let tree = random_sp(&g, &mut rng);
+        let tree = random_sp(&*g, &mut rng);
         let data = Data::new(&g, find_op, find_vertex);
         (g, data, tree)
     }
