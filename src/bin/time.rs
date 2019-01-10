@@ -29,6 +29,8 @@ pub fn main() {
     setup_rayon();
     let args = args();
 
+    ea_tree_repr::set_default_k(args.k);
+
     let time = if args.forest {
         let case = case_forest;
         match args.ds {
@@ -69,9 +71,8 @@ fn run<G, T, F>(args: &Args, new: F) -> Vec<(Duration, Duration)>
 where
     G: Graph,
     T: Tree<G>,
-    F: Sync + Fn(&Args, usize, &mut XorShiftRng) -> (G, Vec<Edge<G>>),
+    F: Sync + Fn(&Args, u32, &mut XorShiftRng) -> (G, Vec<Edge<G>>),
 {
-    const TIMES: usize = 10_000;
     let mut time = vec![(Duration::default(), Duration::default()); args.sizes.len()];
     for _ in progress(0..args.times) {
         time.par_iter_mut().zip(&args.sizes).for_each(|(t, &n)| {
@@ -84,31 +85,39 @@ where
                 T::new(Rc::new(g), &*tree, &mut rng)
             };
             match args.op {
-                Op::ChangePred => for _ in 0..TIMES {
-                    let (t0, mut tt) = time_it(|| tree.clone());
-                    let (t1, _) = time_it(|| tt.change_pred(&mut rng));
-                    tree = tt;
-                    t.0 += t0;
-                    t.1 += t1;
-                },
-                Op::ChangeAny => for _ in 0..TIMES {
-                    let (t0, mut tt) = time_it(|| tree.clone());
-                    let (t1, _) = time_it(|| tt.change_any(&mut rng));
-                    tree = tt;
-                    t.0 += t0;
-                    t.1 += t1;
-                },
+                Op::ChangePred => {
+                    for _ in 0..args.iters {
+                        let (t0, mut tt) = time_it(|| tree.clone());
+                        let (t1, _) = time_it(|| tt.change_pred(&mut rng));
+                        tree = tt;
+                        t.0 += t0;
+                        t.1 += t1;
+                    }
+                }
+                Op::ChangeAny => {
+                    for _ in 0..args.iters {
+                        let (t0, mut tt) = time_it(|| tree.clone());
+                        let (t1, _) = time_it(|| tt.change_any(&mut rng));
+                        tree = tt;
+                        t.0 += t0;
+                        t.1 += t1;
+                    }
+                }
             }
         })
     }
     for t in &mut time {
-        t.0 /= (TIMES * args.times) as u32;
-        t.1 /= (TIMES * args.times) as u32;
+        t.0 /= (args.iters * args.times) as u32;
+        t.1 /= (args.iters * args.times) as u32;
     }
     time
 }
 
-fn case(args: &Args, n: usize, rng: &mut XorShiftRng) -> (CompleteGraph, Vec<Edge<CompleteGraph>>) {
+fn case(
+    args: &Args,
+    n: u32,
+    rng: &mut XorShiftRng,
+) -> (CompleteGraph, Vec<Edge<CompleteGraph>>) {
     let g = CompleteGraph::new(n as u32);
     let tree = if let Some(d) = args.diameter {
         let d = 2 + (d * (n - 3) as f32) as usize;
@@ -121,7 +130,7 @@ fn case(args: &Args, n: usize, rng: &mut XorShiftRng) -> (CompleteGraph, Vec<Edg
 
 fn case_forest(
     _args: &Args,
-    n: usize,
+    n: u32,
     rng: &mut XorShiftRng,
 ) -> (StaticGraph, Vec<Edge<StaticGraph>>) {
     let nsqrt = (n as f64).sqrt();
@@ -161,13 +170,16 @@ fn case_forest(
     (g, tree)
 }
 
+#[derive(Debug)]
 struct Args {
-    sizes: Vec<usize>,
+    sizes: Vec<u32>,
     diameter: Option<f32>,
     forest: bool,
     ds: Ds,
     op: Op,
-    times: usize,
+    times: u32,
+    iters: u32,
+    k: usize,
 }
 
 fn args() -> Args {
@@ -194,6 +206,16 @@ fn args() -> Args {
                     "change-any"
                 ])
                 "Operator")
+            (@arg iters:
+                --iters
+                +takes_value
+                default_value("10000")
+                "The number of iteratively mutation")
+            (@arg k:
+                -k
+                +takes_value
+                default_value("1")
+                "The k parameter for NDDR")
             (@arg forest:
                 --forest
                 "Test graphs that are forests (good for nddr)")
@@ -237,16 +259,18 @@ fn args() -> Args {
         } else {
             None
         },
-        times: value_t_or_exit!(matches, "times", usize),
+        times: value_t_or_exit!(matches, "times", u32),
+        iters: value_t_or_exit!(matches, "iters", u32),
+        k: value_t_or_exit!(matches, "k", usize),
         sizes: matches
             .values_of("sizes")
             .unwrap()
-            .map(|x| x.parse::<usize>().unwrap())
+            .map(|x| x.parse::<u32>().unwrap())
             .collect(),
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 enum Ds {
     EulerTour,
     NddrAdj,
@@ -256,7 +280,7 @@ enum Ds {
     Predecessor2,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Debug, Copy, Clone)]
 enum Op {
     ChangePred,
     ChangeAny,

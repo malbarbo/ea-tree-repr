@@ -10,12 +10,17 @@ use rand::Rng;
 use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::ops::Deref;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 // internal
 use {collect_ndds, find_star_tree, one_tree_op1, one_tree_op2, op1, op2, Bitset, NddTree, Ranges};
 
 // pg 836 5) Step 5 - the value of the k constant is not specified, we use the default value of 1
-const DEFAULT_K: usize = 1;
+static DEFAULT_K: AtomicUsize = AtomicUsize::new(1);
+
+pub fn set_default_k(k: usize) {
+    DEFAULT_K.store(k, Ordering::SeqCst);
+}
 
 #[derive(PartialEq, Clone, Copy)]
 pub enum FindOpStrategy {
@@ -113,7 +118,7 @@ where
             ranges: Ranges::default(),
             m,
             version: 0,
-            k: DEFAULT_K,
+            k: DEFAULT_K.load(Ordering::SeqCst),
             num_reinits: 0,
             pi: pi,
         }
@@ -549,8 +554,8 @@ where
         // v_p and v_a are vertices.
 
         // Step 1
-        let from =
-            self.select_tree_if(&mut rng, |i| {
+        let from = self
+            .select_tree_if(&mut rng, |i| {
                 // Must have more than one vertex so we can choose a vertex != root
                 self[i].len() > 1 && {
                     let free = self[i].deg_in_g() - self[i].deg();
@@ -562,7 +567,8 @@ where
                         root_free != free
                     }
                 }
-            }).expect("The graph is a forest");
+            })
+            .expect("The graph is a forest");
 
         // Step 2
         let p = self.select_tree_vertex_if(from, &mut rng, |i| {
@@ -851,12 +857,13 @@ where
 
     fn _degree(&self, u: Vertex<G>) -> u32 {
         let (t, i) = self.find_index(u);
-        self[t][i].deg() + if i == 0 {
-            // u is a root so get the degree on start_edge
-            self[0][self[0].find_vertex(u).unwrap()].deg()
-        } else {
-            0
-        }
+        self[t][i].deg()
+            + if i == 0 {
+                // u is a root so get the degree on start_edge
+                self[0][self[0].find_vertex(u).unwrap()].deg()
+            } else {
+                0
+            }
     }
 
     fn data(&self) -> Ref<Data<G>> {
