@@ -40,6 +40,7 @@ pub fn main() {
     println!()
 }
 
+// TODO: make it work for sparse graphs
 fn run(
     g: &Rc<CompleteGraph>,
     w: &DefaultEdgePropMut<CompleteGraph, u64>,
@@ -343,9 +344,9 @@ struct Args {
 
 fn args() -> Args {
     let app = clap_app!(
-        ("dc") =>
+        ("dcmst") =>
             (version: crate_version!())
-            (about: crate_description!())
+            (about: "Evolutionary algorithm for degree constrained minimum spanning tree problem")
             (author: crate_authors!())
             (@arg seed:
                 --seed
