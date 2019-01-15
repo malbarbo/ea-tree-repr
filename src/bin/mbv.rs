@@ -14,8 +14,9 @@ use std::rc::Rc;
 
 // external
 use fera::fun::{position_max_by_key, position_min_by_key, vec};
-use fera::graph::algs::{Kruskal, Paths};
+use fera::graph::algs::{Components, Kruskal, Paths};
 use fera::graph::prelude::*;
+use fera::graph::sum_prop;
 use fera::graph::traverse::{Dfs, OnDiscoverTreeEdge};
 use rand::Rng;
 
@@ -72,8 +73,10 @@ pub fn main() {
     for (d, c) in count {
         info!("{:2} = {:2}", d, c);
     }
+    info!("is connected: {}", g.is_connected());
 
-    let (edges, branches) = match args.ds {
+    // run the solver
+    let (edges, degree) = match args.ds {
         Ds::EulerTour => {
             run::<EulerTourTree<_>, CowNestedArrayVertexProp<StaticGraph, u32>>(g, &args)
         }
@@ -89,30 +92,53 @@ pub fn main() {
         }
     };
 
-    if args.kind == Kind::Mbv {
-        print!("{} {}", args.input, branches);
-        for e in edges {
-            let (u, v) = g.ends(e);
-            print!(" {}-{}", u + 1, v + 1)
+    // show the solution
+
+    // number of leafs
+    let v1 = count_vertex_deg(&**g, &degree, |d| d == 1);
+    // number of branch vertices
+    let branches = count_vertex_deg(&**g, &degree, |d| d > 2);
+    // sum of the degree of the branch vertices
+    let sum: u32 = sum_prop(&degree, g.vertices().filter(|v| degree[*v] > 2));
+    match args.kind {
+        Kind::Mbv | Kind::Mds | Kind::Ml => {
+            let obj = match args.kind {
+                Kind::Mbv => branches,
+                Kind::Mds => sum,
+                Kind::Ml => v1,
+                _ => panic!(),
+            };
+            print!("{} {}", args.input, obj);
+            for e in edges {
+                let (u, v) = g.ends(e);
+                print!(" {}-{}", u + 1, v + 1)
+            }
+            println!();
         }
-        println!();
-    } else {
-        if branches != 0 {
-            panic!("cannot find an {:?}", args.kind);
+        Kind::Cycle | Kind::Path => {
+            if count_vertex_deg(&**g, &degree, |d| d > 2) != 0 {
+                panic!("cannot find an {:?}", args.kind);
+            }
+            let mut path = path(g, &edges);
+            if args.kind == Kind::Cycle {
+                transform_path(g, &mut path);
+            }
+            print!("{}", args.input);
+            for u in path.iter().map(|&e| g.source(e)) {
+                print!(" {}", u + 1);
+            }
+            println!(" {}", g.target(*path.last().unwrap()) + 1);
         }
-        let mut path = path(g, &edges);
-        if args.kind == Kind::Cycle {
-            transform_path(g, &mut path);
-        }
-        print!("{}", args.input);
-        for u in path.iter().map(|&e| g.source(e)) {
-            print!(" {}", u + 1);
-        }
-        println!(" {}", g.target(*path.last().unwrap()) + 1);
     }
 }
 
-fn run<T, D>(g: &Rc<StaticGraph>, args: &Args) -> (Vec<Edge<StaticGraph>>, u32)
+fn run<T, D>(
+    g: &Rc<StaticGraph>,
+    args: &Args,
+) -> (
+    Vec<Edge<StaticGraph>>,
+    DefaultVertexPropMut<StaticGraph, u32>,
+)
 where
     T: Tree<StaticGraph>,
     D: VertexPropMutNew<StaticGraph, u32>,
@@ -128,6 +154,7 @@ where
         tree.extend(g.kruskal().edges(&edges));
         if pop.is_empty() {
             pop.push(Ind::<T, D>::new(
+                args.kind,
                 g.clone(),
                 &tree,
                 g.vertex_prop(0),
@@ -135,16 +162,16 @@ where
             ));
         } else {
             // We create a new individual based on an existing one so tree data structures can
-            // share internal state
+            // share internal state (like nddr::Data)
             let new = pop[0].set_edges(&tree, g.vertex_prop(0));
             pop.push(new);
         }
     }
 
-    let mut best = position_min_by_key(&pop, |ind| ind.fitness()).unwrap();
+    let mut best = position_max_by_key(&pop, |ind| ind.fitness()).unwrap();
 
     if pop[best].is_optimum() {
-        return (pop[best].tree.edges(), pop[best].branches);
+        return (pop[best].tree.edges(), pop[best].degree());
     }
 
     info!("best = {:?}", pop[best].value());
@@ -157,11 +184,11 @@ where
         if pop.contains(&new) {
             continue;
         }
-        if new.fitness() <= pop[i].fitness() {
-            if new.fitness() < pop[best].fitness() {
+        if new.fitness() >= pop[i].fitness() {
+            if new.fitness() > pop[best].fitness() {
                 last_it_impr = it;
                 best = i;
-                info!("it = {}, best = {}/{}", it, new.value().0, new.value().1);
+                info!("it = {}, best = {:?}", it, new.value());
                 if new.is_optimum() {
                     pop[i] = new;
                     break;
@@ -169,9 +196,9 @@ where
             }
             pop[i] = new;
         } else {
-            let j = position_max_by_key(&pop, |ind| ind.fitness()).unwrap();
+            let j = position_min_by_key(&pop, |ind| ind.fitness()).unwrap();
             pop[j] = new;
-            best = position_min_by_key(&pop, |ind| ind.fitness()).unwrap();
+            best = position_max_by_key(&pop, |ind| ind.fitness()).unwrap();
         }
 
         if it - last_it_impr >= args.max_num_iters_no_impr.unwrap_or(u64::max_value()) {
@@ -183,7 +210,16 @@ where
         }
     }
 
-    (pop[best].tree.edges(), pop[best].branches)
+    (pop[best].tree.edges(), pop[best].degree())
+}
+
+fn count_vertex_deg<G, D, F>(g: &G, d: &D, fun: F) -> u32
+where
+    G: Graph,
+    D: VertexProp<G, u32>,
+    F: Fn(u32) -> bool,
+{
+    g.vertices().filter(|v| fun(d[*v])).count() as _
 }
 
 #[derive(Clone)]
@@ -195,8 +231,9 @@ where
     tree: T,
     degree: D,
     hash: usize,
-    branches: u32,
-    leafs: u32,
+    v1: u32,
+    v2: u32,
+    kind: Kind,
 }
 
 impl<T, D> PartialEq for Ind<T, D>
@@ -205,7 +242,7 @@ where
     D: VertexPropMut<StaticGraph, u32>,
 {
     fn eq(&self, other: &Self) -> bool {
-        self.hash == other.hash && self.branches == other.branches && self.leafs == other.leafs
+        self.hash == other.hash && self.v1 == other.v1 && self.v2 == other.v2
     }
 }
 
@@ -214,7 +251,7 @@ where
     T: Tree<StaticGraph>,
     D: VertexPropMut<StaticGraph, u32>,
 {
-    fn new_(tree: T, mut degree: D, edges: &[Edge<StaticGraph>]) -> Self {
+    fn new_(kind: Kind, tree: T, mut degree: D, edges: &[Edge<StaticGraph>]) -> Self {
         let g = tree.graph().clone();
         let mut hash = 0;
         for &e in edges {
@@ -223,25 +260,39 @@ where
             degree[v] += 1;
             hash += g.edge_index().get(e);
         }
-        let branches = g.vertices().filter(|v| degree[*v] > 2).count() as _;
-        let leafs = g.vertices().filter(|v| degree[*v] == 1).count() as _;
+        let v1 = count_vertex_deg(&*g, &degree, |d| d == 1);
+        let v2 = count_vertex_deg(&*g, &degree, |d| d == 2);
         Ind {
             tree,
             degree,
             hash,
-            branches,
-            leafs,
+            v1,
+            v2,
+            kind,
         }
     }
 
-    fn new<R: Rng>(g: Rc<StaticGraph>, edges: &[Edge<StaticGraph>], degree: D, rng: R) -> Self {
-        Self::new_(T::new(g, edges, rng), degree, edges)
+    fn new<R: Rng>(
+        kind: Kind,
+        g: Rc<StaticGraph>,
+        edges: &[Edge<StaticGraph>],
+        degree: D,
+        rng: R,
+    ) -> Self {
+        Self::new_(kind, T::new(g, edges, rng), degree, edges)
     }
 
     fn set_edges(&self, edges: &[Edge<StaticGraph>], degree: D) -> Self {
         let mut tree = self.tree.clone();
         tree.set_edges(edges);
-        Self::new_(tree, degree, edges)
+        Self::new_(self.kind, tree, degree, edges)
+    }
+
+    fn degree(&self) -> DefaultVertexPropMut<StaticGraph, u32> {
+        let g = self.tree.graph();
+        let mut deg = g.default_vertex_prop(0);
+        deg.set_values_from(g.vertices(), &self.degree);
+        deg
     }
 
     fn mutate<R: Rng>(&mut self, op: Op, rng: R) {
@@ -254,33 +305,37 @@ where
         self.hash += self.tree.graph().edge_index().get(ins);
 
         let (a, b) = self.tree.graph().ends(rem);
-        if self.degree[a] == 3 {
-            self.branches -= 1;
-        }
         if self.degree[a] == 2 {
-            self.leafs += 1;
+            self.v1 += 1;
+            self.v2 -= 1;
         }
-        if self.degree[b] == 3 {
-            self.branches -= 1;
+        if self.degree[a] == 3 {
+            self.v2 += 1;
         }
         if self.degree[b] == 2 {
-            self.leafs += 1;
+            self.v1 += 1;
+            self.v2 -= 1;
+        }
+        if self.degree[b] == 3 {
+            self.v2 += 1;
         }
         self.degree[a] -= 1;
         self.degree[b] -= 1;
 
         let (a, b) = self.tree.graph().ends(ins);
-        if self.degree[a] == 2 {
-            self.branches += 1;
-        }
         if self.degree[a] == 1 {
-            self.leafs -= 1;
+            self.v1 -= 1;
+            self.v2 += 1;
         }
-        if self.degree[b] == 2 {
-            self.branches += 1;
+        if self.degree[a] == 2 {
+            self.v2 -= 1;
         }
         if self.degree[b] == 1 {
-            self.leafs -= 1;
+            self.v1 -= 1;
+            self.v2 += 1;
+        }
+        if self.degree[b] == 2 {
+            self.v2 -= 1;
         }
         self.degree[a] += 1;
         self.degree[b] += 1;
@@ -288,16 +343,29 @@ where
         self.check();
     }
 
-    fn value(&self) -> (u32, u32) {
-        (self.branches, self.leafs)
+    fn value(&self) -> (u32, u32, u32) {
+        (self.v1, self.v2, self.branches())
     }
 
-    fn fitness(&self) -> (u32, u32) {
-        (self.leafs, self.branches)
+    fn fitness(&self) -> i32 {
+        // Relations, models and a memetic approach for three degree-dependet spanning tree
+        // problems. EJOUR, 2014. C Cerrone, R Cerulli, A Raiconi
+        // pg 445
+        let (alfa, beta) = match self.kind {
+            Kind::Mbv => (1, 1),
+            Kind::Mds => (1, 2),
+            Kind::Ml => (-1, 0),
+            _ => (-1, 1),
+        };
+        alfa * self.v1 as i32 + beta * self.v2 as i32
     }
 
     fn is_optimum(&self) -> bool {
-        self.branches == 0
+        self.branches() == 0
+    }
+
+    fn branches(&self) -> u32 {
+        self.tree.graph().num_vertices() as u32 - self.v1 - self.v2
     }
 
     #[cfg(not(debug_assertions))]
@@ -316,22 +384,9 @@ where
             edges.iter().map(|&e| g.edge_index().get(e)).sum::<usize>(),
             self.hash
         );
-        assert_eq!(
-            self.tree
-                .graph()
-                .vertices()
-                .filter(|v| self.degree[*v] > 2)
-                .count() as u32,
-            self.branches
-        );
-        assert_eq!(
-            self.tree
-                .graph()
-                .vertices()
-                .filter(|v| self.degree[*v] == 1)
-                .count() as u32,
-            self.leafs
-        );
+        assert_eq!(count_vertex_deg(&**g, &deg, |d| d == 1), self.v1);
+        assert_eq!(count_vertex_deg(&**g, &deg, |d| d == 2), self.v2);
+        assert_eq!(count_vertex_deg(&**g, &deg, |d| d > 2), self.branches());
     }
 }
 
@@ -399,7 +454,7 @@ struct Args {
 
 fn args() -> Args {
     let app = clap_app!(
-        ("hcp") =>
+        ("mbv") =>
             (version: crate_version!())
             (about: crate_description!())
             (author: crate_authors!())
@@ -426,10 +481,12 @@ fn args() -> Args {
                 default_value("mbv")
                 possible_values(&[
                     "mbv",
+                    "mds",
+                    "ml",
                     "path",
                     "cycle",
                 ])
-                "The kind of problem to solve: Minimum branch vertices, Hamiltonian path or Hamiltonian cycle")
+                "The kind of problem to solve: Minimum branch vertices, Minimum degree sum, Minimum leaves, Hamiltonian path or Hamiltonian cycle")
             (@arg quiet:
                 --quiet
                 "Only prints the final solution")
@@ -476,6 +533,8 @@ fn args() -> Args {
         },
         kind: match matches.value_of("kind").unwrap() {
             "mbv" => Kind::Mbv,
+            "mds" => Kind::Mds,
+            "ml" => Kind::Ml,
             "path" => Kind::Path,
             "cycle" => Kind::Cycle,
             _ => unreachable!(),
@@ -515,7 +574,9 @@ enum Op {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 enum Kind {
-    Mbv,
-    Path,
     Cycle,
+    Mbv,
+    Mds,
+    Ml,
+    Path,
 }
