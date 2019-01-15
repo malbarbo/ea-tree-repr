@@ -454,9 +454,9 @@ struct Args {
 
 fn args() -> Args {
     let app = clap_app!(
-        ("mbv") =>
+        ("dpst") =>
             (version: crate_version!())
-            (about: crate_description!())
+            (about: "Evolutionary algorithm for degree-dependent spanning tree problems")
             (author: crate_authors!())
             (@arg seed:
                 --seed
