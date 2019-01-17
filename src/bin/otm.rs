@@ -33,19 +33,28 @@ pub fn main() {
 
     info!("{:#?}", args);
 
-    let mut iters = vec![0; args.sizes.len()];
+    let mut iters = vec![EAResult::default(); args.sizes.len()];
     for _ in progress(0..args.times) {
-        for (i, value) in run(&args).into_iter().enumerate() {
-            iters[i] += value;
+        for (i, result) in run(&args).into_iter().enumerate() {
+            iters[i].fitness += result.fitness;
+            iters[i].num_iters += result.num_iters;
+            iters[i].best_iter += result.best_iter;
         }
     }
-    for (n, iters) in args.sizes.into_iter().zip(iters) {
-        println!("{} {}", n, iters / args.times as u64);
+    println!("n fitness num_iters best_iter");
+    for (n, result) in args.sizes.into_iter().zip(iters) {
+        println!(
+            "{} {} {} {}",
+            n,
+            result.fitness / args.times,
+            result.num_iters / args.times as u64,
+            result.best_iter / args.times as u64
+        );
     }
 }
 
-fn run(args: &Args) -> Vec<u64> {
-    let mut iters = vec![];
+fn run(args: &Args) -> Vec<EAResult> {
+    let mut result = vec![];
     for &n in &args.sizes {
         let m = args.f as u64 * n as u64;
         let (g, target, root) = if args.balanced {
@@ -66,9 +75,26 @@ fn run(args: &Args) -> Vec<u64> {
             Ds::Predecessor => run_ea::<PredecessorTree<_>>(g, root, &target, &args),
             Ds::Predecessor2 => run_ea::<PredecessorTree2<_>>(g, root, &target, &args),
         };
-        iters.push(r);
+        result.push(r);
     }
-    iters
+    result
+}
+
+#[derive(Copy, Clone, Default)]
+struct EAResult {
+    fitness: u32,
+    num_iters: u64,
+    best_iter: u64,
+}
+
+impl EAResult {
+    fn new(fitness: u32, num_iters: u64, best_iter: u64) -> EAResult {
+        EAResult {
+            fitness,
+            num_iters,
+            best_iter,
+        }
+    }
 }
 
 fn run_ea<'a, T>(
@@ -76,7 +102,7 @@ fn run_ea<'a, T>(
     root: Option<Vertex<StaticGraph>>,
     target: &'a TargetTree,
     args: &Args,
-) -> u64
+) -> EAResult
 where
     T: Tree<StaticGraph>,
     Ind<'a, T>: Clone,
@@ -111,8 +137,10 @@ where
 
     info!("best = {:?}", pop[best].fitness());
 
-    let mut last_it_impr = 0;
-    for it in 0..=args.max_num_iters() {
+    let mut it = 0;
+    let mut best_iter = 0;
+    for i in 0..=args.max_num_iters() {
+        it = i;
         let i = rng.gen_range(0, pop.len());
         let mut new = pop[i].clone();
         new.mutate(args.op, &mut rng);
@@ -121,7 +149,7 @@ where
         }
         if new.fitness() >= pop[i].fitness() {
             if new.fitness() > pop[best].fitness() {
-                last_it_impr = it;
+                best_iter = it;
                 best = i;
                 info!("it = {}, best = {}", it, new.fitness());
                 if new.is_optimum() {
@@ -136,7 +164,7 @@ where
             best = position_max_by_key(&pop, |ind| ind.fitness()).unwrap();
         }
 
-        if it - last_it_impr >= args.max_num_iters_no_impr() {
+        if it - best_iter >= args.max_num_iters_no_impr() {
             info!(
                 "max number of iterations without improvement reached: {:?}",
                 args.max_num_iters_no_impr
@@ -145,7 +173,7 @@ where
         }
     }
 
-    last_it_impr
+    EAResult::new(pop[best].fitness(), it, best_iter)
 }
 
 fn new_case<R: Rng>(
