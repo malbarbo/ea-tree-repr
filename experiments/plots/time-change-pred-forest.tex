@@ -13,12 +13,11 @@
         xlabel=Number of vertices,
         ylabel=Time (\si{\us}),
       ]
-      \addplot+ [mark=none] table {../results/time-change-pred-0};
-      \addplot+ [mark=none] table {../results/time-change-pred-1};
-      \addplot+ [mark=none] table {../results/time-change-pred-2};
-      \addplot+ [mark=none] table {../results/time-change-pred-3};
-      \addplot+ [mark=none] table {../results/time-change-pred-4};
-      \legend{EulerTour, NddrAdj, NddrEdge, Predecessor, Predecessor2}
+      \addplot+ [mark=none] table {../results/time-change-pred-forest-0};
+      \addplot+ [mark=none] table {../results/time-change-pred-forest-1};
+      \addplot+ [mark=none] table {../results/time-change-pred-forest-2};
+      \addplot+ [mark=none] table {../results/time-change-pred-forest-3};
+      \legend{2LETT, NddrAdj, Predecessor, 2LPredecessor}
     \end{axis}
   \end{tikzpicture}
 \end{document}
