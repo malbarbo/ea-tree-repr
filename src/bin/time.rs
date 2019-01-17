@@ -29,6 +29,9 @@ pub fn main() {
     setup_rayon();
     let args = args();
 
+    if args.ds != Ds::NddrBalanced {
+        eprintln!("Ignoring k = {} parameter", args.k);
+    }
     ea_tree_repr::set_default_k(args.k);
 
     let time = if args.forest || args.regular.is_some() {
@@ -322,7 +325,7 @@ fn args() -> Args {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 enum Ds {
     EulerTour,
     NddrAdj,
