@@ -36,6 +36,12 @@ cases/fhcp:
 	mkdir -p cases/fhcp && cd cases/fhcp && 7z x ../../FHCPCS.7z
 	rm FHCPCS.7z
 
+cases/carrabs-mbv:
+	curl -O "http://www.dipmat2.unisa.it/people/carrabs/www/DataSet/MBV_Instances.zip"
+	mkdir -p cases/carrabs-mbv && cd cases/carrabs-mbv && unzip -q ../../MBV_Instances.zip MBV_Instances/Spd_Inst_Rid_Final2/* MBV_Instances/Spd_Inst_Rid_Final2_500-1000/* && mv MBV_Instances/Spd_Inst_Rid_Final2/* MBV_Instances/Spd_Inst_Rid_Final2_500-1000/* . && rm -rf MBV_Instances
+	cd cases/carrabs-mbv && for f in *.txt; do ../../mbv2tsp $$f > $$(basename $$f .txt).tsp; done
+	rm MBV_Instances.zip
+
 
 #######################
 # Copy time vs Mutation time
