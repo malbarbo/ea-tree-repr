@@ -183,3 +183,23 @@ results/time-diameter-change-any.pdf:
 		results/time-diameter-change-any \
 		"euler-tour|nddr-balanced|pred change-any 5000 50 100" # n samples times
 	tectonic plots/time-diameter-change-any.tex -o results/
+
+
+#######################
+# One Tree Max problem best solution evolution
+
+results/otm-change-pred.pdf:
+	mkdir -p results
+	./run-combinations \
+		${BASE}/otm \
+		results/otm-change-pred \
+		"--quiet --max_num_iters 1000000 euler-tour|nddr-adj|pred|pred2 change-pred 1000 5000" # times n
+	tectonic plots/otm-change-pred.tex -o results/
+
+results/otm-change-any.pdf:
+	mkdir -p results
+	./run-combinations \
+		${BASE}/otm \
+		results/otm-change-any \
+		"--quiet --max_num_iters 1000000 euler-tour|nddr-adj|pred change-any 1000 5000" # times n
+	tectonic plots/otm-change-any.tex -o results/

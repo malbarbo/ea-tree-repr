@@ -1,0 +1,20 @@
+\documentclass[tikz]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage[brazil]{babel}
+\usepackage{pgfplots}
+
+\begin{document}
+  \begin{tikzpicture}
+    \begin{axis}[
+        legend pos = south east,
+        xlabel=Iteration,
+        ylabel=Fitness,
+        ymax=1
+      ]
+      \addplot+ [mark=none] table {../results/otm-change-any-0};
+      \addplot+ [mark=none] table {../results/otm-change-any-1};
+      \addplot+ [mark=none] table {../results/otm-change-any-2};
+      \legend{2LETT, NDDRAdj, Predecessor}
+    \end{axis}
+  \end{tikzpicture}
+\end{document}

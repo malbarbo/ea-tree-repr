@@ -33,67 +33,39 @@ pub fn main() {
 
     info!("{:#?}", args);
 
-    let mut iters = vec![EAResult::default(); args.sizes.len()];
-    for _ in progress(0..args.times) {
-        for (i, result) in run(&args).into_iter().enumerate() {
-            iters[i].fitness += result.fitness;
-            iters[i].num_iters += result.num_iters;
-            iters[i].best_iter += result.best_iter;
-        }
-    }
-    println!("n fitness num_iters best_iter");
-    for (n, result) in args.sizes.into_iter().zip(iters) {
-        println!(
-            "{} {} {} {}",
-            n,
-            result.fitness / args.times,
-            result.num_iters / args.times as u64,
-            result.best_iter / args.times as u64
-        );
+    let results = vec(progress(0..args.times).map(|_| run(&args)));
+    let iters: usize = results.iter().map(|r| r.iter_fitness.len()).max().unwrap();
+    let space = (iters - 1) as f64 / args.samples as f64;
+    println!("iter fitness");
+    for i in 0..(args.samples + 1) {
+        let iter = ((f64::from(i) * space).ceil() as usize).min(iters - 1);
+        let sum: u64 = results.iter().map(|r| r.iter_fitness[iter] as u64).sum();
+        let fitness = sum as f64 / args.times as f64;
+        let fitness_percentage = fitness / (args.size - 1) as f64;
+        println!("{} {}", iter + 1, fitness_percentage);
     }
 }
 
-fn run(args: &Args) -> Vec<EAResult> {
-    let mut result = vec![];
-    for &n in &args.sizes {
-        let m = args.f as u64 * n as u64;
-        let (g, target, root) = if args.balanced {
-            new_case_balanced(n, m, new_rng_with_seed(args.seed))
-        } else {
-            new_case(n, m, args.diameter, new_rng_with_seed(args.seed))
-        };
+fn run(args: &Args) -> EAResult {
+    let n = args.size;
+    let m = (args.f * n) as u64;
+    let (g, target, root) = if args.balanced {
+        new_case_balanced(n, m, new_rng_with_seed(args.seed))
+    } else {
+        new_case(n, m, args.diameter, new_rng_with_seed(args.seed))
+    };
 
-        assert_eq!(n as usize, g.num_vertices());
-        assert_eq!(m as usize, g.num_edges());
+    assert_eq!(n as usize, g.num_vertices());
+    assert_eq!(m as usize, g.num_edges());
 
-        let g = &Rc::new(g);
+    let g = &Rc::new(g);
 
-        let r = match args.ds {
-            Ds::EulerTour => run_ea::<EulerTourTree<_>>(g, root, &target, &args),
-            Ds::NddrAdj => run_ea::<NddrAdjTree<_>>(g, root, &target, &args),
-            Ds::NddrEdge => run_ea::<NddrEdgeTree<_>>(g, root, &target, &args),
-            Ds::Predecessor => run_ea::<PredecessorTree<_>>(g, root, &target, &args),
-            Ds::Predecessor2 => run_ea::<PredecessorTree2<_>>(g, root, &target, &args),
-        };
-        result.push(r);
-    }
-    result
-}
-
-#[derive(Copy, Clone, Default)]
-struct EAResult {
-    fitness: u32,
-    num_iters: u64,
-    best_iter: u64,
-}
-
-impl EAResult {
-    fn new(fitness: u32, num_iters: u64, best_iter: u64) -> EAResult {
-        EAResult {
-            fitness,
-            num_iters,
-            best_iter,
-        }
+    match args.ds {
+        Ds::EulerTour => run_ea::<EulerTourTree<_>>(g, root, &target, &args),
+        Ds::NddrAdj => run_ea::<NddrAdjTree<_>>(g, root, &target, &args),
+        Ds::NddrEdge => run_ea::<NddrEdgeTree<_>>(g, root, &target, &args),
+        Ds::Predecessor => run_ea::<PredecessorTree<_>>(g, root, &target, &args),
+        Ds::Predecessor2 => run_ea::<PredecessorTree2<_>>(g, root, &target, &args),
     }
 }
 
@@ -107,6 +79,7 @@ where
     T: Tree<StaticGraph>,
     Ind<'a, T>: Clone,
 {
+    let mut iter_fitness = vec![];
     let mut rng = new_rng_with_seed(args.seed);
     let mut edges = vec(g.edges());
     let mut tree = vec![];
@@ -137,14 +110,13 @@ where
 
     info!("best = {:?}", pop[best].fitness());
 
-    let mut it = 0;
     let mut best_iter = 0;
-    for i in 0..=args.max_num_iters() {
-        it = i;
+    for it in 0..args.max_num_iters() {
         let i = rng.gen_range(0, pop.len());
         let mut new = pop[i].clone();
         new.mutate(args.op, &mut rng);
         if pop.contains(&new) {
+            iter_fitness.push(pop[best].fitness());
             continue;
         }
         if new.fitness() >= pop[i].fitness() {
@@ -152,8 +124,10 @@ where
                 best_iter = it;
                 best = i;
                 info!("it = {}, best = {}", it, new.fitness());
-                if new.is_optimum() {
+                if args.stop_on_optimum && new.is_optimum() {
+                    info!("optimum found");
                     pop[i] = new;
+                    iter_fitness.push(pop[best].fitness());
                     break;
                 }
             }
@@ -164,6 +138,8 @@ where
             best = position_max_by_key(&pop, |ind| ind.fitness()).unwrap();
         }
 
+        iter_fitness.push(pop[best].fitness());
+
         if it - best_iter >= args.max_num_iters_no_impr() {
             info!(
                 "max number of iterations without improvement reached: {:?}",
@@ -173,7 +149,22 @@ where
         }
     }
 
-    EAResult::new(pop[best].fitness(), it, best_iter)
+    EAResult::new(iter_fitness, best_iter)
+}
+
+#[derive(Clone, Default)]
+struct EAResult {
+    iter_fitness: Vec<u32>,
+    best_iter: u64,
+}
+
+impl EAResult {
+    fn new(iter_fitness: Vec<u32>, best_iter: u64) -> EAResult {
+        EAResult {
+            iter_fitness,
+            best_iter,
+        }
+    }
 }
 
 fn new_case<R: Rng>(
@@ -414,10 +405,13 @@ struct Args {
     ds: Ds,
     op: Op,
     times: u32,
-    sizes: Vec<u32>,
+    size: u32,
+    // optional parameters
+    samples: u32,
     f: u32,
     diameter: Option<u32>,
     balanced: bool,
+    stop_on_optimum: bool,
     seed: u32,
     pop_size: u32,
     max_num_iters: Option<u64>,
@@ -441,39 +435,6 @@ fn args() -> Args {
         (version: crate_version!())
         (about: "Evolutionary algorithm for the one tree max problem")
         (author: crate_authors!())
-        (@arg seed:
-            --seed
-             +takes_value
-             "Seed used in the random number generator. A random value is used if none is specified")
-        (@arg pop_size:
-             --pop_size
-             +takes_value
-             default_value("10")
-             "Number of individual in the population")
-        (@arg max_num_iters:
-             --max_num_iters
-             +takes_value
-             "Maximum number of iterations")
-        (@arg max_num_iters_no_impr:
-             --max_num_iters_no_impr
-             +takes_value
-             "Maximum number of iterations without improvement")
-        (@arg quiet:
-             --quiet
-             "Only prints the final solution")
-        (@arg f:
-             -f
-             +takes_value
-             default_value("3")
-             "Edge factor. The number of edges is f * n")
-        (@arg d:
-             -d
-             --diameter
-             +takes_value
-             "The diameter of the target tree")
-        (@arg balanced:
-             --balanced
-             "Create a target tree composed of sqrt(n) subtrees")
         (@arg ds:
              +required
              possible_values(&[
@@ -494,10 +455,49 @@ fn args() -> Args {
         (@arg times:
              +required
              "Number of times to executed the experiment")
-        (@arg sizes:
+        (@arg size:
              +required
-             multiple(true)
-             "List of the number of vertices")
+             "Number of vertices")
+        (@arg seed:
+            --seed
+             +takes_value
+             "Seed used in the random number generator. A random value is used if none is specified")
+        (@arg pop_size:
+             --pop_size
+             +takes_value
+             default_value("10")
+             "Number of individual in the population")
+        (@arg max_num_iters:
+             --max_num_iters
+             +takes_value
+             "Maximum number of iterations")
+        (@arg max_num_iters_no_impr:
+             --max_num_iters_no_impr
+             +takes_value
+             "Maximum number of iterations without improvement")
+        (@arg quiet:
+             --quiet
+             "Only prints the final solution")
+        (@arg samples:
+             --samples
+             default_value("100")
+             "The number of samples to show")
+        (@arg f:
+             -f
+             +takes_value
+             default_value("3")
+             "Edge factor. The number of edges is f * n")
+        (@arg d:
+             -d
+             --diameter
+             +takes_value
+             "The diameter of the target tree")
+        (@arg balanced:
+             --balanced
+             "Create a target tree composed of sqrt(n) subtrees")
+        (@arg stop_on_optimum:
+             --stop_on_optimum
+             "Stop when the optimum solution is found")
     );
 
     let matches = app.get_matches();
@@ -517,17 +517,14 @@ fn args() -> Args {
             _ => unreachable!(),
         },
         times: value_t_or_exit!(matches, "times", u32),
-        sizes: matches
-            .values_of("sizes")
-            .unwrap()
-            .map(|x| x.parse::<u32>().unwrap())
-            .collect(),
+        size: value_t_or_exit!(matches, "size", u32),
         seed: if matches.is_present("seed") {
             value_t_or_exit!(matches, "seed", u32)
         } else {
             rand::thread_rng().gen()
         },
         pop_size: value_t_or_exit!(matches, "pop_size", u32),
+        samples: value_t_or_exit!(matches, "samples", u32),
         max_num_iters: if matches.is_present("max_num_iters") {
             Some(value_t_or_exit!(matches, "max_num_iters", u64))
         } else {
@@ -546,6 +543,7 @@ fn args() -> Args {
             None
         },
         balanced: matches.is_present("balanced"),
+        stop_on_optimum: matches.is_present("stop_on_optimum"),
     }
 }
 
