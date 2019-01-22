@@ -249,7 +249,7 @@ where
             let end_next = self.next_pos(end);
             let end_next_next = self.next_pos(end_next);
             let start_prev = self.prev_pos(start);
-            // Get partial with a lcoal lifetime instead of 'static. It is safe because partial is
+            // Get partial with a local lifetime instead of 'static. It is safe because partial is
             // cleaned
             let partial = unsafe { self.partial() };
             // 1
