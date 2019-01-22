@@ -1,0 +1,38 @@
+#!/usr/bin/python3
+
+import sys
+
+def main():
+    f = sys.argv[1]
+    (n, edges) = read(f)
+    write(f, n, edges)
+
+
+def write(f, n, edges):
+    print("NAME :", f)
+    print("TYPE : HCP")
+    print("DIMENSION :", n)
+    print("EDGE_DATA_FORMAT : EDGE_LIST")
+    print("EDGE_DATA_SECTION")
+    print("\n".join(map(lambda x: "{} {}".format(x[0], x[1]), edges)))
+    print("-1")
+    print("EOF")
+
+
+def read(f):
+    def parse(line):
+        x = line.split()
+        return int(x[1]), int(x[2])
+    n = 0
+    edges = []
+    lines = list(filter(lambda s: not s.startswith("c"), open(f).readlines()))
+    assert lines[0].startswith("p edge")
+    lines[0] = lines[0].replace("p edge", "p")
+    n, m = parse(lines[0])
+    for line in lines[1:m + 1]:
+        edges.append(parse(line))
+    assert m == len(edges)
+    return n, edges
+
+if __name__ == "__main__":
+    main()
