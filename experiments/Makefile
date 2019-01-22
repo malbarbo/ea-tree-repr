@@ -27,6 +27,8 @@ all: \
 	results/time-change-pred-large.pdf \
 	results/time-diameter-change-any.pdf \
 	results/time-diameter-change-pred.pdf \
+	results/omt-change-pred.pdf \
+	results/omt-change-any.pdf \
 	results/time-copy-vs-mut-pred.pdf \
 	results/time-copy-vs-mut-pred2.pdf
 
@@ -188,18 +190,18 @@ results/time-diameter-change-any.pdf:
 #######################
 # One Tree Max problem best solution evolution
 
-results/otm-change-pred.pdf:
+results/omt-change-pred.pdf:
 	mkdir -p results
 	./run-combinations \
-		${BASE}/otm \
-		results/otm-change-pred \
+		${BASE}/omt \
+		results/omt-change-pred \
 		"--quiet --max_num_iters 1000000 euler-tour|nddr-adj|pred|pred2 change-pred 1000 5000" # times n
-	tectonic plots/otm-change-pred.tex -o results/
+	tectonic plots/omt-change-pred.tex -o results/
 
-results/otm-change-any.pdf:
+results/omt-change-any.pdf:
 	mkdir -p results
 	./run-combinations \
-		${BASE}/otm \
-		results/otm-change-any \
+		${BASE}/omt \
+		results/omt-change-any \
 		"--quiet --max_num_iters 1000000 euler-tour|nddr-adj|pred change-any 1000 5000" # times n
-	tectonic plots/otm-change-any.tex -o results/
+	tectonic plots/omt-change-any.tex -o results/

@@ -431,9 +431,9 @@ impl Args {
 
 fn args() -> Args {
     let app = clap_app!(
-        ("otm") =>
+        ("omt") =>
         (version: crate_version!())
-        (about: "Evolutionary algorithm for the one tree max problem")
+        (about: "Evolutionary algorithm for the one-max tree problem")
         (author: crate_authors!())
         (@arg ds:
              +required
