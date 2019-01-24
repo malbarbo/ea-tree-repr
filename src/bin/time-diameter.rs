@@ -31,11 +31,11 @@ fn main() {
     ea_tree_repr::set_default_k(args.k);
 
     let (d, time) = match args.ds {
-        Ds::EulerTour => run::<EulerTourTree<_>>(args.n, args.op, args.samples, args.times),
-        Ds::NddrAdj => run::<NddrAdjTree<_>>(args.n, args.op, args.samples, args.times),
-        Ds::NddrBalanced => run::<NddrBalancedTree<_>>(args.n, args.op, args.samples, args.times),
-        Ds::Predecessor => run::<PredecessorTree<_>>(args.n, args.op, args.samples, args.times),
-        Ds::Predecessor2 => run::<PredecessorTree2<_>>(args.n, args.op, args.samples, args.times),
+        Ds::EulerTour => run::<EulerTourTree<_>>(&args),
+        Ds::NddrAdj => run::<NddrAdjTree<_>>(&args),
+        Ds::NddrBalanced => run::<NddrBalancedTree<_>>(&args),
+        Ds::Predecessor => run::<PredecessorTree<_>>(&args),
+        Ds::Predecessor2 => run::<PredecessorTree2<_>>(&args),
     };
 
     println!("diameter time");
@@ -44,29 +44,24 @@ fn main() {
     }
 }
 
-fn run<T: Tree<CompleteGraph>>(
-    n: usize,
-    op: Op,
-    samples: usize,
-    times: usize,
-) -> (Vec<usize>, Vec<Duration>) {
-    let space = (n - 3) as f64 / (samples - 1) as f64;
-    let ds = vec((0..samples).map(|i| 2 + (i as f64 * space).round() as usize));
-    let mut time = vec![Duration::default(); samples];
-    for _ in progress(0..times) {
+fn run<T: Tree<CompleteGraph>>(args: &Args) -> (Vec<usize>, Vec<Duration>) {
+    let space = (args.n - 3) as f64 / (args.samples - 1) as f64;
+    let ds = vec((0..args.samples).map(|i| 2 + (i as f64 * space).round() as usize));
+    let mut time = vec![Duration::default(); args.samples];
+    for _ in progress(0..args.times) {
         ds.par_iter().zip(&mut time).for_each(|(&d, t)| {
             let mut rng = new_rng();
-            let (g, tree) = graph_tree(n, d);
+            let (g, tree) = graph_tree(args.n, d);
             let tree = T::new(Rc::new(g), &*tree, &mut rng);
             let start = Instant::now();
-            match op {
+            match args.op {
                 Op::ChangePred => {
-                    for _ in 0..10_000 {
+                    for _ in 0..args.iters {
                         tree.clone().change_pred(&mut rng);
                     }
                 }
                 Op::ChangeAny => {
-                    for _ in 0..10_000 {
+                    for _ in 0..args.iters {
                         tree.clone().change_any(&mut rng);
                     }
                 }
@@ -75,7 +70,7 @@ fn run<T: Tree<CompleteGraph>>(
         })
     }
     for t in &mut time {
-        *t /= 10_000 * times as u32;
+        *t /= (args.iters * args.times) as u32;
     }
     (ds, time)
 }
@@ -111,6 +106,11 @@ fn args() -> Args {
                 +takes_value
                 default_value("1")
                 "The k parameter for NDDR")
+            (@arg iters:
+                --iters
+                +takes_value
+                default_value("10000")
+                "The number times the mutation operation is applied in a tree")
             (@arg samples:
                 +required
                 "Number of tree diameter samples")
@@ -136,9 +136,16 @@ fn args() -> Args {
             _ => unreachable!(),
         },
         k: value_t_or_exit!(matches, "k", usize),
+        iters: value_t_or_exit!(matches, "iters", usize),
         samples: value_t_or_exit!(matches, "samples", usize),
         times: value_t_or_exit!(matches, "times", usize),
     }
+}
+
+fn graph_tree(n: usize, d: usize) -> (CompleteGraph, Vec<Edge<CompleteGraph>>) {
+    let g = CompleteGraph::new(n as u32);
+    let tree = random_sp_with_diameter(&g, d, new_rng());
+    (g, tree)
 }
 
 #[derive(Debug)]
@@ -147,14 +154,9 @@ struct Args {
     ds: Ds,
     op: Op,
     k: usize,
+    iters: usize,
     samples: usize,
     times: usize,
-}
-
-fn graph_tree(n: usize, d: usize) -> (CompleteGraph, Vec<Edge<CompleteGraph>>) {
-    let g = CompleteGraph::new(n as u32);
-    let tree = random_sp_with_diameter(&g, d, new_rng());
-    (g, tree)
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
