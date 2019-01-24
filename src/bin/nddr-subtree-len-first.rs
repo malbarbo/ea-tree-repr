@@ -61,7 +61,7 @@ fn args() -> (Op, FindOpStrategy, usize, Vec<usize>) {
                 possible_values(&[
                     "adj",
                     "adj-smaller",
-                    "balanced",
+                    "free",
                     "edge",
                 ])
                 "Strategy used to find the operands values for the operator")
@@ -90,7 +90,7 @@ fn args() -> (Op, FindOpStrategy, usize, Vec<usize>) {
     let strategy = match matches.value_of("strategy").unwrap() {
         "adj" => FindOpStrategy::Adj,
         "adj-smaller" => FindOpStrategy::AdjSmaller,
-        "balanced" => FindOpStrategy::Balanced,
+        "free" => FindOpStrategy::Free,
         "edge" => FindOpStrategy::Edge,
         _ => unreachable!(),
     };

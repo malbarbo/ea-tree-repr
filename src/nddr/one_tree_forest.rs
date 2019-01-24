@@ -27,7 +27,7 @@ pub enum FindOpStrategy {
     Adj,
     AdjSmaller,
     Edge,
-    Balanced,
+    Free,
 }
 
 // The strategy used to find the tree that contains a vertex.
@@ -509,7 +509,7 @@ where
                 FindOpStrategy::Adj => self.find_op_adj(&mut rng),
                 FindOpStrategy::AdjSmaller => self.find_op_adj_smaller(&mut rng),
                 FindOpStrategy::Edge => self.find_op_edge(&mut rng),
-                FindOpStrategy::Balanced => self.find_op_balanced(&mut rng),
+                FindOpStrategy::Free => self.find_op_free(&mut rng),
             };
 
             // cannot be the star_tree
@@ -626,7 +626,7 @@ where
         (from, p, to, a)
     }
 
-    fn find_op_balanced<R: Rng>(&self, mut rng: R) -> (usize, usize, usize, usize) {
+    fn find_op_free<R: Rng>(&self, mut rng: R) -> (usize, usize, usize, usize) {
         let from = self.select_tree(&mut rng);
         let p = self.select_tree_vertex(from, &mut rng);
         let to = self.select_tree(&mut rng);
@@ -952,8 +952,8 @@ mod tests {
     def_test!(test_op1_adj_smaller_fatnode, AdjSmaller, FatNode);
     def_test!(test_op1_adj_smaller_map, AdjSmaller, Map);
 
-    def_test!(test_op1_balanced_fatnode, Edge, FatNode);
-    def_test!(test_op1_balanced_map, Edge, Map);
+    def_test!(test_op1_free_fatnode, Edge, FatNode);
+    def_test!(test_op1_free_map, Edge, Map);
 
     def_test!(test_op1_edge_fatnode, Edge, FatNode);
     def_test!(test_op1_edge_map, Edge, Map);

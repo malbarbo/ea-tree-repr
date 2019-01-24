@@ -18,14 +18,14 @@ use std::time::{Duration, Instant};
 // local
 use ea_tree_repr::{
     micro_secs, new_rng, progress, random_sp_with_diameter, setup_rayon, EulerTourTree,
-    NddrAdjTree, NddrBalancedTree, PredecessorTree, PredecessorTree2, Tree,
+    NddrAdjTree, NddrFreeTree, PredecessorTree, PredecessorTree2, Tree,
 };
 
 fn main() {
     setup_rayon();
     let args = args();
 
-    if args.ds != Ds::NddrBalanced {
+    if args.ds != Ds::NddrFree {
         eprintln!("Ignoring k = {} parameter", args.k);
     }
     ea_tree_repr::set_default_k(args.k);
@@ -33,7 +33,7 @@ fn main() {
     let (d, time) = match args.ds {
         Ds::EulerTour => run::<EulerTourTree<_>>(&args),
         Ds::NddrAdj => run::<NddrAdjTree<_>>(&args),
-        Ds::NddrBalanced => run::<NddrBalancedTree<_>>(&args),
+        Ds::NddrFree => run::<NddrFreeTree<_>>(&args),
         Ds::Predecessor => run::<PredecessorTree<_>>(&args),
         Ds::Predecessor2 => run::<PredecessorTree2<_>>(&args),
     };
@@ -86,7 +86,7 @@ fn args() -> Args {
                 possible_values(&[
                     "euler-tour",
                     "nddr-adj",
-                    "nddr-balanced",
+                    "nddr-free",
                     "pred",
                     "pred2",
                 ])
@@ -125,7 +125,7 @@ fn args() -> Args {
         ds: match matches.value_of("ds").unwrap() {
             "euler-tour" => Ds::EulerTour,
             "nddr-adj" => Ds::NddrAdj,
-            "nddr-balanced" => Ds::NddrBalanced,
+            "nddr-free" => Ds::NddrFree,
             "pred" => Ds::Predecessor,
             "pred2" => Ds::Predecessor2,
             _ => unreachable!(),
@@ -163,7 +163,7 @@ struct Args {
 enum Ds {
     EulerTour,
     NddrAdj,
-    NddrBalanced,
+    NddrFree,
     Predecessor,
     Predecessor2,
 }

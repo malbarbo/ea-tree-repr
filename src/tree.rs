@@ -97,11 +97,11 @@ where
 }
 
 #[derive(Clone)]
-pub struct NddrBalancedTree<G>(NddrOneTreeForest<G>, XorShiftRng)
+pub struct NddrFreeTree<G>(NddrOneTreeForest<G>, XorShiftRng)
 where
     G: IncidenceGraph + WithVertexIndexProp + Clone + Choose;
 
-impl<G> PartialEq for NddrBalancedTree<G>
+impl<G> PartialEq for NddrFreeTree<G>
 where
     G: IncidenceGraph + WithVertexIndexProp + Clone + Choose,
 {
@@ -110,7 +110,7 @@ where
     }
 }
 
-impl<G> Tree<G> for NddrBalancedTree<G>
+impl<G> Tree<G> for NddrFreeTree<G>
 where
     G: IncidenceGraph + WithVertexIndexProp + Clone + Choose,
 {
@@ -129,11 +129,11 @@ where
             g,
             root,
             edges.to_vec(),
-            FindOpStrategy::Balanced,
+            FindOpStrategy::Free,
             FindVertexStrategy::FatNode,
             rng,
         );
-        NddrBalancedTree(nddr, xrng)
+        NddrFreeTree(nddr, xrng)
     }
 
     fn set_edges(&mut self, edges: &[Edge<G>]) {

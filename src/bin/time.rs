@@ -21,7 +21,7 @@ use std::time::Duration;
 // local
 use ea_tree_repr::{
     micro_secs, new_rng, progress, random_sp, random_sp_with_diameter, setup_rayon, time_it,
-    EulerTourTree, NddrAdjTree, NddrBalancedTree, NddrEdgeTree, PredecessorTree, PredecessorTree2,
+    EulerTourTree, NddrAdjTree, NddrFreeTree, NddrEdgeTree, PredecessorTree, PredecessorTree2,
     Tree,
 };
 
@@ -29,7 +29,7 @@ pub fn main() {
     setup_rayon();
     let args = args();
 
-    if args.ds != Ds::NddrBalanced {
+    if args.ds != Ds::NddrFree {
         eprintln!("Ignoring k = {} parameter", args.k);
     }
     ea_tree_repr::set_default_k(args.k);
@@ -47,8 +47,8 @@ pub fn main() {
         match args.ds {
             Ds::EulerTour => run::<_, EulerTourTree<_>, _>(&args, case),
             Ds::NddrAdj => run::<_, NddrAdjTree<_>, _>(&args, case),
-            Ds::NddrBalanced => {
-                eprintln!("nddr-balanced cannot be used in non complete graphs");
+            Ds::NddrFree => {
+                eprintln!("nddr-free cannot be used in non complete graphs");
                 ::std::process::exit(1);
             }
             Ds::NddrEdge => run::<_, NddrEdgeTree<_>, _>(&args, case),
@@ -60,7 +60,7 @@ pub fn main() {
         match args.ds {
             Ds::EulerTour => run::<_, EulerTourTree<_>, _>(&args, case),
             Ds::NddrAdj => run::<_, NddrAdjTree<_>, _>(&args, case),
-            Ds::NddrBalanced => run::<_, NddrBalancedTree<_>, _>(&args, case),
+            Ds::NddrFree => run::<_, NddrFreeTree<_>, _>(&args, case),
             Ds::NddrEdge => run::<_, NddrEdgeTree<_>, _>(&args, case),
             Ds::Predecessor => run::<_, PredecessorTree<_>, _>(&args, case),
             Ds::Predecessor2 => run::<_, PredecessorTree2<_>, _>(&args, case),
@@ -234,7 +234,7 @@ fn args() -> Args {
                 possible_values(&[
                     "euler-tour",
                     "nddr-adj",
-                    "nddr-balanced",
+                    "nddr-free",
                     "nddr-edge",
                     "pred",
                     "pred2",
@@ -284,7 +284,7 @@ fn args() -> Args {
         ds: match matches.value_of("ds").unwrap() {
             "euler-tour" => Ds::EulerTour,
             "nddr-adj" => Ds::NddrAdj,
-            "nddr-balanced" => Ds::NddrBalanced,
+            "nddr-free" => Ds::NddrFree,
             "nddr-edge" => Ds::NddrEdge,
             "pred" => Ds::Predecessor,
             "pred2" => Ds::Predecessor2,
@@ -329,7 +329,7 @@ fn args() -> Args {
 enum Ds {
     EulerTour,
     NddrAdj,
-    NddrBalanced,
+    NddrFree,
     NddrEdge,
     Predecessor,
     Predecessor2,

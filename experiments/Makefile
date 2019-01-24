@@ -91,7 +91,7 @@ results/nddr-subtree-len-1.pdf:
 	./run-combinations \
 		${BASE}/nddr-subtree-len \
 		results/nddr-subtree-len-1 \
-		"adj|balanced change-any 100 150 100000" # n calls times
+		"adj|free change-any 100 150 100000" # n calls times
 	tectonic plots/nddr-subtree-len-1.tex -o results/
 
 results/nddr-subtree-len-2.pdf:
@@ -99,7 +99,7 @@ results/nddr-subtree-len-2.pdf:
 	./run-combinations \
 		${BASE}/nddr-subtree-len \
 		results/nddr-subtree-len-2 \
-		"adj|balanced change-any 1000 150 100000" # n calls times
+		"adj|free change-any 1000 150 100000" # n calls times
 	tectonic plots/nddr-subtree-len-2.tex -o results/
 
 results/nddr-subtree-len-first-1.pdf:
@@ -107,7 +107,7 @@ results/nddr-subtree-len-first-1.pdf:
 	./run-combinations \
 		${BASE}/nddr-subtree-len-first \
 		results/nddr-subtree-len-first-1 \
-		"adj|balanced change-any 10000 ${SUBTREE_FIRST}" # times sizes
+		"adj|free change-any 10000 ${SUBTREE_FIRST}" # times sizes
 	tectonic plots/nddr-subtree-len-first-1.tex -o results/
 
 
@@ -121,7 +121,7 @@ results/time-change-pred.pdf:
 	./run-combinations \
 		${BASE}/time \
 		results/time-change-pred \
-		"euler-tour|nddr-balanced|pred|pred2 change-pred ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_PRED}" # times sizes
+		"euler-tour|nddr-free|pred|pred2 change-pred ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_PRED}" # times sizes
 	tectonic plots/time-change-pred.tex -o results/
 
 results/time-change-pred-forest.pdf:
@@ -137,7 +137,7 @@ results/time-change-pred-large.pdf:
 	./run-combinations \
 		${BASE}/time \
 		results/time-change-pred-large \
-		"euler-tour|nddr-balanced|pred|pred2 change-pred ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_PRED_LARGE}" # times sizes
+		"euler-tour|nddr-free|pred|pred2 change-pred ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_PRED_LARGE}" # times sizes
 	tectonic plots/time-change-pred-large.tex -o results/
 
 # any
@@ -147,7 +147,7 @@ results/time-change-any.pdf:
 	./run-combinations \
 		${BASE}/time \
 		results/time-change-any \
-		"euler-tour|nddr-balanced|pred change-any ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_ANY}" # times sizes
+		"euler-tour|nddr-free|pred change-any ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_ANY}" # times sizes
 	tectonic plots/time-change-any.tex -o results/
 
 results/time-change-any-forest.pdf:
@@ -163,7 +163,7 @@ results/time-change-any-large.pdf:
 	./run-combinations \
 		${BASE}/time \
 		results/time-change-any-large \
-		"euler-tour|nddr-balanced|pred change-any ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_ANY_LARGE}" # times sizes
+		"euler-tour|nddr-free|pred change-any ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_ANY_LARGE}" # times sizes
 	tectonic plots/time-change-any-large.tex -o results/
 
 
@@ -175,7 +175,7 @@ results/time-diameter-change-pred.pdf:
 	./run-combinations \
 		${BASE}/time-diameter \
 		results/time-diameter-change-pred \
-		"euler-tour|nddr-balanced|pred|pred2 change-pred 5000 50 100" # n samples times
+		"euler-tour|nddr-free|pred|pred2 change-pred 5000 50 100" # n samples times
 	tectonic plots/time-diameter-change-pred.tex -o results/
 
 results/time-diameter-change-any.pdf:
@@ -183,7 +183,7 @@ results/time-diameter-change-any.pdf:
 	./run-combinations \
 		${BASE}/time-diameter \
 		results/time-diameter-change-any \
-		"euler-tour|nddr-balanced|pred change-any 5000 50 100" # n samples times
+		"euler-tour|nddr-free|pred change-any 5000 50 100" # n samples times
 	tectonic plots/time-diameter-change-any.tex -o results/
 
 
