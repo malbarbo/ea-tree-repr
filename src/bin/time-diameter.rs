@@ -23,14 +23,19 @@ use ea_tree_repr::{
 
 fn main() {
     setup_rayon();
-    let (n, ds, op, samples, times) = args();
+    let args = args();
 
-    let (d, time) = match ds {
-        Ds::EulerTour => run::<EulerTourTree<_>>(n, op, samples, times),
-        Ds::NddrAdj => run::<NddrAdjTree<_>>(n, op, samples, times),
-        Ds::NddrBalanced => run::<NddrBalancedTree<_>>(n, op, samples, times),
-        Ds::Predecessor => run::<PredecessorTree<_>>(n, op, samples, times),
-        Ds::Predecessor2 => run::<PredecessorTree2<_>>(n, op, samples, times),
+    if args.ds != Ds::NddrBalanced {
+        eprintln!("Ignoring k = {} parameter", args.k);
+    }
+    ea_tree_repr::set_default_k(args.k);
+
+    let (d, time) = match args.ds {
+        Ds::EulerTour => run::<EulerTourTree<_>>(args.n, args.op, args.samples, args.times),
+        Ds::NddrAdj => run::<NddrAdjTree<_>>(args.n, args.op, args.samples, args.times),
+        Ds::NddrBalanced => run::<NddrBalancedTree<_>>(args.n, args.op, args.samples, args.times),
+        Ds::Predecessor => run::<PredecessorTree<_>>(args.n, args.op, args.samples, args.times),
+        Ds::Predecessor2 => run::<PredecessorTree2<_>>(args.n, args.op, args.samples, args.times),
     };
 
     println!("diameter time");
@@ -55,12 +60,16 @@ fn run<T: Tree<CompleteGraph>>(
             let tree = T::new(Rc::new(g), &*tree, &mut rng);
             let start = Instant::now();
             match op {
-                Op::ChangePred => for _ in 0..10_000 {
-                    tree.clone().change_pred(&mut rng);
-                },
-                Op::ChangeAny => for _ in 0..10_000 {
-                    tree.clone().change_any(&mut rng);
-                },
+                Op::ChangePred => {
+                    for _ in 0..10_000 {
+                        tree.clone().change_pred(&mut rng);
+                    }
+                }
+                Op::ChangeAny => {
+                    for _ in 0..10_000 {
+                        tree.clone().change_any(&mut rng);
+                    }
+                }
             }
             *t += start.elapsed();
         })
@@ -71,7 +80,7 @@ fn run<T: Tree<CompleteGraph>>(
     (ds, time)
 }
 
-fn args() -> (usize, Ds, Op, usize, usize) {
+fn args() -> Args {
     let app = clap_app!(
         ("time-diameter") =>
             (version: crate_version!())
@@ -97,6 +106,11 @@ fn args() -> (usize, Ds, Op, usize, usize) {
             (@arg n:
                 +required
                 "Number of vertices")
+            (@arg k:
+                -k
+                +takes_value
+                default_value("1")
+                "The k parameter for NDDR")
             (@arg samples:
                 +required
                 "Number of tree diameter samples")
@@ -106,23 +120,35 @@ fn args() -> (usize, Ds, Op, usize, usize) {
     );
 
     let matches = app.get_matches();
-    let n = value_t_or_exit!(matches, "n", usize);
-    let ds = match matches.value_of("ds").unwrap() {
-        "euler-tour" => Ds::EulerTour,
-        "nddr-adj" => Ds::NddrAdj,
-        "nddr-balanced" => Ds::NddrBalanced,
-        "pred" => Ds::Predecessor,
-        "pred2" => Ds::Predecessor2,
-        _ => unreachable!(),
-    };
-    let op = match matches.value_of("op").unwrap() {
-        "change-pred" => Op::ChangePred,
-        "change-any" => Op::ChangeAny,
-        _ => unreachable!(),
-    };
-    let samples = value_t_or_exit!(matches, "samples", usize);
-    let times = value_t_or_exit!(matches, "times", usize);
-    (n, ds, op, samples, times)
+    Args {
+        n: value_t_or_exit!(matches, "n", usize),
+        ds: match matches.value_of("ds").unwrap() {
+            "euler-tour" => Ds::EulerTour,
+            "nddr-adj" => Ds::NddrAdj,
+            "nddr-balanced" => Ds::NddrBalanced,
+            "pred" => Ds::Predecessor,
+            "pred2" => Ds::Predecessor2,
+            _ => unreachable!(),
+        },
+        op: match matches.value_of("op").unwrap() {
+            "change-pred" => Op::ChangePred,
+            "change-any" => Op::ChangeAny,
+            _ => unreachable!(),
+        },
+        k: value_t_or_exit!(matches, "k", usize),
+        samples: value_t_or_exit!(matches, "samples", usize),
+        times: value_t_or_exit!(matches, "times", usize),
+    }
+}
+
+#[derive(Debug)]
+struct Args {
+    n: usize,
+    ds: Ds,
+    op: Op,
+    k: usize,
+    samples: usize,
+    times: usize,
 }
 
 fn graph_tree(n: usize, d: usize) -> (CompleteGraph, Vec<Edge<CompleteGraph>>) {
@@ -131,7 +157,7 @@ fn graph_tree(n: usize, d: usize) -> (CompleteGraph, Vec<Edge<CompleteGraph>>) {
     (g, tree)
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq)]
 enum Ds {
     EulerTour,
     NddrAdj,
@@ -140,7 +166,7 @@ enum Ds {
     Predecessor2,
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 enum Op {
     ChangePred,
     ChangeAny,
