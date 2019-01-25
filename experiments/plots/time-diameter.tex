@@ -1,0 +1,32 @@
+\documentclass[tikz]{standalone}
+\usepackage{fontspec}
+\usepackage{clrscode3e}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.13}
+\usetikzlibrary{pgfplots.groupplots}
+\usetikzlibrary{calc}
+\usepackage{siunitx}
+
+\begin{document}
+  \begin{tikzpicture}
+    \begin{groupplot}[
+        group style={group size=2 by 1, group name = myplot},
+        grid=both,
+        xlabel=Diameter,
+      ]
+      \nextgroupplot[title=\proc{change-any}, ylabel=Time (\si{\us})]
+      \addplot+ [mark=none] table {../results/time-diameter-change-any/euler-tour};
+      \addplot+ [mark=none] table {../results/time-diameter-change-any/nddr-free};
+      \addplot+ [mark=none] table {../results/time-diameter-change-any/pred};
+
+      \nextgroupplot[title=\proc{change-pred}, legend to name={leg}, legend style={legend columns=4}]
+      \addplot+ [mark=none] table {../results/time-change-pred/euler-tour};
+      \addplot+ [mark=none] table {../results/time-change-pred/nddr-free};
+      \addplot+ [mark=none] table {../results/time-change-pred/pred};
+      \addplot+ [mark=none] table {../results/time-change-pred/pred2};
+
+      \legend{2LETT, NddrFree, Predecessor, 2LPredecessor}
+    \end{groupplot}
+    \node[yshift=-1.75cm] at ($(myplot c1r1.south)!0.5!(myplot c2r1.south)$) {\ref{leg}};
+  \end{tikzpicture}
+\end{document}

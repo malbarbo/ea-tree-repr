@@ -8,28 +8,21 @@ TIME := /usr/bin/time -f '\nTotal time %E'
 BASE := ../target/release
 COPY_VS_MUT := $(shell seq 1000 1000 75000)
 SUBTREE_FIRST := $(shell seq 20 20 1000)
-CHANGE_PRED := $(shell seq 1000 1000 50000)
-CHANGE_PRED_FOREST := ${CHANGE_PRED}
-CHANGE_PRED_LARGE := $(shell seq 6000 6000 300000)
-CHANGE_ANY := ${CHANGE_PRED}
-CHANGE_ANY_FOREST := ${CHANGE_PRED}
-CHANGE_ANY_LARGE := ${CHANGE_PRED_LARGE}
+CHANGE_SIZES := $(shell seq 1000 1000 50000)
+CHANGE_FOREST_SIZES := ${CHANGE_PRED}
+CHANGE_LARGE_SIZES := $(shell seq 6000 6000 300000)
 CHANGE_TIMES := 30
 CHANGE_PARAMS := -k 1 --iters 100000
 
-all: \
+plots: \
 	results/nddr-subtree-len-1.pdf \
 	results/nddr-subtree-len-2.pdf \
 	results/nddr-subtree-len-first-1.pdf \
-	results/time-change-any.pdf \
-	results/time-change-any-forest.pdf \
-	results/time-change-pred.pdf \
-	results/time-change-pred-forest.pdf \
-	results/time-change-any-large.pdf \
-	results/time-change-pred-large.pdf \
-	results/time-diameter-change-any.pdf \
-	results/time-diameter-change-pred.pdf \
-	results/omt-change-pred.pdf \
+	results/time.pdf \
+	results/time-forest.pdf \
+	results/time-large.pdf \
+	results/time-diameter.pdf \
+	results/omt.pdf \
 	results/omt-change-any.pdf \
 	results/time-copy-vs-mut-pred.pdf \
 	results/time-copy-vs-mut-pred2.pdf
@@ -111,75 +104,85 @@ results/nddr-subtree-len-first-1.pdf:
 #######################
 # Mutation time vs tree size with random diameter
 
-# pred
+# time
 
-results/time-change-pred.pdf:
+results/time.pdf: results/time-change-pred results/time-change-any
+	tectonic plots/time.tex -o results/
+
+results/time-change-pred:
 	mkdir -p results/time-change-pred
 	${RUNNER} "${TIME} ${BASE}/time {} change-pred ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_PRED} > results/time-change-pred/{}" \
 		::: euler-tour nddr-free pred pred2
-	tectonic plots/time-change-pred.tex -o results/
 
-results/time-change-pred-forest.pdf:
-	mkdir -p results/time-change-pred-forest
-	${RUNNER} "${TIME} ${BASE}/time --forest {} change-pred ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_PRED_FOREST} > results/time-change-pred-forest/{}" \
-		::: euler-tour nddr-adj pred pred2
-	tectonic plots/time-change-pred-forest.tex -o results/
-
-results/time-change-pred-large.pdf:
-	mkdir -p results/time-change-pred-large
-	${RUNNER} "${TIME} ${BASE}/time {} change-pred ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_PRED_LARGE} > results/time-change-pred-large/{}" \
-		::: euler-tour nddr-free pred pred2
-	tectonic plots/time-change-pred-large.tex -o results/
-
-# any
-results/time-change-any.pdf:
+results/time-change-any:
 	mkdir -p results/time-change-any
 	${RUNNER} "${TIME} ${BASE}/time {} change-any ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_ANY} > results/time-change-any/{}" \
 		::: euler-tour nddr-free pred
-	tectonic plots/time-change-any.tex -o results/
 
-results/time-change-any-forest.pdf:
+
+# time forest
+results/time-forest.pdf: results/time-change-pred-forest results/time-change-any-forest
+	tectonic plots/time-forest.tex -o results/
+
+results/time-change-pred-forest:
+	mkdir -p results/time-change-pred-forest
+	${RUNNER} "${TIME} ${BASE}/time --forest {} change-pred ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_FOREST_SIZES} > results/time-change-pred-forest/{}" \
+		::: euler-tour nddr-adj pred pred2
+
+results/time-change-any-forest:
 	mkdir -p results/time-change-any-forest
-	${RUNNER} "${TIME} ${BASE}/time --forest {} change-any ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_ANY_FOREST} > results/time-change-any-forest/{}" \
+	${RUNNER} "${TIME} ${BASE}/time --forest {} change-any ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_FOREST_SIZES} > results/time-change-any-forest/{}" \
 		::: euler-tour nddr-adj pred
-	tectonic plots/time-change-any-forest.tex -o results/
 
-results/time-change-any-large.pdf:
+
+# time large
+
+results/time-large.pdf: results/time-change-pred-large results/time-change-any-large
+	tectonic plots/time-large.tex -o results/
+
+results/time-change-pred-large:
+	mkdir -p results/time-change-pred-large
+	${RUNNER} "${TIME} ${BASE}/time {} change-pred ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_LARGE_SIZES} > results/time-change-pred-large/{}" \
+		::: euler-tour nddr-free pred pred2
+
+results/time-change-any-large:
 	mkdir -p results/time-change-any-large
-	${RUNNER} "${TIME} ${BASE}/time {} change-any ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_ANY_LARGE} > results/time-change-any-large/{}" \
+	${RUNNER} "${TIME} ${BASE}/time {} change-any ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_LARGE_SIZES} > results/time-change-any-large/{}" \
 		::: euler-tour nddr-free pred
-	tectonic plots/time-change-any-large.tex -o results/
 
 
 #######################
 # Mutation time vs tree diameter
 
-results/time-diameter-change-pred.pdf:
+results/time-diameter.pdf: results/time-diameter-change-pred results/time-diameter-change-any
+	tectonic plots/time-diameter.tex -o results/
+
+results/time-diameter-change-pred:
 	mkdir -p results/time-diameter-change-pred
 	# ds op n samples times
 	${RUNNER} "${TIME} ${BASE}/time-diameter {} change-pred 5000 50 100 > results/time-diameter-change-pred/{}" \
 		::: euler-tour nddr-free pred pred2
-	tectonic plots/time-diameter-change-pred.tex -o results/
 
-results/time-diameter-change-any.pdf:
+results/time-diameter-change-any:
 	mkdir -p results/time-diameter-change-any
 	# ds op n samples times
 	${RUNNER} "${TIME} ${BASE}/time-diameter {} change-any 5000 50 100 > results/time-diameter-change-any/{}" \
 		::: euler-tour nddr-free pred
-	tectonic plots/time-diameter-change-any.tex -o results/
 
 
 #######################
 # One Tree Max problem best solution evolution
 
-results/omt-change-pred.pdf:
+results/omt.pdf: results/omt-change-pred results/omt-change-any
+	tectonic plots/omt.tex -o results/
+
+results/omt-change-pred:
 	mkdir -p results/omt-change-pred
 	# ds op times n
 	${RUNNER} "${TIME} ${BASE}/omt --quiet --max_num_iters 1000000 {} change-pred 1000 5000 > results/omt-change-pred/{}" \
 		::: euler-tour nddr-adj pred pred2
-	tectonic plots/omt-change-pred.tex -o results/
 
-results/omt-change-any.pdf:
+results/omt-change-any:
 	mkdir -p results/omt-change-any
 	# ds op times n
 	${RUNNER} "${TIME} ${BASE}/omt --quiet --max_num_iters 1000000 {} change-any 1000 5000 > results/omt-change-any/{}" \
