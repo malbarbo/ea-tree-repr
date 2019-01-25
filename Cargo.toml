@@ -12,11 +12,7 @@ fera = { version = "0.2", features = ["array", "ext", "fun", "graph"] }
 log = { version = "0.4", features = ["std"] }
 pbr = "1.0"
 rand = "0.5"
-rayon = "1.0"
 tsplib = "0.1"
-
-[features]
-system_allocator = []
 
 [profile.release]
 debug = true

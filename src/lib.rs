@@ -1,9 +1,5 @@
 #![cfg_attr(feature = "cargo-clippy", warn(clone_on_ref_ptr))]
 
-#[cfg(feature = "system_allocator")]
-#[global_allocator]
-static A: std::alloc::System = std::alloc::System;
-
 extern crate fera;
 #[macro_use]
 extern crate log;
@@ -51,12 +47,6 @@ pub fn micro_secs(t: Duration) -> f64 {
 
 pub fn milli_secs(t: Duration) -> f64 {
     1_000.0 * t.as_secs() as f64 + f64::from(t.subsec_nanos()) / 1_000_000.0
-}
-
-pub fn setup_rayon() {
-    if ::std::env::var("RAYON_NUM_THREADS").is_err() {
-        ::std::env::set_var("RAYON_NUM_THREADS", "1");
-    }
 }
 
 pub unsafe fn transmute_lifetime<'a, 'b, T: ?Sized>(value: &'a T) -> &'b T {

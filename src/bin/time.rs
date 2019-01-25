@@ -1,7 +1,6 @@
 extern crate ea_tree_repr;
 extern crate fera;
 extern crate rand;
-extern crate rayon;
 
 #[macro_use]
 extern crate clap;
@@ -12,7 +11,6 @@ use fera::fun::vec;
 use fera::graph::algs::Kruskal;
 use fera::graph::prelude::*;
 use rand::{Rng, XorShiftRng};
-use rayon::prelude::*;
 
 // system
 use std::rc::Rc;
@@ -20,13 +18,11 @@ use std::time::Duration;
 
 // local
 use ea_tree_repr::{
-    micro_secs, new_rng, progress, random_sp, random_sp_with_diameter, setup_rayon, time_it,
-    EulerTourTree, NddrAdjTree, NddrFreeTree, NddrEdgeTree, PredecessorTree, PredecessorTree2,
-    Tree,
+    micro_secs, new_rng, progress, random_sp, random_sp_with_diameter, time_it, EulerTourTree,
+    NddrAdjTree, NddrEdgeTree, NddrFreeTree, PredecessorTree, PredecessorTree2, Tree,
 };
 
 pub fn main() {
-    setup_rayon();
     let args = args();
 
     if args.ds != Ds::NddrFree {
@@ -87,7 +83,7 @@ where
 {
     let mut time = vec![(Duration::default(), Duration::default()); args.sizes.len()];
     for _ in progress(0..args.times) {
-        time.par_iter_mut().zip(&args.sizes).for_each(|(t, &n)| {
+        time.iter_mut().zip(&args.sizes).for_each(|(t, &n)| {
             let mut rng = new_rng();
             let (g, tree) = new(args, n, &mut rng);
             let mut tree = if args.forest {

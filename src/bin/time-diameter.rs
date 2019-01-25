@@ -1,7 +1,6 @@
 extern crate ea_tree_repr;
 extern crate fera;
 extern crate rand;
-extern crate rayon;
 
 #[macro_use]
 extern crate clap;
@@ -9,7 +8,6 @@ extern crate clap;
 // external
 use fera::fun::vec;
 use fera::graph::prelude::*;
-use rayon::prelude::*;
 
 // system
 use std::rc::Rc;
@@ -17,12 +15,11 @@ use std::time::{Duration, Instant};
 
 // local
 use ea_tree_repr::{
-    micro_secs, new_rng, progress, random_sp_with_diameter, setup_rayon, EulerTourTree,
-    NddrAdjTree, NddrFreeTree, PredecessorTree, PredecessorTree2, Tree,
+    micro_secs, new_rng, progress, random_sp_with_diameter, EulerTourTree, NddrAdjTree,
+    NddrFreeTree, PredecessorTree, PredecessorTree2, Tree,
 };
 
 fn main() {
-    setup_rayon();
     let args = args();
 
     if args.ds != Ds::NddrFree {
@@ -49,7 +46,7 @@ fn run<T: Tree<CompleteGraph>>(args: &Args) -> (Vec<usize>, Vec<Duration>) {
     let ds = vec((0..args.samples).map(|i| 2 + (i as f64 * space).round() as usize));
     let mut time = vec![Duration::default(); args.samples];
     for _ in progress(0..args.times) {
-        ds.par_iter().zip(&mut time).for_each(|(&d, t)| {
+        ds.iter().zip(&mut time).for_each(|(&d, t)| {
             let mut rng = new_rng();
             let (g, tree) = graph_tree(args.n, d);
             let tree = T::new(Rc::new(g), &*tree, &mut rng);

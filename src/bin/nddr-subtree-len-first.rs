@@ -1,7 +1,6 @@
 extern crate ea_tree_repr;
 extern crate fera;
 extern crate rand;
-extern crate rayon;
 
 #[macro_use]
 extern crate clap;
@@ -9,19 +8,16 @@ extern crate clap;
 // external
 use fera::graph::prelude::*;
 use rand::Rng;
-use rayon::prelude::*;
 
 // system
 use std::rc::Rc;
 
 // local
 use ea_tree_repr::{
-    new_rng, progress, random_sp, setup_rayon, FindOpStrategy, FindVertexStrategy,
-    NddrOneTreeForest,
+    new_rng, progress, random_sp, FindOpStrategy, FindVertexStrategy, NddrOneTreeForest,
 };
 
 pub fn main() {
-    setup_rayon();
     let (op, strategy, times, sizes) = args();
     let subtree_len = run(op, strategy, times, &sizes);
     println!("n subtree_len expected");
@@ -34,7 +30,7 @@ pub fn main() {
 fn run(op: Op, find_op: FindOpStrategy, times: usize, sizes: &[usize]) -> Vec<usize> {
     let mut len = vec![0; sizes.len()];
     for _ in progress(0..times) {
-        sizes.par_iter().zip(&mut len).for_each(|(&n, ll)| {
+        sizes.iter().zip(&mut len).for_each(|(&n, ll)| {
             let mut rng = new_rng();
             let mut tree = new(n, find_op, &mut rng);
             match op {
