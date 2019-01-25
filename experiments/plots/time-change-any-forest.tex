@@ -13,9 +13,9 @@
         xlabel=Number of vertices,
         ylabel=Time (\si{\us}),
       ]
-      \addplot+ [mark=none] table {../results/time-change-any-forest-0};
-      \addplot+ [mark=none] table {../results/time-change-any-forest-1};
-      \addplot+ [mark=none] table {../results/time-change-any-forest-2};
+      \addplot+ [mark=none] table {../results/time-change-any-forest/euler-tour};
+      \addplot+ [mark=none] table {../results/time-change-any-forest/nddr-adj};
+      \addplot+ [mark=none] table {../results/time-change-any-forest/pred};
       \legend{2LETT, NddrAdj, Predecessor}
     \end{axis}
   \end{tikzpicture}

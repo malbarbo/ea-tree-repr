@@ -10,9 +10,9 @@
         xlabel = Number of vertices,
         ylabel = Subtree length,
       ]
-      \addplot+ [mark=none] table[y index = 1] {../results/nddr-subtree-len-first-1-0};
-      \addplot+ [mark=none] table[y index = 1] {../results/nddr-subtree-len-first-1-1};
-      \addplot+ [mark=none] table[y index = 2] {../results/nddr-subtree-len-first-1-0};
+      \addplot+ [mark=none] table[y index = 1] {../results/nddr-subtree-len-first-1/adj};
+      \addplot+ [mark=none] table[y index = 1] {../results/nddr-subtree-len-first-1/free};
+      \addplot+ [mark=none] table[y index = 2] {../results/nddr-subtree-len-first-1/free};
       \legend{Adjacent, Free, $2 \sqrt{n}$}
     \end{axis}
   \end{tikzpicture}

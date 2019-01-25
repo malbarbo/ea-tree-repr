@@ -13,9 +13,9 @@
         xlabel=Number of vertices,
         ylabel=Time (\si{\us}),
       ]
-      \addplot+ [mark=none] table {../results/time-change-any-0};
-      \addplot+ [mark=none] table {../results/time-change-any-1};
-      \addplot+ [mark=none] table {../results/time-change-any-2};
+      \addplot+ [mark=none] table {../results/time-change-any/euler-tour};
+      \addplot+ [mark=none] table {../results/time-change-any/nddr-free};
+      \addplot+ [mark=none] table {../results/time-change-any/pred};
       \legend{2LETT, NddrFree, Predecessor}
     \end{axis}
   \end{tikzpicture}

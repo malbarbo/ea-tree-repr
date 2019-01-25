@@ -14,10 +14,10 @@
         xlabel=Diameter,
         ylabel=Time (\si{\us}),
       ]
-      \addplot+ [mark=none] table {../results/time-diameter-change-pred-0};
-      \addplot+ [mark=none] table {../results/time-diameter-change-pred-1};
-      \addplot+ [mark=none] table {../results/time-diameter-change-pred-2};
-      \addplot+ [mark=none] table {../results/time-diameter-change-pred-3};
+      \addplot+ [mark=none] table {../results/time-diameter-change-pred/euler-tour};
+      \addplot+ [mark=none] table {../results/time-diameter-change-pred/nddr-free};
+      \addplot+ [mark=none] table {../results/time-diameter-change-pred/pred};
+      \addplot+ [mark=none] table {../results/time-diameter-change-pred/pred2};
       \legend{2LETT, NddrFree, Predecessor, 2LPredecessor}
     \end{axis}
   \end{tikzpicture}

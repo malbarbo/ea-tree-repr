@@ -11,11 +11,11 @@
         ylabel=Fitness,
         ymax=1
       ]
-      \addplot+ [mark=none] table {../results/otm-change-pred-0};
-      \addplot+ [mark=none] table {../results/otm-change-pred-1};
-      \addplot+ [mark=none] table {../results/otm-change-pred-2};
-      \addplot+ [mark=none] table {../results/otm-change-pred-3};
-      \legend{2LETT, NDDRAdj, Predecessor, 2LPredecessor}
+      \addplot+ [mark=none] table {../results/otm-change-pred/euler-tour};
+      \addplot+ [mark=none] table {../results/otm-change-pred/nddr-adj};
+      \addplot+ [mark=none] table {../results/otm-change-pred/pred};
+      \addplot+ [mark=none] table {../results/otm-change-pred/pred2};
+      \legend{2LETT, NddrAdj, Predecessor, 2LPredecessor}
     \end{axis}
   \end{tikzpicture}
 \end{document}

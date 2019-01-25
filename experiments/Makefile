@@ -3,6 +3,8 @@
 # targets. So, when an input changes, the target must be manually erased and
 # then regenerated with the appropriated make command.
 
+RUNNER := /usr/bin/parallel --jobs 1 --linebuffer -t
+TIME := /usr/bin/time -f '\nTotal time %E'
 BASE := ../target/release
 COPY_VS_MUT := $(shell seq 1000 1000 75000)
 SUBTREE_FIRST := $(shell seq 20 20 1000)
@@ -67,19 +69,17 @@ cases/tsplib-hcp:
 # Copy time vs Mutation time
 
 results/time-copy-vs-mut-pred.pdf:
-	mkdir -p results
-	./run-combinations \
-		${BASE}/time \
-		results/time-copy-vs-mut-pred \
-		"pred change-pred|change-any 100 ${COPY_VS_MUT}" # times sizes
+	mkdir -p results/time-copy-vs-mut-pred
+	# ds op times sizes
+	${RUNNER} "${TIME} ${BASE}/time pred {} 100 ${COPY_VS_MUT} > results/time-copy-vs-mut-pred/{}" \
+		::: change-pred change-any
 	tectonic plots/time-copy-vs-mut-pred.tex -o results/
 
 results/time-copy-vs-mut-pred2.pdf:
-	mkdir -p results
-	./run-combinations \
-		${BASE}/time \
-		results/time-copy-vs-mut-pred2 \
-		"pred2 change-pred|change-any 100 ${COPY_VS_MUT}" # times sizes
+	mkdir -p results/time-copy-vs-mut-pred2
+	# ds op times sizes
+	${RUNNER} "${TIME} ${BASE}/time pred2 {} 100 ${COPY_VS_MUT} > results/time-copy-vs-mut-pred2/{}" \
+		::: change-pred change-any
 	tectonic plots/time-copy-vs-mut-pred2.tex -o results/
 
 
@@ -87,27 +87,24 @@ results/time-copy-vs-mut-pred2.pdf:
 # NDDR subtree length
 
 results/nddr-subtree-len-1.pdf:
-	mkdir -p results
-	./run-combinations \
-		${BASE}/nddr-subtree-len \
-		results/nddr-subtree-len-1 \
-		"adj|free change-any 100 150 100000" # n calls times
+	mkdir -p results/nddr-subtree-len-1
+	# ds op n calls times
+	${RUNNER} "${TIME} ${BASE}/nddr-subtree-len {} change-any 100 150 100000 > results/nddr-subtree-len-1/{}" \
+		::: adj free
 	tectonic plots/nddr-subtree-len-1.tex -o results/
 
 results/nddr-subtree-len-2.pdf:
-	mkdir -p results
-	./run-combinations \
-		${BASE}/nddr-subtree-len \
-		results/nddr-subtree-len-2 \
-		"adj|free change-any 1000 150 100000" # n calls times
+	mkdir -p results/nddr-subtree-len-2
+	# ds op n calls times
+	${RUNNER} "${TIME} ${BASE}/nddr-subtree-len {} change-any 1000 150 100000 > results/nddr-subtree-len-2/{}" \
+		::: adj free
 	tectonic plots/nddr-subtree-len-2.tex -o results/
 
 results/nddr-subtree-len-first-1.pdf:
-	mkdir -p results
-	./run-combinations \
-		${BASE}/nddr-subtree-len-first \
-		results/nddr-subtree-len-first-1 \
-		"adj|free change-any 10000 ${SUBTREE_FIRST}" # times sizes
+	mkdir -p results/nddr-subtree-len-first-1
+	# ds op times sizes
+	${RUNNER} "${TIME} ${BASE}/nddr-subtree-len-first {} change-any 10000 ${SUBTREE_FIRST} > results/nddr-subtree-len-first-1/{}" \
+		::: adj free
 	tectonic plots/nddr-subtree-len-first-1.tex -o results/
 
 
@@ -117,53 +114,40 @@ results/nddr-subtree-len-first-1.pdf:
 # pred
 
 results/time-change-pred.pdf:
-	mkdir -p results
-	./run-combinations \
-		${BASE}/time \
-		results/time-change-pred \
-		"euler-tour|nddr-free|pred|pred2 change-pred ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_PRED}" # times sizes
+	mkdir -p results/time-change-pred
+	${RUNNER} "${TIME} ${BASE}/time {} change-pred ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_PRED} > results/time-change-pred/{}" \
+		::: euler-tour nddr-free pred pred2
 	tectonic plots/time-change-pred.tex -o results/
 
 results/time-change-pred-forest.pdf:
-	mkdir -p results
-	./run-combinations \
-		${BASE}/time \
-		results/time-change-pred-forest \
-		"--forest euler-tour|nddr-adj|pred|pred2 change-pred ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_PRED_FOREST}" # times sizes
+	mkdir -p results/time-change-pred-forest
+	${RUNNER} "${TIME} ${BASE}/time --forest {} change-pred ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_PRED_FOREST} > results/time-change-pred-forest/{}" \
+		::: euler-tour nddr-adj pred pred2
 	tectonic plots/time-change-pred-forest.tex -o results/
 
 results/time-change-pred-large.pdf:
-	mkdir -p results
-	./run-combinations \
-		${BASE}/time \
-		results/time-change-pred-large \
-		"euler-tour|nddr-free|pred|pred2 change-pred ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_PRED_LARGE}" # times sizes
+	mkdir -p results/time-change-pred-large
+	${RUNNER} "${TIME} ${BASE}/time {} change-pred ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_PRED_LARGE} > results/time-change-pred-large/{}" \
+		::: euler-tour nddr-free pred pred2
 	tectonic plots/time-change-pred-large.tex -o results/
 
 # any
-
 results/time-change-any.pdf:
-	mkdir -p results
-	./run-combinations \
-		${BASE}/time \
-		results/time-change-any \
-		"euler-tour|nddr-free|pred change-any ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_ANY}" # times sizes
+	mkdir -p results/time-change-any
+	${RUNNER} "${TIME} ${BASE}/time {} change-any ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_ANY} > results/time-change-any/{}" \
+		::: euler-tour nddr-free pred
 	tectonic plots/time-change-any.tex -o results/
 
 results/time-change-any-forest.pdf:
-	mkdir -p results
-	./run-combinations \
-		${BASE}/time \
-		results/time-change-any-forest \
-		"--forest euler-tour|nddr-adj|pred change-any ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_ANY_FOREST}" # times sizes
+	mkdir -p results/time-change-any-forest
+	${RUNNER} "${TIME} ${BASE}/time --forest {} change-any ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_ANY_FOREST} > results/time-change-any-forest/{}" \
+		::: euler-tour nddr-adj pred
 	tectonic plots/time-change-any-forest.tex -o results/
 
 results/time-change-any-large.pdf:
-	mkdir -p results
-	./run-combinations \
-		${BASE}/time \
-		results/time-change-any-large \
-		"euler-tour|nddr-free|pred change-any ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_ANY_LARGE}" # times sizes
+	mkdir -p results/time-change-any-large
+	${RUNNER} "${TIME} ${BASE}/time {} change-any ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_ANY_LARGE} > results/time-change-any-large/{}" \
+		::: euler-tour nddr-free pred
 	tectonic plots/time-change-any-large.tex -o results/
 
 
@@ -171,19 +155,17 @@ results/time-change-any-large.pdf:
 # Mutation time vs tree diameter
 
 results/time-diameter-change-pred.pdf:
-	mkdir -p results
-	./run-combinations \
-		${BASE}/time-diameter \
-		results/time-diameter-change-pred \
-		"euler-tour|nddr-free|pred|pred2 change-pred 5000 50 100" # n samples times
+	mkdir -p results/time-diameter-change-pred
+	# ds op n samples times
+	${RUNNER} "${TIME} ${BASE}/time-diameter {} change-pred 5000 50 100 > results/time-diameter-change-pred/{}" \
+		::: euler-tour nddr-free pred pred2
 	tectonic plots/time-diameter-change-pred.tex -o results/
 
 results/time-diameter-change-any.pdf:
-	mkdir -p results
-	./run-combinations \
-		${BASE}/time-diameter \
-		results/time-diameter-change-any \
-		"euler-tour|nddr-free|pred change-any 5000 50 100" # n samples times
+	mkdir -p results/time-diameter-change-any
+	# ds op n samples times
+	${RUNNER} "${TIME} ${BASE}/time-diameter {} change-any 5000 50 100 > results/time-diameter-change-any/{}" \
+		::: euler-tour nddr-free pred
 	tectonic plots/time-diameter-change-any.tex -o results/
 
 
@@ -191,17 +173,15 @@ results/time-diameter-change-any.pdf:
 # One Tree Max problem best solution evolution
 
 results/omt-change-pred.pdf:
-	mkdir -p results
-	./run-combinations \
-		${BASE}/omt \
-		results/omt-change-pred \
-		"--quiet --max_num_iters 1000000 euler-tour|nddr-adj|pred|pred2 change-pred 1000 5000" # times n
+	mkdir -p results/omt-change-pred
+	# ds op times n
+	${RUNNER} "${TIME} ${BASE}/omt --quiet --max_num_iters 1000000 {} change-pred 1000 5000 > results/omt-change-pred/{}" \
+		::: euler-tour nddr-adj pred pred2
 	tectonic plots/omt-change-pred.tex -o results/
 
 results/omt-change-any.pdf:
-	mkdir -p results
-	./run-combinations \
-		${BASE}/omt \
-		results/omt-change-any \
-		"--quiet --max_num_iters 1000000 euler-tour|nddr-adj|pred change-any 1000 5000" # times n
+	mkdir -p results/omt-change-any
+	# ds op times n
+	${RUNNER} "${TIME} ${BASE}/omt --quiet --max_num_iters 1000000 {} change-any 1000 5000 > results/omt-change-any/{}" \
+		::: euler-tour nddr-adj pred pred2
 	tectonic plots/omt-change-any.tex -o results/

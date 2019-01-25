@@ -3,6 +3,7 @@
 \usepackage{pgfplots}
 \pgfplotsset{compat=1.13}
 \usepackage{siunitx}
+\usepackage{clrscode3e}
 
 \begin{document}
   \begin{tikzpicture}
@@ -13,10 +14,11 @@
         xlabel=Number of vertices,
         ylabel=Time (\si{\us}),
       ]
-      \addplot+ [mark=none] table[y index = 2] {../results/time-copy-vs-mut-pred2-0};
-      \addplot+ [mark=none] table[y index = 3] {../results/time-copy-vs-mut-pred2-0};
-      \addplot+ [mark=none] table[y index = 3] {../results/time-copy-vs-mut-pred2-1};
-      \legend{Copy, ChangePred, ChangeAny}
+      % We could use either change-pred or change-any to read the copy time
+      \addplot+ [mark=none] table[y index = 2] {../results/time-copy-vs-mut-pred2/change-pred};
+      \addplot+ [mark=none] table[y index = 3] {../results/time-copy-vs-mut-pred2/change-pred};
+      \addplot+ [mark=none] table[y index = 3] {../results/time-copy-vs-mut-pred2/change-any};
+      \legend{Copy, \proc{change-pred}, \proc{change-any}}
     \end{axis}
   \end{tikzpicture}
 \end{document}

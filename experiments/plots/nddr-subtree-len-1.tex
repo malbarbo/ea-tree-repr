@@ -7,12 +7,12 @@
   \begin{tikzpicture}
     \begin{axis}[
         legend pos = north west,
-        xlabel=Mutation,
+        xlabel=Iteration,
         ylabel=Subtree length,
       ]
-      \addplot+ [mark=none] table {../results/nddr-subtree-len-1-0};
-      \addplot+ [mark=none] table {../results/nddr-subtree-len-1-1};
-      \legend{Adjacent, Unbiased}
+      \addplot+ [mark=none] table {../results/nddr-subtree-len-1/adj};
+      \addplot+ [mark=none] table {../results/nddr-subtree-len-1/free};
+      \legend{Adjacent, Free}
     \end{axis}
   \end{tikzpicture}
 \end{document}

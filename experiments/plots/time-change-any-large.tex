@@ -13,10 +13,10 @@
         xlabel=Number of vertices,
         ylabel=Time (\si{\us}),
       ]
-      \addplot+ [mark=none] table {../results/time-change-any-large-0};
-      \addplot+ [mark=none] table {../results/time-change-any-large-1};
-      \addplot+ [mark=none] table {../results/time-change-any-large-2};
-      \legend{2LETT, NddrFree, Predecessor, 2LPredecessor}
+      \addplot+ [mark=none] table {../results/time-change-any-large/euler-tour};
+      \addplot+ [mark=none] table {../results/time-change-any-large/nddr-free};
+      \addplot+ [mark=none] table {../results/time-change-any-large/pred};
+      \legend{2LETT, NddrFree, Predecessor}
     \end{axis}
   \end{tikzpicture}
 \end{document}
