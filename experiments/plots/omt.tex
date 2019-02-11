@@ -6,13 +6,6 @@
 \usetikzlibrary{pgfplots.groupplots}
 \usetikzlibrary{calc}
 
-\pgfplotscreateplotcyclelist{exotic}{
-  blue,densely dotted\\
-  red,densely dashed\\
-  brown!60!black,densely dashdotted\\
-  black,densely dashdotdotted\\
-}
-
 \begin{document}
   \begin{tikzpicture}
     \begin{groupplot}[
@@ -20,7 +13,6 @@
         ymax=1,
         xlabel=Iteration,
         grid=both,
-        cycle list name=exotic,
       ]
       \nextgroupplot[title=\proc{change-any}, ylabel=Fitness]
       \addplot+ [mark=none] table {../results/omt-change-any/euler-tour};

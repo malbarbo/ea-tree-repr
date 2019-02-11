@@ -2,18 +2,23 @@
 \usepackage[T1]{fontenc}
 \usepackage[brazil]{babel}
 \usepackage{pgfplots}
+\pgfplotsset{compat=1.13}
 
 \begin{document}
   \begin{tikzpicture}
     \begin{axis}[
+        name=plt,
         legend pos = north west,
         xlabel = Number of vertices,
         ylabel = Subtree length,
+        legend to name={leg},
+        legend style={legend columns=3}
       ]
       \addplot+ [mark=none] table[y index = 1] {../results/nddr-subtree-len-first-1/adj};
       \addplot+ [mark=none] table[y index = 1] {../results/nddr-subtree-len-first-1/free};
       \addplot+ [mark=none] table[y index = 2] {../results/nddr-subtree-len-first-1/free};
       \legend{Adjacent, Free, $2 \sqrt{n}$}
     \end{axis}
+    \node[yshift=-1.5cm] at (plt.south) {\ref{leg}};
   \end{tikzpicture}
 \end{document}

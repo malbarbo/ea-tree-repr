@@ -9,7 +9,7 @@ BASE := ../target/release
 COPY_VS_MUT := $(shell seq 1000 1000 75000)
 SUBTREE_FIRST := $(shell seq 20 20 1000)
 CHANGE_SIZES := $(shell seq 1000 1000 50000)
-CHANGE_FOREST_SIZES := ${CHANGE_PRED}
+CHANGE_FOREST_SIZES := ${CHANGE_SIZES}
 CHANGE_LARGE_SIZES := $(shell seq 6000 6000 300000)
 CHANGE_TIMES := 30
 CHANGE_PARAMS := -k 1 --iters 100000
@@ -23,7 +23,6 @@ plots: \
 	results/time-large.pdf \
 	results/time-diameter.pdf \
 	results/omt.pdf \
-	results/omt-change-any.pdf \
 	results/time-copy-vs-mut-pred.pdf \
 	results/time-copy-vs-mut-pred2.pdf
 
@@ -111,12 +110,12 @@ results/time.pdf: results/time-change-pred results/time-change-any
 
 results/time-change-pred:
 	mkdir -p results/time-change-pred
-	${RUNNER} "${TIME} ${BASE}/time {} change-pred ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_PRED} > results/time-change-pred/{}" \
+	${RUNNER} "${TIME} ${BASE}/time {} change-pred ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_SIZES} > results/time-change-pred/{}" \
 		::: euler-tour nddr-free pred pred2
 
 results/time-change-any:
 	mkdir -p results/time-change-any
-	${RUNNER} "${TIME} ${BASE}/time {} change-any ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_ANY} > results/time-change-any/{}" \
+	${RUNNER} "${TIME} ${BASE}/time {} change-any ${CHANGE_PARAMS} ${CHANGE_TIMES} ${CHANGE_SIZES} > results/time-change-any/{}" \
 		::: euler-tour nddr-free pred
 
 
@@ -179,12 +178,11 @@ results/omt.pdf: results/omt-change-pred results/omt-change-any
 results/omt-change-pred:
 	mkdir -p results/omt-change-pred
 	# ds op times n
-	${RUNNER} "${TIME} ${BASE}/omt --quiet --max_num_iters 1000000 {} change-pred 1000 5000 > results/omt-change-pred/{}" \
+	${RUNNER} "${TIME} ${BASE}/omt --quiet --max_num_iters 1000000 {} change-pred 100 5000 > results/omt-change-pred/{}" \
 		::: euler-tour nddr-adj pred pred2
 
 results/omt-change-any:
 	mkdir -p results/omt-change-any
 	# ds op times n
-	${RUNNER} "${TIME} ${BASE}/omt --quiet --max_num_iters 1000000 {} change-any 1000 5000 > results/omt-change-any/{}" \
+	${RUNNER} "${TIME} ${BASE}/omt --quiet --max_num_iters 1000000 {} change-any 100 5000 > results/omt-change-any/{}" \
 		::: euler-tour nddr-adj pred pred2
-	tectonic plots/omt-change-any.tex -o results/
