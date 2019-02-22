@@ -5,7 +5,7 @@
 \pgfplotsset{compat=1.13}
 
 \begin{document}
-  \begin{tikzpicture}
+  \begin{tikzpicture}[font=\footnotesize]
     \begin{axis}[
         name=plt,
         legend pos = north west,
@@ -19,6 +19,6 @@
       \addplot+ [mark=none] table[y index = 2] {../results/nddr-subtree-len-first-1/free};
       \legend{Adjacent, Free, $2 \sqrt{n}$}
     \end{axis}
-    \node[yshift=-1.5cm] at (plt.south) {\ref{leg}};
+    \node[yshift=-1.3cm] at (plt.south) {\ref{leg}};
   \end{tikzpicture}
 \end{document}

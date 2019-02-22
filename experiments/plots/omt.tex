@@ -7,7 +7,7 @@
 \usetikzlibrary{calc}
 
 \begin{document}
-  \begin{tikzpicture}
+  \begin{tikzpicture}[font=\footnotesize]
     \begin{groupplot}[
         group style={group size=2 by 1, group name = myplot},
         ymax=1,
@@ -25,8 +25,8 @@
       \addplot+ [mark=none] table {../results/omt-change-pred/pred};
       \addplot+ [mark=none] table {../results/omt-change-pred/pred2};
 
-      \legend{2LETT, NddrAdj, Predecessor, 2LPredecessor}
+      \legend{2LETT, NDDRAdj, Predecessor, 2LPredecessor}
     \end{groupplot}
-    \node[yshift=-1.75cm] at ($(myplot c1r1.south)!0.5!(myplot c2r1.south)$) {\ref{leg}};
+    \node[yshift=-1.5cm] at ($(myplot c1r1.south)!0.5!(myplot c2r1.south)$) {\ref{leg}};
   \end{tikzpicture}
 \end{document}

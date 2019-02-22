@@ -5,7 +5,7 @@
 \usepackage{siunitx}
 
 \begin{document}
-  \begin{tikzpicture}
+  \begin{tikzpicture}[font=\footnotesize]
     \begin{axis}[
         legend pos = north west,
         scaled x ticks = false,
@@ -16,7 +16,7 @@
       \addplot+ [mark=none] table {../results/time-change-any-large/euler-tour};
       \addplot+ [mark=none] table {../results/time-change-any-large/nddr-free};
       \addplot+ [mark=none] table {../results/time-change-any-large/pred};
-      \legend{2LETT, NddrFree, Predecessor}
+      \legend{2LETT, NDDRFree, Predecessor}
     \end{axis}
   \end{tikzpicture}
 \end{document}

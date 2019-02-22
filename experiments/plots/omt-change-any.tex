@@ -4,17 +4,17 @@
 \usepackage{pgfplots}
 
 \begin{document}
-  \begin{tikzpicture}
+  \begin{tikzpicture}[font=\footnotesize]
     \begin{axis}[
         legend pos = south east,
         xlabel=Iteration,
         ylabel=Fitness,
         ymax=1
       ]
-      \addplot+ [mark=none] table {../results/otm-change-any/euler-tour};
-      \addplot+ [mark=none] table {../results/otm-change-any/nddr-adj};
-      \addplot+ [mark=none] table {../results/otm-change-any/pred};
-      \legend{2LETT, NddrAdj, Predecessor}
+      \addplot+ [mark=none] table {../results/omt-change-any/euler-tour};
+      \addplot+ [mark=none] table {../results/omt-change-any/nddr-adj};
+      \addplot+ [mark=none] table {../results/omt-change-any/pred};
+      \legend{2LETT, NDDRAdj, Predecessor}
     \end{axis}
   \end{tikzpicture}
 \end{document}

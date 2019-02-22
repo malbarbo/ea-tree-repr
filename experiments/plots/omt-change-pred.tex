@@ -4,7 +4,7 @@
 \usepackage{pgfplots}
 
 \begin{document}
-  \begin{tikzpicture}
+  \begin{tikzpicture}[font=\footnotesize]
     \begin{axis}[
         legend pos = south east,
         xlabel=Iteration,
@@ -15,7 +15,7 @@
       \addplot+ [mark=none] table {../results/otm-change-pred/nddr-adj};
       \addplot+ [mark=none] table {../results/otm-change-pred/pred};
       \addplot+ [mark=none] table {../results/otm-change-pred/pred2};
-      \legend{2LETT, NddrAdj, Predecessor, 2LPredecessor}
+      \legend{2LETT, NDDRAdj, Predecessor, 2LPredecessor}
     \end{axis}
   \end{tikzpicture}
 \end{document}
