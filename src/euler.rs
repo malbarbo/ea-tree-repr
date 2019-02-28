@@ -7,10 +7,15 @@ use rand::Rng;
 
 use std::cell::UnsafeCell;
 use std::rc::Rc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use {transmute_lifetime, Bitset, Linspace, Pool};
 
-const MAX_TRIES_CHANGE_ANY: usize = 5;
+static DEFAULT_CHANGE_ANY_MAX_TRIES: AtomicUsize = AtomicUsize::new(1);
+
+pub fn set_default_change_any_max_tries(max: usize) {
+    DEFAULT_CHANGE_ANY_MAX_TRIES.store(max, Ordering::SeqCst);
+}
 
 #[derive(Clone)]
 pub struct EulerTourTree<G: WithEdge + WithVertexIndexProp> {
@@ -20,6 +25,7 @@ pub struct EulerTourTree<G: WithEdge + WithVertexIndexProp> {
     segs: Rc<Vec<Rc<Segment<G>>>>,
     nsqrt: usize,
     len: usize,
+    max_tries: usize,
 }
 
 impl<G> EulerTourTree<G>
@@ -36,6 +42,7 @@ where
             segs: Rc::default(),
             nsqrt,
             len,
+            max_tries: DEFAULT_CHANGE_ANY_MAX_TRIES.load(Ordering::SeqCst),
         };
         tour.set_edges(edges);
         tour.check();
@@ -168,7 +175,7 @@ where
         for e in self
             .g
             .choose_out_edge_iter(x, &mut rng)
-            .take(MAX_TRIES_CHANGE_ANY)
+            .take(self.max_tries)
         {
             if e == rem {
                 continue;
@@ -193,7 +200,7 @@ where
         for e in self
             .g
             .choose_out_edge_iter(x, &mut rng)
-            .take(MAX_TRIES_CHANGE_ANY)
+            .take(self.max_tries)
         {
             if e == rem || x == self.source(sub.start) {
                 continue;
