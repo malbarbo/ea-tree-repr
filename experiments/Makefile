@@ -24,7 +24,8 @@ plots: \
 	results/time-diameter.pdf \
 	results/omt.pdf \
 	results/time-copy-vs-mut-pred.pdf \
-	results/time-copy-vs-mut-pred2.pdf
+	results/time-copy-vs-mut-pred2.pdf \
+	results/eule-tour-change-any.pdf
 
 
 #######################
@@ -98,6 +99,17 @@ results/nddr-subtree-len-first-1.pdf:
 	${RUNNER} "${TIME} ${BASE}/nddr-subtree-len-first {} change-any 10000 ${SUBTREE_FIRST} > results/nddr-subtree-len-first-1/{}" \
 		::: adj free
 	tectonic plots/nddr-subtree-len-first-1.tex -o results/
+
+
+#######################
+# Euler tour change-any
+
+results/euler-tour-change-any.pdf:
+	mkdir -p results/euler-tour-change-any
+	${RUNNER} "${TIME} ${BASE}/euler-tour-change-any --max_tries {2} {1} 50 10000 > results/euler-tour-change-any/{1}-{2}" \
+		::: 100 1000 \
+		::: 1 3 5 7
+#	tectonic plots/euler-tour-change-any.tex -o results/
 
 
 #######################

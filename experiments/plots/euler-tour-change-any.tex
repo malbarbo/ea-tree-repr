@@ -1,0 +1,36 @@
+\documentclass[tikz]{standalone}
+\usepackage[T1]{fontenc}
+\usepackage[brazil]{babel}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.13}
+\usetikzlibrary{calc}
+\usetikzlibrary{pgfplots.groupplots}
+
+\begin{document}
+  \begin{tikzpicture}[font=\footnotesize]
+    \begin{groupplot}[
+        group style={group size=2 by 1, group name = myplot},
+        grid=both,
+        legend pos=north east,
+        xlabel=Number of edges,
+        xtick={0, 0.25, 0.5, 0.75, 1.0},
+        xticklabels={$n$, $2n$, $3n$, $4n$, $5n$},
+      ]
+
+      \nextgroupplot[ylabel={Failures (\%)}]
+      \addplot+ [mark=none] table {../results/euler-tour-change-any/1000-1};
+      \addplot+ [mark=none] table {../results/euler-tour-change-any/1000-3};
+      \addplot+ [mark=none] table {../results/euler-tour-change-any/1000-5};
+      \addplot+ [mark=none] table {../results/euler-tour-change-any/1000-7};
+
+      \nextgroupplot[ylabel={Tries},legend to name={leg}, legend style={legend columns=4}]
+      \addplot+ [mark=none] table[x=d, y=tries] {../results/euler-tour-change-any/1000-1};
+      \addplot+ [mark=none] table[x=d, y=tries] {../results/euler-tour-change-any/1000-3};
+      \addplot+ [mark=none] table[x=d, y=tries] {../results/euler-tour-change-any/1000-5};
+      \addplot+ [mark=none] table[x=d, y=tries] {../results/euler-tour-change-any/1000-7};
+
+      \legend{$k=1$, $k=3$, $k=5$, $k=7$}
+    \end{groupplot}
+    \node[yshift=-1.5cm] at ($(myplot c1r1.south)!0.5!(myplot c2r1.south)$) {\ref{leg}};
+  \end{tikzpicture}
+\end{document}
