@@ -11,7 +11,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 
 use {transmute_lifetime, Bitset, Linspace, Pool};
 
-static DEFAULT_CHANGE_ANY_MAX_TRIES: AtomicUsize = AtomicUsize::new(1);
+static DEFAULT_CHANGE_ANY_MAX_TRIES: AtomicUsize = AtomicUsize::new(5);
 
 pub fn set_default_change_any_max_tries(max: usize) {
     DEFAULT_CHANGE_ANY_MAX_TRIES.store(max, Ordering::SeqCst);
@@ -26,6 +26,9 @@ pub struct EulerTourTree<G: WithEdge + WithVertexIndexProp> {
     nsqrt: usize,
     len: usize,
     max_tries: usize,
+    last_change_any_failed: bool,
+    last_change_any_tries: usize,
+    bridges: Vec<Edge<G>>,
 }
 
 impl<G> EulerTourTree<G>
@@ -43,6 +46,9 @@ where
             nsqrt,
             len,
             max_tries: DEFAULT_CHANGE_ANY_MAX_TRIES.load(Ordering::SeqCst),
+            last_change_any_failed: false,
+            last_change_any_tries: 0,
+            bridges: vec![],
         };
         tour.set_edges(edges);
         tour.check();
@@ -68,6 +74,19 @@ where
             .run();
         assert!(stack.is_empty());
         tour
+    }
+
+    pub fn last_change_any_failed(&self) -> bool {
+        self.last_change_any_failed
+    }
+
+    pub fn last_change_any_tries(&self) -> usize {
+        self.last_change_any_tries
+    }
+
+    pub fn avoid_bridges(&mut self) {
+        use fera::graph::algs::Components;
+        self.bridges = self.g.cut_edges();
     }
 
     pub fn set_edges(&mut self, edges: &[Edge<G>]) {
@@ -144,9 +163,15 @@ where
     }
 
     pub fn change_any<R: Rng>(&mut self, mut rng: R) -> (Edge<G>, Edge<G>) {
-        let sub = self.choose_subtree(&mut rng);
-        assert_ne!((0, 0), sub.start);
-        let rem = self.get_edge(self.prev_pos(sub.start));
+        let (sub, rem) = loop {
+            let sub = self.choose_subtree(&mut rng);
+            assert_ne!((0, 0), sub.start);
+            let rem = self.get_edge(self.prev_pos(sub.start));
+            if self.bridges.contains(&rem) {
+                continue;
+            }
+            break (sub, rem);
+        };
         let ins = if self.subtree_len(sub) <= self.len / 2 {
             self.choose_ins_edge_subtree(sub, rem, &mut rng)
         } else {
@@ -158,25 +183,29 @@ where
             } else {
                 self.move_after(ins, to, sub.start, sub_new_root, sub.end);
             }
+            self.last_change_any_failed = false;
             self.check();
             (ins, rem)
         } else {
+            self.last_change_any_failed = true;
             self.change_pred(rng)
         }
     }
 
     fn choose_ins_edge_subtree<R: Rng>(
-        &self,
+        &mut self,
         sub: Subtree,
         rem: Edge<G>,
         mut rng: R,
     ) -> Option<(Edge<G>, (usize, usize), (usize, usize))> {
+        self.last_change_any_tries = 0;
         let x = self.choose_subtree_vertex(sub, &mut rng);
         for e in self
             .g
             .choose_out_edge_iter(x, &mut rng)
             .take(self.max_tries)
         {
+            self.last_change_any_tries += 1;
             if e == rem {
                 continue;
             }
@@ -191,17 +220,19 @@ where
     }
 
     fn choose_ins_edge_non_subtree<R: Rng>(
-        &self,
+        &mut self,
         sub: Subtree,
         rem: Edge<G>,
         mut rng: R,
     ) -> Option<(Edge<G>, (usize, usize), (usize, usize))> {
+        self.last_change_any_tries = 0;
         let x = self.choose_non_subtree_vertex(sub, &mut rng);
         for e in self
             .g
             .choose_out_edge_iter(x, &mut rng)
             .take(self.max_tries)
         {
+            self.last_change_any_tries += 1;
             if e == rem || x == self.source(sub.start) {
                 continue;
             }
